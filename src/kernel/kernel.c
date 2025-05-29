@@ -1,4 +1,5 @@
 #include "memory/heap/kheap.h"
+#include "tsc/tsc.h"
 #include <kernel.h>
 
 #include <limine.h>
@@ -186,6 +187,8 @@ void kstart(void) {
 
     uint64_t system_startup_time;
     mark_time(&system_startup_time);
+    system_startup_time -=
+        1000; // add one second because of the TSC calibration
 
     char *FIRMWARE_TYPE;
 
@@ -391,34 +394,12 @@ void kstart(void) {
             memcpy(cpu_name + i * 16, data, 16);
         }
 
-        kprintf("CPU Name: %s\n", cpu_name);
+        kprintf("CPU Name: %s @ %llu MHz\n", cpu_name,
+                tsc_frequency / 1000 / 1000);
         kfree(cpu_name);
     }
 
     kprintf("CPU Vendor: %s\n", get_cpu_vendor());
-    char *hypervisor = kmalloc(49);
-
-    {
-        unsigned int data[4];
-        memset(hypervisor, 0, 49);
-
-        __asm__("cpuid"
-                : "=a"(data[0]), "=b"(data[1]), "=c"(data[2]), "=d"(data[3])
-                : "a"(0x40000000)); // Hypervisor info
-
-        if (data[0] == 0x40000000) {
-            // Hypervisor name is in EBX, ECX, and EDX
-            memcpy(hypervisor, &data[1], 4);
-            memcpy(hypervisor + 4, &data[2], 4);
-            memcpy(hypervisor + 8, &data[3], 4);
-            hypervisor[12] = '\0'; // Null-terminate the string
-        } else {
-            memcpy(hypervisor, "No Hypervisor", sizeof("No Hypervisor"));
-        }
-
-        kprintf("Hypervisor: %s\n\n", hypervisor);
-        kfree(hypervisor);
-    }
 
     kprintf("Total Memory: 0x%llx (%lu MBytes)\n",
             limine_parsed_data.memory_total,
@@ -427,8 +408,6 @@ void kstart(void) {
     kprintf("Total available Memory: 0x%llx (%lu MBytes)\n\n",
             limine_parsed_data.memory_usable_total,
             limine_parsed_data.memory_usable_total / 0x100000);
-
-    kprintf("--- SYSTEM INFO END ---\n");
 
     if (!module_request.response) {
         kprintf_warn("No modules loaded.\n");
@@ -538,7 +517,7 @@ void kstart(void) {
 
     limine_parsed_data.boot_time = get_ms(system_startup_time);
 
-    kprintf("System started: Time took: %d seconds %d ms.\n",
+    kprintf("System started: Time took: %llu seconds %llu ms.\n",
             limine_parsed_data.boot_time / 1000,
             limine_parsed_data.boot_time % 1000);
 

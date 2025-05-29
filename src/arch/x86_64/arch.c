@@ -46,18 +46,17 @@ void arch_base_init() {
     init_sse();
     kprintf_ok("Initialized SSE1 + SSE2\n");
 
-    if (check_tsc()) {
-        tsc_init();
-        tsc = true;
-        kprintf_ok("Initialized TSC\n");
-    } else {
-    }
-
     irq_registerHandler(0, timer_tick);
 
     pit_init(PIT_TICKS);
     pit = true;
     kprintf_ok("Initialized PIT\n");
+
+    if (check_tsc()) {
+        tsc_init();
+        tsc = true;
+        kprintf_ok("Initialized TSC\n");
+    }
 }
 
 void sleep(unsigned long ms) {
@@ -94,10 +93,10 @@ uint64_t get_ms(uint64_t start) {
     if (pit) {
         now = get_ticks();
 
-        return (now - start) / 1000;
+        return (now - start);
     } else {
         now = _get_tsc();
 
-        return (now - start) / 1000000;
+        return ((now - start) * 1000) / tsc_frequency;
     }
 }

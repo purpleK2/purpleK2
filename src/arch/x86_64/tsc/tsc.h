@@ -5,8 +5,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-extern volatile uint64_t tsc_ticks;
 extern bool tsc;
+extern uint64_t tsc_frequency;
 
 extern uint64_t _get_tsc();
 void tsc_tick_handler(void *ctx);
