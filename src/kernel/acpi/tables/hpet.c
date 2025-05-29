@@ -1,5 +1,6 @@
 #include "hpet.h"
 #include "apic/ioapic/ioapic.h"
+#include "apic/lapic/lapic.h"
 #include "interrupts/irq.h"
 #include "memory/heap/kheap.h"
 #include "memory/pmm/pmm.h"
@@ -9,6 +10,8 @@
 #include "uacpi/tables.h"
 
 uint64_t hpet_base_glob = 0;
+
+uint64_t hpet_counter = 0;
 
 hpet_timer_t hpet_timers[32] = {0}; // 32 timers, max supported by HPET
 
@@ -153,4 +156,8 @@ uint64_t hpet_get_counter(void) {
     uint64_t val = hpet_main_counter->raw;
     hpet_start();
     return val;
+}
+
+void hpet_test_handler(void *ctx) {
+    hpet_counter = hpet_get_counter();
 }

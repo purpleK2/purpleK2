@@ -47,4 +47,6 @@ uint64_t hpet_start(void);
 uint64_t hpet_get_base(void);
 uint64_t hpet_get_counter(void);
 
+void hpet_test_handler(void *ctx);
+
 #endif // HPET_H

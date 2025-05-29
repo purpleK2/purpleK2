@@ -152,10 +152,6 @@ struct bootloader_data *get_bootloader_data() {
 
 vmm_context_t *kernel_vmm_ctx;
 
-void hpet_test_handler(void *ctx) {
-    debugf(".");
-}
-
 // kernel main function
 void kstart(void) {
     asm("cli");
