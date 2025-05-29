@@ -1,4 +1,6 @@
+#include "io.h"
 #include "memory/heap/kheap.h"
+#include "tables/hpet.h"
 #include "tsc/tsc.h"
 #include <kernel.h>
 
@@ -149,6 +151,10 @@ struct bootloader_data *get_bootloader_data() {
 }
 
 vmm_context_t *kernel_vmm_ctx;
+
+void hpet_test_handler(void *ctx) {
+    debugf(".");
+}
 
 // kernel main function
 void kstart(void) {
@@ -368,7 +374,7 @@ void kstart(void) {
 
     if (check_apic()) {
         asm("cli");
-        debugf_debug("APIC device is supported\n");
+        debugf_debug("APIC is supported\n");
 
         lapic_init();
         ioapic_init();
@@ -380,6 +386,9 @@ void kstart(void) {
     }
 #endif
 #endif
+
+    hpet_init();
+    kprintf_ok("HPET initialized\n");
 
     {
         char *cpu_name = kmalloc(49);
@@ -446,36 +455,6 @@ void kstart(void) {
     dev_serial_init();
     dev_parallel_init();
 
-    fs_vfs_t *rootfs = fakefs_create();
-    vfs_register(rootfs);
-    vfs_mount("/", rootfs, 0);
-
-    fs_node_t *root;
-    if (vfs_lookup("/", &root) == 0) {
-        root->vfs->ops->create(root->vfs, root, "/myfile.txt", VREG, 0);
-    }
-
-    if (vfs_create("/myfile.txt", VREG, 0) == 0) {
-        kprintf_ok("Created /myfile.txt\n");
-    } else {
-        kprintf_warn("Failed to create /myfile.txt\n");
-    }
-
-    fs_open_file_t *file = kcalloc(1, sizeof(fs_open_file_t));
-    if (vfs_open("/myfile.txt", 0, &file) == 0) {
-        const char *text = "Hello, fakefs!";
-        vfs_write(file, text, strlen(text));
-        vfs_seek(file, 0, 0); // SEEK_SET
-        char buf[128] = {0};
-        int n         = vfs_read(file, buf, sizeof(buf));
-        if (n > 0) {
-            kprintf("Read %d bytes: %s\n", n, buf);
-        }
-        vfs_close(file);
-    } else {
-        kprintf_warn("Failed to open /myfile.txt\n");
-    }
-
 #ifdef CONFIG_DEVFS_ENABLE
     // devfs_init();
 
@@ -510,16 +489,14 @@ void kstart(void) {
 
     // limine_parsed_data.smp_enabled = true;
 
-    // ustar_file_tree_t *pci_ids = file_lookup(initramfs_disk, "pci.ids");
-
-    // pci_scan(pci_ids);
-    // pci_print_list();
-
     limine_parsed_data.boot_time = get_ms(system_startup_time);
 
     kprintf("System started: Time took: %llu seconds %llu ms.\n",
             limine_parsed_data.boot_time / 1000,
             limine_parsed_data.boot_time % 1000);
+
+    register_hpet_irq(0, hpet_test_handler);
+    hpet_start();
 
     for (;;)
         ;
