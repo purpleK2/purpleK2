@@ -18,9 +18,10 @@
 #define PCI_ADDR(s, b, d, f) (((b << 20) | (d << 15) | (f << 12)) + s)
 
 typedef enum {
-    PCI_TYPE_PIO  = 0,
-    PCI_TYPE_MMIO = 1
-} pci_type_t;
+    PCI_BAR_TYPE_NONE = 0, // Unused BAR
+    PCI_BAR_TYPE_PIO  = 1, // Port I/O
+    PCI_BAR_TYPE_MMIO = 2  // Memory-Mapped I/O
+} pci_bar_type_t;
 
 typedef struct pci_device {
     uint8_t bus, device, function;
@@ -33,9 +34,9 @@ typedef struct pci_device {
     char device_str[MAX_DEVICE_NAME];
 
     uint32_t bar[6];
+    uint8_t bar_type[6]; // New field to store type of each BAR
     uint8_t irq_line, irq_pin;
 
-    pci_type_t type;
     struct pci_device *next;
 } pci_device_t;
 

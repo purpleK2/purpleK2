@@ -485,6 +485,12 @@ void kstart(void) {
 
     // limine_parsed_data.smp_enabled = true;
 
+    ustar_file_tree_t *pci_ids =
+        file_lookup(initramfs_disk, "pci.ids"); // Load PCI IDs from initrd
+
+    pci_scan(pci_ids);
+    pci_print_list();
+
     limine_parsed_data.boot_time = get_ms(system_startup_time);
 
     kprintf("System started: Time took: %llu seconds %llu ms.\n",

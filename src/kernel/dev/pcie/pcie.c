@@ -103,31 +103,48 @@ pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
     pci_lookup_vendor_device(new_dev, pci_ids->found_files[0]->start,
                              pci_ids->found_files[0]->size);
 
-    // read BARs
+    // Initialize BARs and BAR types to zero
     for (int i = 0; i < 6; i++) {
+        new_dev->bar[i]      = 0;
+        new_dev->bar_type[i] = PCI_BAR_TYPE_NONE;
+    }
+
+    // Read BARs and determine their types
+    int bar_count =
+        (new_dev->header_type == 0) ? 6 : 2; // Type 0: 6 BARs, Type 1: 2 BARs
+    for (int i = 0; i < bar_count; i++) {
         uint32_t bar = pci_config_read(bus, device, function, 0x10 + (i * 4));
-        if (bar == 0)
-            break;
-        if ((bar & 0x1) == 0) {
-            // Memory mapped I/O
-            new_dev->bar[i] = bar & ~0xF;
-            new_dev->type   = PCI_TYPE_MMIO;
+        new_dev->bar[i] = bar; // Store raw BAR value initially
+        if (bar == 0) {
+            new_dev->bar_type[i] = PCI_BAR_TYPE_NONE; // Unused BAR
+            continue;
+        }
+        if (bar & 0x1) {
+            // I/O mapped (PIO)
+            new_dev->bar[i]      = bar & ~0x3; // Clear low 2 bits for alignment
+            new_dev->bar_type[i] = PCI_BAR_TYPE_PIO;
         } else {
-            // I/O mapped
-            new_dev->bar[i] = bar & ~0x3;
-            new_dev->type   = PCI_TYPE_PIO;
+            // Memory mapped I/O (MMIO)
+            new_dev->bar[i]      = bar & ~0xF; // Clear low 4 bits for alignment
+            new_dev->bar_type[i] = PCI_BAR_TYPE_MMIO;
         }
     }
-    // read IRQ line and pin
-    uint8_t irq_line =
-        pci_config_read(bus, device, function, 0x3C); // Read the interrupt line
-    uint8_t irq_pin =
-        pci_config_read(bus, device, function, 0x3D); // Read the interrupt pin
 
-    new_dev->irq_line = irq_line; // Directly assign the interrupt line
-    new_dev->irq_pin  = irq_pin;  // Directly assign the interrupt pin
+    // Read IRQ line and pin
+    uint32_t config_data = pci_config_read(bus, device, function, 0x3C);
+    uint8_t irq_line     = (config_data >> 0) & 0xFF; // Interrupt Line at 0x3C
+    uint8_t irq_pin      = (config_data >> 8) & 0xFF; // Interrupt Pin at 0x3D
 
-    kprintf("IRQ Pin: %d\n", new_dev->irq_pin);
+    if (irq_pin > 4) {
+        kprintf("Warning: Invalid IRQ Pin %d for device %d:%d:%d\n", irq_pin,
+                bus, device, function);
+        irq_pin = 0; // Handle as no interrupt
+    }
+
+    new_dev->irq_line = irq_line;
+    new_dev->irq_pin  = irq_pin;
+
+    kprintf("IRQ Line: %d, IRQ Pin: %d\n", new_dev->irq_line, new_dev->irq_pin);
 
     new_dev->next    = pci_devices_head;
     pci_devices_head = new_dev;
@@ -256,7 +273,6 @@ void pci_print_list() {
                dev->header_type == 0 ? "Single Function" : "Multi-Function");
         debugf("  %s\n", dev->prog_if == 0 ? "No Programming Interface"
                                            : "Programming Interface");
-        debugf("  %s\n", dev->type == PCI_TYPE_MMIO ? "MMIO" : "PIO");
 
         switch (dev->irq_pin) {
         case 1:
@@ -280,12 +296,24 @@ void pci_print_list() {
             debugf("  IRQ %d\n", dev->irq_line);
         }
 
-        debugf("  BAR0: 0x%08x\n", dev->bar[0]);
-        debugf("  BAR1: 0x%08x\n", dev->bar[1]);
-        debugf("  BAR2: 0x%08x\n", dev->bar[2]);
-        debugf("  BAR3: 0x%08x\n", dev->bar[3]);
-        debugf("  BAR4: 0x%08x\n", dev->bar[4]);
-        debugf("  BAR5: 0x%08x\n", dev->bar[5]);
+        for (int i = 0; i < 6; i++) {
+            const char *bar_type_str;
+            switch (dev->bar_type[i]) {
+            case PCI_BAR_TYPE_NONE:
+                bar_type_str = "Unused";
+                break;
+            case PCI_BAR_TYPE_PIO:
+                bar_type_str = "PIO";
+                break;
+            case PCI_BAR_TYPE_MMIO:
+                bar_type_str = "MMIO";
+                break;
+            default:
+                bar_type_str = "Unknown";
+                break;
+            }
+            debugf("  BAR%d: 0x%08x (%s)\n", i, dev->bar[i], bar_type_str);
+        }
         dev = dev->next;
     }
 }
