@@ -70,17 +70,17 @@ int hpet_init(void) {
             hpet_base + 0x100 + (i * 0x20)));
 
         // get bit 4 to check if it supports periodic mode
-        if (GET_BIT(4, hpet_timer->conf_and_cap_reg)) {
+        if (BIT_GET(4, hpet_timer->conf_and_cap_reg)) {
             debugf_debug("    HPET Timer %d supports periodic mode.\n", i);
         } else {
             debugf_debug("    HPET Timer %d does not support periodic mode.\n",
                          i);
         }
 
-        SET_BIT(hpet_timer->conf_and_cap_reg, 1);    // edge triggered mode
-        SET_BIT(hpet_timer->conf_and_cap_reg, 3);    // enable periodic mode
-        CLEAR_BIT(hpet_timer->conf_and_cap_reg, 8);  // ensure 64-bit mode
-        CLEAR_BIT(hpet_timer->conf_and_cap_reg, 14); // no FSB mode
+        BIT_SET(hpet_timer->conf_and_cap_reg, 1);    // edge triggered mode
+        BIT_SET(hpet_timer->conf_and_cap_reg, 3);    // enable periodic mode
+        BIT_CLEAR(hpet_timer->conf_and_cap_reg, 8);  // ensure 64-bit mode
+        BIT_CLEAR(hpet_timer->conf_and_cap_reg, 14); // no FSB mode
 
         // get higher 32 bits of the conf and cap reg to see what irqs are
         // allowed
@@ -114,7 +114,7 @@ int hpet_init(void) {
             hpet_timer->comp_val_reg = 0;
         }
 
-        // SET_BIT(hpet_timer->conf_and_cap_reg, 2); // enable the timer
+        // BIT_SET(hpet_timer->conf_and_cap_reg, 2); // enable the timer
 
         hpet_timers[i].entry   = hpet_timer;
         hpet_timers[i].irq_num = first_irq;

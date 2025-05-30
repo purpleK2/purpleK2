@@ -5,10 +5,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-
-#define SET_BIT(x, bit)   ((x) |= (1ULL << (bit)))
-#define CLEAR_BIT(x, bit) ((x) &= ~(1ULL << (bit)))
-#define GET_BIT(x, bit)   (((x) >> (bit)) & 1)
+#include <util/macro.h>
 
 #define HPET_GET_REV_ID(cap)         ((uint8_t)((cap).raw & 0xFF))
 #define HPET_GET_NUM_TIM_CAP(cap)    ((uint8_t)(((cap).raw >> 8) & 0x1F))

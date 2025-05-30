@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <util/macro.h>
 
 #define FALSE                0
 #define TRUE                 1
@@ -77,7 +78,7 @@ typedef struct {
     uint8_t error;
     uint8_t reserved0;
     uint32_t reserved1;
-} __attribute__((packed)) FIS_DEV_BITS;
+} PACKED FIS_DEV_BITS;
 
 typedef struct tagFIS_REG_H2D {
     uint8_t fis_type;

@@ -2,6 +2,7 @@
 #define GDT_H 1
 
 #include <stdint.h>
+#include <util/macro.h>
 
 #define GDT_CODE_SEGMENT 0x08
 #define GDT_DATA_SEGMENT 0x10
@@ -29,12 +30,12 @@ typedef struct {
     uint8_t access;               // access
     uint8_t limit_high_and_flags; // ((limit >> 16) & 0xF) | (flags & 0xF0)
     uint8_t base_high;            // (base >> 24) & 0xF
-} __attribute__((packed)) gdt_entry_t;
+} PACKED gdt_entry_t;
 
 typedef struct {
     uint16_t size;
     gdt_entry_t *pointer;
-} __attribute__((packed)) gdt_pointer_t;
+} PACKED gdt_pointer_t;
 
 void gdt_init();
 

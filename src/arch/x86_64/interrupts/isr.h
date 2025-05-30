@@ -2,6 +2,7 @@
 #define ISR_H 1
 
 #include <stdint.h>
+#include <util/macro.h>
 
 typedef struct {
     // registers in the reverse order they are pushed:
@@ -36,7 +37,7 @@ typedef struct {
     uint64_t rsp;
     uint64_t ss;
 
-} __attribute__((packed)) registers_t;
+} PACKED registers_t;
 
 typedef void (*isrHandler)(void *ctx);
 

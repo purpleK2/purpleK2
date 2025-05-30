@@ -31,6 +31,7 @@
 #include <terminal/terminal.h>
 #include <tsc/tsc.h>
 #include <util/assert.h>
+#include <util/macro.h>
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -42,94 +43,39 @@
 #define INITRD_FILE "initrd.cpio"
 #define INITRD_PATH "/" INITRD_FILE
 
-/*
-    Set the base revision to 2, this is recommended as this is the latest
-    base revision described by the Limine boot protocol specification.
-    See specification for further info.
+USED SECTION(".requests") static volatile LIMINE_BASE_REVISION(3);
 
-    (Note for Omar)
-    --- DON'T EVEN DARE TO PUT THIS ANYWHERE ELSE OTHER THAN HERE. ---
-*/
-__attribute__((used,
-               section(".requests"))) static volatile LIMINE_BASE_REVISION(3);
-
-// The Limine requests can be placed anywhere, but it is important that
-// the compiler does not optimise them away, so, usually, they should
-// be made volatile or equivalent, _and_ they should be accessed at least
-// once or marked as used with the "used" attribute as done here.
-__attribute__((
-    used,
-    section(".requests"))) static volatile struct limine_framebuffer_request
+USED SECTION(".requests") static volatile struct limine_framebuffer_request
     framebuffer_request = {.id = LIMINE_FRAMEBUFFER_REQUEST, .revision = 0};
-
-// https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md#memory-map-feature
-__attribute__((
-    used, section(".requests"))) static volatile struct limine_memmap_request
+USED SECTION(".requests") static volatile struct limine_memmap_request
     memmap_request = {.id = LIMINE_MEMMAP_REQUEST, .revision = 0};
-
-// https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md#paging-mode-feature
-__attribute__((
-    used,
-    section(".requests"))) static volatile struct limine_paging_mode_request
+USED SECTION(".requests") static volatile struct limine_paging_mode_request
     paging_mode_request = {.id = LIMINE_PAGING_MODE_REQUEST, .revision = 0};
-
-// https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md#hhdm-higher-half-direct-map-feature
-__attribute__((used,
-               section(".requests"))) static volatile struct limine_hhdm_request
+USED SECTION(".requests") static volatile struct limine_hhdm_request
     hhdm_request = {.id = LIMINE_HHDM_REQUEST, .revision = 0};
-
-// https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md#kernel-address-feature
-__attribute__((
-    used,
-    section(".requests"))) static volatile struct limine_kernel_address_request
+USED SECTION(".requests") static volatile struct limine_kernel_address_request
     kernel_address_request = {.id       = LIMINE_KERNEL_ADDRESS_REQUEST,
                               .revision = 0};
-
-// https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md#rsdp-feature
-__attribute__((used,
-               section(".requests"))) static volatile struct limine_rsdp_request
+USED SECTION(".requests") static volatile struct limine_rsdp_request
     rsdp_request = {.id = LIMINE_RSDP_REQUEST, .revision = 0};
-
-// https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md#module-feature
-__attribute__((
-    used, section(".requests"))) static volatile struct limine_module_request
+USED SECTION(".requests") static volatile struct limine_module_request
     module_request = {.id = LIMINE_MODULE_REQUEST, .revision = 0};
-
-// https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md#firmware-type-feature
-__attribute__((
-    used,
-    section(".requests"))) static volatile struct limine_firmware_type_request
+USED SECTION(".requests") static volatile struct limine_firmware_type_request
     firmware_type_request = {.id = LIMINE_FIRMWARE_TYPE_REQUEST, .revision = 0};
-
-// next time warn me when you remove a request
-__attribute__((used,
-               section(".requests"))) static volatile struct limine_smp_request
+USED SECTION(".requests") static volatile struct limine_smp_request
     smp_request = {.id = LIMINE_SMP_REQUEST, .revision = 0};
 
-// Define the start and end markers for the Limine requests.
-// These can also be moved anywhere, to any .c file, as seen fit.
-__attribute__((used,
-               section(".requests_start_"
-                       "marker"))) static volatile LIMINE_REQUESTS_START_MARKER;
-
-__attribute__((
-    used,
-    section(
-        ".requests_end_marker"))) static volatile LIMINE_REQUESTS_END_MARKER;
-
-extern void _crash_test();
+USED SECTION(
+    ".requests_start_marker") static volatile LIMINE_REQUESTS_START_MARKER;
+USED SECTION(".requests_end_marker") static volatile LIMINE_REQUESTS_END_MARKER;
 
 struct limine_framebuffer *framebuffer;
-
 struct limine_memmap_response *memmap_response;
 struct limine_memmap_entry *memmap_entry;
-
 struct limine_hhdm_response *hhdm_response;
 struct limine_kernel_address_response *kernel_address_response;
 struct limine_paging_mode_response *paging_mode_response;
-
 struct limine_rsdp_response *rsdp_response;
-
 struct limine_module_response *module_response;
 
 struct bootloader_data limine_parsed_data;

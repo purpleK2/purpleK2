@@ -19,12 +19,12 @@ typedef struct {
                         // address
     uint32_t base_high; // The higher 32 bits of the ISR's address
     uint32_t reserved;  // Set to zero
-} __attribute__((packed)) idt_entry_t;
+} PACKED idt_entry_t;
 
 typedef struct {
     uint16_t limit;
     idt_entry_t *base;
-} __attribute__((packed)) idtr_t;
+} PACKED idtr_t;
 
 __attribute__((
     aligned(0x10))) static idt_entry_t idt_entries[IDT_MAX_DESCRIPTORS];
