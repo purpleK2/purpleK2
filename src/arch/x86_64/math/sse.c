@@ -1,5 +1,6 @@
 #include "sse.h"
-#include "cpu.h"
+
+#include <cpu.h>
 
 #include <stdio.h>
 

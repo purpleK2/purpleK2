@@ -1,4 +1,5 @@
 #include "initrd.h"
+
 #include <memory/heap/kheap.h>
 
 void dev_initrd_init(void *ramfs_disk) {

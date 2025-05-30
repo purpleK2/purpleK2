@@ -1,8 +1,5 @@
-/*
-        - Page fault handler
-
-        - Paging utilities
-*/
+#ifndef PAGING_H
+#define PAGING_H 1
 
 #include <interrupts/isr.h>
 
@@ -113,3 +110,5 @@ void copy_range_to_pagemap(uint64_t *dst_pml4, uint64_t *src_pml4,
                            uint64_t virt_start, size_t len);
 
 void paging_init(uint64_t *kernel_pml4);
+
+#endif

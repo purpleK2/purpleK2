@@ -1,5 +1,6 @@
 #include "parallel.h"
-#include "dev/device.h"
+
+#include <dev/device.h>
 
 int lpt1_status() {
     uint8_t status = _inb(STATUS_PORT);

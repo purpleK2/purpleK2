@@ -1,7 +1,9 @@
 #include "string.h"
-#include "stdio.h"
+
 #include <io.h>
 #include <memory/heap/kheap.h>
+
+#include <stdio.h>
 
 // GCC and Clang reserve the right to generate calls to the following
 // 4 functions even if they are not directly called.

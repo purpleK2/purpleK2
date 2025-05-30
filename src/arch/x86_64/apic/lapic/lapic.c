@@ -1,27 +1,22 @@
 #include "lapic.h"
 
 #include <cpu.h>
-
-#include <stdio.h>
-
 #include <interrupts/irq.h>
 #include <interrupts/isr.h>
-#include <pic/pic.h>
-
-#include <pit/pit.h>
-#include <time.h>
-#include <tsc/tsc.h>
-
-#include <scheduler/scheduler.h>
-
 #include <memory/pmm/pmm.h>
 #include <memory/vmm/vmm.h>
+#include <pic/pic.h>
+#include <pit/pit.h>
+#include <scheduler/scheduler.h>
+#include <tsc/tsc.h>
+
+#include <stdio.h>
+#include <time.h>
 
 uint32_t lapic_timer_ticks_per_ms = 0;
+bool lapic_status                 = false;
+uint64_t lapic_base               = 0;
 
-bool lapic_status = false;
-
-uint64_t lapic_base = 0;
 bool is_lapic_enabled() {
     return lapic_status;
 }

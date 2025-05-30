@@ -1,5 +1,5 @@
 #ifndef LIMITS_H
-#define LIMITS_H
+#define LIMITS_H 1
 
 #define LIMIT_SCHEUDLER_PROC_MAX 1024
 #define LIMIT_FD_PROC_MAX        1024

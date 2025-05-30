@@ -1,8 +1,10 @@
 #include "fakefs.h"
-#include "fs/vfs/vfs.h"
+
+#include <fs/vfs/vfs.h>
 #include <memory/heap/kheap.h>
+
 #include <stdio.h>
-#include <util/string.h>
+#include <string.h>
 
 typedef struct {
     char *content;

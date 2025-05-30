@@ -1,12 +1,11 @@
 #ifndef VMM_H
 #define VMM_H 1
 
+#include <limine.h>
+#include <paging/paging.h>
+
 #include <stddef.h>
 #include <stdint.h>
-
-#include <limine.h>
-
-#include <paging/paging.h>
 
 typedef struct virtmem_object_t {
     uint64_t base;

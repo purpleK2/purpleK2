@@ -1,5 +1,5 @@
 #ifndef DEVICE_H
-#define DEVICE_H
+#define DEVICE_H 1
 
 #include <stddef.h>
 #include <stdint.h>

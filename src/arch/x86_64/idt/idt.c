@@ -2,10 +2,10 @@
 
 #include <gdt/gdt.h>
 
-#include <stdbool.h>
 #include <util/binary.h>
 #include <util/util.h>
 
+#include <stdbool.h>
 #include <stdio.h>
 
 typedef struct {

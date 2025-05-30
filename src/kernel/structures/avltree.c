@@ -1,6 +1,8 @@
 #include "avltree.h"
+
 #include <memory/heap/kheap.h>
-#include <util/string.h>
+
+#include <string.h>
 
 // Helper function to get the maximum of two integers
 static int max(int a, int b) {

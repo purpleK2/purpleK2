@@ -1,13 +1,14 @@
 #ifndef PCIE_H
-#define PCIE_H
+#define PCIE_H 1
 
 #include <fs/cpio/newc.h>
 #include <io.h>
 #include <memory/heap/kheap.h>
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <util/string.h>
+#include <string.h>
 
 #define MAX_VENDOR_NAME 128
 #define MAX_DEVICE_NAME 128
@@ -66,4 +67,4 @@ void pci_lookup_vendor_device(pci_device_t *dev, const char *pci_ids,
                               size_t length);
 void pci_print_list();
 
-#endif
+#endif // PCIE_H

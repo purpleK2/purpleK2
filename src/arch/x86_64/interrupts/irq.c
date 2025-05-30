@@ -1,17 +1,14 @@
 #include "irq.h"
 
-#include <pic/pic.h>
-
-#include <interrupts/isr.h>
-
-#include <io.h>
-#include <stdio.h>
-
-#include <stddef.h>
-
 #include <apic/ioapic/ioapic.h>
 #include <apic/lapic/lapic.h>
 #include <cpu.h>
+#include <interrupts/isr.h>
+#include <io.h>
+#include <pic/pic.h>
+
+#include <stddef.h>
+#include <stdio.h>
 
 void irq_init() {
     pic_config(PIC_REMAP_OFFSET, PIC_REMAP_OFFSET + 8);

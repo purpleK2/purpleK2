@@ -1,9 +1,10 @@
 #ifndef VFS_H
-#define VFS_H
+#define VFS_H 1
 
-#include "structures/avltree.h"
-#include "types.h"
+#include <structures/avltree.h>
+
 #include <stdint.h>
+#include <types.h>
 
 // vfs errors
 #define VENOENT 1

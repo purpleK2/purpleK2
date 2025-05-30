@@ -1,6 +1,8 @@
 #include "vfs.h"
+
 #include <memory/heap/kheap.h>
-#include <util/string.h>
+
+#include <string.h>
 
 static fs_node_t *vfs_root_node = NULL;
 static AVLTree *vfs_mount_table = NULL;

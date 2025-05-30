@@ -1,12 +1,13 @@
 #ifndef DEV_PARALLEL_H
 #define DEV_PARALLEL_H
 
-#include <../arch/x86_64/io.h>
 #include <dev/device.h>
+#include <io.h>
 #include <memory/heap/kheap.h>
+
 #include <stddef.h>
 #include <stdint.h>
-#include <util/string.h>
+#include <string.h>
 
 #define LPT1_BASE    0x378
 #define DATA_PORT    (LPT1_BASE + 0)

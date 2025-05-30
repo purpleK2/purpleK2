@@ -1,5 +1,5 @@
 #ifndef KMALLOC_H
-#define KMALLOC_H
+#define KMALLOC_H 1
 
 #include <stdbool.h>
 #include <stddef.h>

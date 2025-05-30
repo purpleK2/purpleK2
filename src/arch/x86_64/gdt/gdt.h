@@ -15,10 +15,12 @@
 #define GDT_BASE_HIGH(base) ((base >> 24) & 0xFF)
 
 #define GDT_ENTRY(base, limit, access, flags)                                  \
-    {                                                                          \
-        GDT_LIMIT_LOW(limit), GDT_BASE_LOW(base), GDT_BASE_MIDDLE(base),       \
-            access, GDT_FLAGS_HI_LIMIT(limit, flags), GDT_BASE_HIGH(base)      \
-    }
+    {GDT_LIMIT_LOW(limit),                                                     \
+     GDT_BASE_LOW(base),                                                       \
+     GDT_BASE_MIDDLE(base),                                                    \
+     access,                                                                   \
+     GDT_FLAGS_HI_LIMIT(limit, flags),                                         \
+     GDT_BASE_HIGH(base)}
 
 typedef struct {
     uint16_t limit_low;           // limit & 0xFF

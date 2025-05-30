@@ -1,33 +1,24 @@
-#include "time.h"
 #include "uacpi/kernel_api.h"
 
 #include <acpi/uacpi/types.h>
-#include <uacpi/status.h>
-
-#include <kernel.h>
-
+#include <arch.h>
+#include <cpu.h>
+#include <dev/pcie/pcie.h>
 #include <interrupts/isr.h>
-
+#include <io.h>
+#include <kernel.h>
 #include <memory/heap/kheap.h>
 #include <memory/vmm/vma.h>
 #include <paging/paging.h>
-
+#include <semaphore.h>
+#include <spinlock.h>
+#include <uacpi/status.h>
 #include <util/assert.h>
-#include <util/string.h>
 #include <util/util.h>
 
 #include <stdio.h>
-
-#include <io.h>
-
-#include <dev/pcie/pcie.h>
-
-#include <semaphore.h>
-#include <spinlock.h>
-
-#include <arch.h>
-
-#include <cpu.h>
+#include <string.h>
+#include <time.h>
 
 // --- fun fact: `uacpi_phys_addr` is uint64_t btw ---
 

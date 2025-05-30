@@ -1,29 +1,16 @@
-/*
-        Page fault "handler"
-
-        When a page fault exception is fired, the _hcf screen will print
-   information about the given error code.
-
-        (C) RepubblicaTech 2024
-*/
-
 #include "paging.h"
-#include "smp/ipi.h"
+
+#include <autoconf.h>
+#include <cpu.h>
+#include <kernel.h>
+#include <limine.h>
+#include <memory/pmm/pmm.h>
+#include <smp/ipi.h>
+#include <util/util.h>
 
 #include <stdint.h>
 #include <stdio.h>
-
-#include <memory/pmm/pmm.h>
-
-#include <util/string.h>
-#include <util/util.h>
-
-#include <kernel.h>
-#include <limine.h>
-
-#include <cpu.h>
-
-#include <autoconf.h>
+#include <string.h>
 
 /* http://wiki.osdev.org/Exceptions#Page_Fault
 

@@ -1,7 +1,7 @@
+#include "gdt.h"
+
 #include <stdint.h>
 #include <stdio.h>
-
-#include "gdt.h"
 
 gdt_pointer_t gdtr;
 gdt_entry_t gdt_entries[5];

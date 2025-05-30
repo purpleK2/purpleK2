@@ -1,21 +1,16 @@
+#include "vmm.h"
 
+#include <autoconf.h>
+#include <cpu.h>
+#include <kernel.h>
 #include <memory/vmm/vma.h>
-#include <memory/vmm/vmm.h>
 #include <paging/paging.h>
+#include <spinlock.h>
+#include <util/util.h>
 
 #include <stdint.h>
 #include <stdio.h>
-
-#include <spinlock.h>
-
-#include <util/string.h>
-#include <util/util.h>
-
-#include <kernel.h>
-
-#include <autoconf.h>
-
-#include <cpu.h>
+#include <string.h>
 
 vmm_context_t *current_vmm_ctx;
 

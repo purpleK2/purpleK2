@@ -1,8 +1,4 @@
-#include <smp/smp.h>
-#include <tsc/tsc.h>
-
-#include <stdint.h>
-#include <stdio.h>
+#include "smp.h"
 
 #include <apic/lapic/lapic.h>
 #include <gdt/gdt.h>
@@ -14,8 +10,11 @@
 #include <paging/paging.h>
 #include <scheduler/scheduler.h>
 #include <smp/ipi.h>
-
+#include <tsc/tsc.h>
 #include <util/util.h>
+
+#include <stdint.h>
+#include <stdio.h>
 
 struct tlb_shootdown_event **events;
 

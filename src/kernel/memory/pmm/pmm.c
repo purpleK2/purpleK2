@@ -6,19 +6,16 @@
 
 #include "pmm.h"
 
+#include <autoconf.h>
 #include <kernel.h>
 #include <limine.h>
-
-#include <util/string.h>
+#include <spinlock.h>
 #include <util/util.h>
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
-
-#include <spinlock.h>
-
-#include <autoconf.h>
+#include <string.h>
 
 lock_t PMM_LOCK;
 

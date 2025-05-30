@@ -2,9 +2,9 @@
 #define PMM_H 1
 
 #include <kernel.h>
-#include <stddef.h>
+#include <memory/pmm/freelist.h>
 
-#include "freelist.h"
+#include <stddef.h>
 
 #define PFRAME_SIZE 0x1000 // each page frame is 4KB wide
 

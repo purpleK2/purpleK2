@@ -1,7 +1,9 @@
 #include "newc.h"
-#include "memory/heap/kheap.h"
+
+#include <memory/heap/kheap.h>
+
 #include <stdio.h>
-#include <util/string.h>
+#include <string.h>
 
 #define align4(x) (((x) + 3) & ~3)
 

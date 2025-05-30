@@ -1,5 +1,5 @@
-#ifndef CPIO_NEWC_H
-#define CPIO_NEWC_H 1
+#ifndef NEWC_H
+#define NEWC_H 1
 
 #include <stddef.h>
 #include <stdint.h>
@@ -37,4 +37,4 @@ size_t cpio_fs_read(cpio_fs_t *fs, const char *filename, void *buffer,
 void cpio_fs_free(cpio_fs_t *fs);
 cpio_file_t *cpio_fs_get_file(cpio_fs_t *fs, const char *filename);
 
-#endif // CPIO_NEWC_H
+#endif // NEWC_H

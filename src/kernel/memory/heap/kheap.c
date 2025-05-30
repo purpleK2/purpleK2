@@ -1,7 +1,9 @@
 #include "kheap.h"
-#include "memory/vmm/vmm.h"
+
 #include <memory/vmm/vma.h>
-#include <util/string.h>
+#include <memory/vmm/vmm.h>
+
+#include <string.h>
 
 #define ALIGN8(x)      (((x) + 7) & ~7)
 #define MIN_BLOCK_SIZE 16

@@ -1,9 +1,10 @@
 #include "tsc.h"
-#include "pit/pit.h"
 
 #include <interrupts/isr.h>
-#include <stdio.h>
+#include <pit/pit.h>
 #include <util/util.h>
+
+#include <stdio.h>
 
 uint64_t tsc_frequency = 0;
 

@@ -1,16 +1,13 @@
 #include "vma.h"
 
-#include <stdio.h>
-
+#include <autoconf.h>
 #include <memory/pmm/pmm.h>
 #include <paging/paging.h>
-
-#include "util/string.h"
-#include "util/util.h"
-
 #include <spinlock.h>
+#include <util/util.h>
 
-#include <autoconf.h>
+#include <stdio.h>
+#include <string.h>
 
 // @param phys optional parameter, maps the newly allocated virtual address to
 // such physical address

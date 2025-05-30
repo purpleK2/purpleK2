@@ -1,13 +1,10 @@
 #include "stdio.h"
-#include "terminal/terminal.h"
 
 #include <io.h>
-
 #include <limine.h>
-
 #include <spinlock.h>
-
 #include <stdarg.h>
+#include <terminal/terminal.h>
 #include <util/va_list.h>
 
 #define NANOPRINTF_USE_FIELD_WIDTH_FORMAT_SPECIFIERS     1

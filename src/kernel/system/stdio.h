@@ -4,11 +4,11 @@
 // #define PRINTF_MIRROR            // printf() will be mirrored to the E9 port
 #define BETTER_DEBUG // better debug info (with function names and line)
 
-#include <stdint.h>
-
 #include <nanoprintf.h>
-#include <time.h>
 #include <tsc/tsc.h>
+
+#include <stdint.h>
+#include <time.h>
 
 extern bool pit;
 

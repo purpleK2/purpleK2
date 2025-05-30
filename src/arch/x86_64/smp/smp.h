@@ -3,7 +3,6 @@
 
 #include <limine.h>
 
-
 struct tlb_shootdown_event {
     uint64_t virtual;
     uint64_t length;

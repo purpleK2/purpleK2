@@ -1,23 +1,20 @@
 #include "scheduler.h"
 
-#include <stdatomic.h>
-#include <stdio.h>
-
+#include <autoconf.h>
 #include <fs/vfs/vfs.h>
 #include <gdt/gdt.h>
 #include <interrupts/isr.h>
 #include <kernel.h>
-#include <spinlock.h>
-
 #include <memory/heap/kheap.h>
 #include <memory/vmm/vmm.h>
 #include <paging/paging.h>
-
 #include <smp/smp.h>
+#include <spinlock.h>
 #include <util/assert.h>
-#include <util/string.h>
 
-#include <autoconf.h>
+#include <stdatomic.h>
+#include <stdio.h>
+#include <string.h>
 
 scheduler_manager_t *scheduler_manager;
 

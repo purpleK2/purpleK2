@@ -1,8 +1,9 @@
 #include "device.h"
 
 #include <memory/heap/kheap.h>
+
 #include <stdio.h>
-#include <util/string.h>
+#include <string.h>
 
 static device_t *device_table[DEVICES_MAX];
 static int device_count = 0;

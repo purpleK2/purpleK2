@@ -1,23 +1,19 @@
 #include "arch.h"
-#include "math/fpu.h"
-#include "math/sse.h"
 
-#include <stdio.h>
-
+#include <cpu.h>
 #include <gdt/gdt.h>
 #include <idt/idt.h>
 #include <interrupts/irq.h>
 #include <interrupts/isr.h>
-
+#include <math/fpu.h>
+#include <math/sse.h>
+#include <paging/paging.h>
 #include <pic/pic.h>
 #include <pit/pit.h>
 #include <tsc/tsc.h>
 
-#include <paging/paging.h>
-
+#include <stdio.h>
 #include <time.h>
-
-#include <cpu.h>
 
 #define PIT_TICKS 1000 / 1 // 1 ms
 

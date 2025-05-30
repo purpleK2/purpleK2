@@ -21,7 +21,6 @@ typedef unsigned int fd_t;
 // locks
 typedef atomic_flag lock_t;
 
-#define LOCK_INIT                                                              \
-    { 0 }
+#define LOCK_INIT {0}
 
 #endif // TYPES_H

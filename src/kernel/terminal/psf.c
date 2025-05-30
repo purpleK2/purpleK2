@@ -1,7 +1,8 @@
-#include "kernel.h"
+#include "psf.h"
+
 #include <graphical/framebuffer.h>
+#include <kernel.h>
 #include <terminal/font.h>
-#include <terminal/psf.h>
 #include <terminal/terminal.h>
 
 #include <stdio.h>

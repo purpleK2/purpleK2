@@ -1,7 +1,9 @@
 #include "serial.h"
-#include "dev/device.h"
-#include "io.h"
-#include "stdio.h"
+
+#include <dev/device.h>
+#include <io.h>
+
+#include <stdio.h>
 
 int serial_received(int port) {
     return _inb(port + 5) & 1;

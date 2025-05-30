@@ -1,4 +1,5 @@
 #include "dump.h"
+
 #include <stdio.h>
 
 void hex_dump(const void *data, size_t size) {

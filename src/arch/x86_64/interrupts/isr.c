@@ -1,16 +1,12 @@
 #include "isr.h"
 
-#include <kernel.h>
-
-#include <smp/ipi.h>
-#include <smp/smp.h>
-
 #include <apic/lapic/lapic.h>
-
 #include <gdt/gdt.h>
 #include <idt/idt.h>
-
+#include <kernel.h>
 #include <limine.h>
+#include <smp/ipi.h>
+#include <smp/smp.h>
 
 #include <stddef.h>
 #include <stdint.h>

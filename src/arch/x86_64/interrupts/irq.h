@@ -1,9 +1,9 @@
 #ifndef IRQ_H
 #define IRQ_H 1
 
-#include <stdint.h>
+#include <interrupts/isr.h>
 
-#include "isr.h"
+#include <stdint.h>
 
 typedef void (*irq_handler)(void *ctx);
 

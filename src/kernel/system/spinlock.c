@@ -1,6 +1,7 @@
 #include "spinlock.h"
-#include "stdio.h"
-#include "types.h"
+
+#include <stdio.h>
+#include <types.h>
 
 void spinlock_acquire(lock_t *lock) {
     unsigned int timeout = 1000000;

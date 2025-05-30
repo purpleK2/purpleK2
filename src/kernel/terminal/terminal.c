@@ -1,11 +1,13 @@
+#include "terminal.h"
+
 #include <graphical/framebuffer.h>
 #include <limine.h>
+#include <terminal/psf.h>
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <terminal/psf.h>
-#include <terminal/terminal.h>
-#include <util/string.h>
+#include <string.h>
 
 #define MAX_ROWS 256
 #define MAX_COLS 256

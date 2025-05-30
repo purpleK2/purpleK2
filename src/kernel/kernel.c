@@ -1,43 +1,10 @@
-#include "io.h"
-#include "memory/heap/kheap.h"
-#include "tables/hpet.h"
-#include "tsc/tsc.h"
-#include <kernel.h>
-
-#include <limine.h>
-
-#include <terminal/psf.h>
-#include <terminal/terminal.h>
-
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdio.h>
-
-#include <ahci/ahci.h>
-
-#include <arch.h>
-#include <cpu.h>
-
-#include <time.h>
-
-#include <memory/heap/kheap.h>
-#include <memory/pmm/pmm.h>
-#include <memory/vmm/vma.h>
-#include <memory/vmm/vmm.h>
-#include <paging/paging.h>
-
-#include <scheduler/scheduler.h>
-#include <smp/ipi.h>
-#include <smp/smp.h>
+#include "kernel.h"
 
 #include <acpi/acpi.h>
-
-#include <fs/cpio/newc.h>
-#include <fs/fakefs/fakefs.h>
-#include <fs/vfs/devfs/devfs.h>
-#include <fs/vfs/vfs.h>
-
+#include <ahci/ahci.h>
+#include <arch.h>
+#include <autoconf.h>
+#include <cpu.h>
 #include <dev/device.h>
 #include <dev/fs/initrd.h>
 #include <dev/pcie/pcie.h>
@@ -45,11 +12,32 @@
 #include <dev/port/parallel/parallel.h>
 #include <dev/port/serial/serial.h>
 #include <dev/std/helper.h>
-
+#include <fs/cpio/newc.h>
+#include <fs/fakefs/fakefs.h>
+#include <fs/vfs/devfs/devfs.h>
+#include <fs/vfs/vfs.h>
+#include <io.h>
+#include <limine.h>
+#include <memory/heap/kheap.h>
+#include <memory/pmm/pmm.h>
+#include <memory/vmm/vma.h>
+#include <memory/vmm/vmm.h>
+#include <paging/paging.h>
+#include <scheduler/scheduler.h>
+#include <smp/ipi.h>
+#include <smp/smp.h>
+#include <tables/hpet.h>
+#include <terminal/psf.h>
+#include <terminal/terminal.h>
+#include <tsc/tsc.h>
 #include <util/assert.h>
-#include <util/string.h>
 
-#include <autoconf.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
 
 #define INITRD_FILE "initrd.cpio"
 #define INITRD_PATH "/" INITRD_FILE

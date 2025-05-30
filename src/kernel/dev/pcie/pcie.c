@@ -1,8 +1,10 @@
 #include "pcie.h"
-#include "fs/cpio/newc.h"
-#include "stdio.h"
+
+#include <fs/cpio/newc.h>
 #include <memory/heap/kheap.h>
-#include <util/string.h>
+
+#include <stdio.h>
+#include <string.h>
 
 pci_device_t *pci_devices_head = NULL;
 

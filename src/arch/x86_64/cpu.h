@@ -1,11 +1,10 @@
 #ifndef CPU_H
 #define CPU_H 1
 
+#include <cpuid.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#include <cpuid.h>
 
 // Vendor strings from CPUs.
 #define CPUID_VENDOR_AMD "AuthenticAMD"

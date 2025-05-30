@@ -1,12 +1,12 @@
-#ifndef MEMORY_H
-#define MEMORY_H 1
+#ifndef STRING_H
+#define STRING_H 1
+
+#include <kernel.h>
+#include <limine.h>
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#include <kernel.h>
-#include <limine.h>
 
 /*
     GCC and Clang reserve the right to generate calls to the following
