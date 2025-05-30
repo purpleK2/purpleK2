@@ -96,18 +96,6 @@ void print_reg_dump(void *ctx) {
 void panic_common(void *ctx) {
     registers_t *regs = ctx;
 
-    debugf(ANSI_COLOR_BLUE);
-
-    bsod_init();
-
-    uint64_t cpu = 0;
-    if (is_lapic_enabled())
-        cpu = lapic_get_id();
-
-    mprintf("KERNEL PANIC! \"%s\" (Exception n. %d) on CPU %hhu\n",
-            exceptions[regs->interrupt], regs->interrupt, cpu);
-    mprintf("\terrcode: %llx\n", regs->error);
-
     print_reg_dump(regs);
 
     // stacktrace
@@ -175,6 +163,18 @@ void isr_handler(void *ctx) {
                     lapic_get_id());
     } else {
         stdio_panic_init();
+
+        debugf(ANSI_COLOR_BLUE);
+
+        bsod_init();
+
+        uint64_t cpu = 0;
+        if (is_lapic_enabled())
+            cpu = lapic_get_id();
+
+        mprintf("KERNEL PANIC! \"%s\" (Exception n. %d) on CPU %hhu\n",
+                exceptions[regs->interrupt], regs->interrupt, cpu);
+        mprintf("\terrcode: %llx\n", regs->error);
 
         panic_common(regs);
 
