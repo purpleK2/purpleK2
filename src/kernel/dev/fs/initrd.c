@@ -3,7 +3,7 @@
 
 void dev_initrd_init(void *ramfs_disk) {
     device_t *dev = kmalloc(sizeof(device_t));
-    memcpy(dev->name, "initrd", DEVICE_NAME_MAX);
+    memcpy(dev->name, "ram0", DEVICE_NAME_MAX);
     dev->type  = DEVICE_TYPE_BLOCK;
     dev->read  = dev_initrd_read;
     dev->write = dev_initrd_write;

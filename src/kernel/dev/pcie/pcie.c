@@ -1,4 +1,5 @@
 #include "pcie.h"
+#include "fs/cpio/newc.h"
 #include "stdio.h"
 #include <memory/heap/kheap.h>
 #include <util/string.h>
@@ -84,7 +85,7 @@ uint32_t pci_config_read(uint8_t bus, uint8_t device, uint8_t function,
 }
 
 pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
-                             ustar_file_tree_t *pci_ids) {
+                             cpio_file_t *pci_ids) {
     uint32_t vendor_device = pci_config_read(bus, device, function, 0);
     if ((vendor_device & 0xFFFF) == 0xFFFF)
         return NULL;
@@ -100,8 +101,7 @@ pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
     new_dev->subclass     = (class_info >> 16) & 0xFF;
     new_dev->prog_if      = (class_info >> 8) & 0xFF;
     new_dev->header_type  = pci_config_read(bus, device, function, 0x0C) & 0xFF;
-    pci_lookup_vendor_device(new_dev, pci_ids->found_files[0]->start,
-                             pci_ids->found_files[0]->size);
+    pci_lookup_vendor_device(new_dev, pci_ids->data, pci_ids->filesize);
 
     // Initialize BARs and BAR types to zero
     for (int i = 0; i < 6; i++) {
@@ -144,14 +144,12 @@ pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
     new_dev->irq_line = irq_line;
     new_dev->irq_pin  = irq_pin;
 
-    kprintf("IRQ Line: %d, IRQ Pin: %d\n", new_dev->irq_line, new_dev->irq_pin);
-
     new_dev->next    = pci_devices_head;
     pci_devices_head = new_dev;
     return new_dev;
 }
 
-void pci_scan(ustar_file_tree_t *pci_ids) {
+void pci_scan(cpio_file_t *pci_ids) {
     for (uint16_t bus = 0; bus < 256; bus++) {
         for (uint8_t device = 0; device < 32; device++) {
             for (uint8_t function = 0; function < 8; function++) {

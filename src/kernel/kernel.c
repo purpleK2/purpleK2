@@ -33,8 +33,8 @@
 
 #include <acpi/acpi.h>
 
+#include <fs/cpio/newc.h>
 #include <fs/fakefs/fakefs.h>
-#include <fs/ustar/ustar.h>
 #include <fs/vfs/devfs/devfs.h>
 #include <fs/vfs/vfs.h>
 
@@ -51,7 +51,7 @@
 
 #include <autoconf.h>
 
-#define INITRD_FILE "initrd.img"
+#define INITRD_FILE "initrd.cpio"
 #define INITRD_PATH "/" INITRD_FILE
 
 /*
@@ -328,15 +328,15 @@ void kstart(void) {
 
     kmalloc_init();
 
-    debugf("Malloc Test:\n");
+    debugf_debug("Malloc Test:\n");
     void *ptr1 = kmalloc(0xA0);
-    debugf("[1] kmalloc(0xA0) @ %p\n", ptr1);
+    debugf_debug("[1] kmalloc(0xA0) @ %p\n", ptr1);
     void *ptr2 = kmalloc(0xA3B0);
-    debugf("[2] kmalloc(0xA3B0) @ %p\n", ptr2);
+    debugf_debug("[2] kmalloc(0xA3B0) @ %p\n", ptr2);
     kfree(ptr1);
     kfree(ptr2);
     ptr1 = kmalloc(0xF00);
-    debugf("[3] kmalloc(0xF00) @ %p\n", ptr1);
+    debugf_debug("[3] kmalloc(0xF00) @ %p\n", ptr1);
     kfree(ptr1);
     kprintf_ok("kheap init done\n");
 
@@ -434,19 +434,35 @@ void kstart(void) {
     }
 
     if (!initrd) {
-        kprintf_panic("No initrd file found.");
+        kprintf_panic("No initrd.cpio file found.");
         _hcf();
     }
 
     kprintf_info("Initrd loaded at address %p\n", initrd->address);
 
-    ustar_fs_t *initramfs_disk = ramfs_init(initrd->address);
+    cpio_fs_t fs;
+    memset(&fs, 0, sizeof(cpio_fs_t));
 
-    ustar_file_tree_t *test = file_lookup(initramfs_disk, "test.txt");
-    kprintf("%*s", test->found_files[0]->size, test->found_files[0]->start);
+    int ret = cpio_fs_parse(&fs, initrd->address, initrd->size);
+    if (ret < 0) {
+        kprintf_panic("Failed to parse initrd.cpio file.");
+        _hcf();
+    }
+
+    kprintf_ok("Initrd.cpio parsed successfully!\n");
+
+    // test CPIO read
+    char buffer[256];
+    size_t read_size = cpio_fs_read(&fs, "test.txt", buffer, sizeof(buffer));
+    if (read_size > 0) {
+        kprintf("Read %zu bytes from test.txt:\n%.*s\n\n", read_size,
+                (int)read_size, buffer);
+    } else {
+        kprintf_warn("Failed to read test.txt from initrd.cpio\n");
+    }
 
     register_std_devices();
-    dev_initrd_init(initramfs_disk);
+    dev_initrd_init(initrd->address);
     dev_e9_init();
     dev_serial_init();
     dev_parallel_init();
@@ -457,7 +473,7 @@ void kstart(void) {
     device_t *dev_e9       = get_device("e9");
     device_t *dev_serial   = get_device("com1");
     device_t *dev_parallel = get_device("lpt1");
-    device_t *dev_initrd   = get_device("initrd");
+    device_t *dev_initrd   = get_device("ram0");
     device_t *dev_null     = get_device("null");
 
 #ifdef CONFIG_DEVFS_ENABLE_E9
@@ -485,8 +501,7 @@ void kstart(void) {
 
     // limine_parsed_data.smp_enabled = true;
 
-    ustar_file_tree_t *pci_ids =
-        file_lookup(initramfs_disk, "pci.ids"); // Load PCI IDs from initrd
+    cpio_file_t *pci_ids = cpio_fs_get_file(&fs, "pci.ids");
 
     pci_scan(pci_ids);
     pci_print_list();
@@ -496,9 +511,6 @@ void kstart(void) {
     kprintf("System started: Time took: %llu seconds %llu ms.\n",
             limine_parsed_data.boot_time / 1000,
             limine_parsed_data.boot_time % 1000);
-
-    register_hpet_irq(0, hpet_test_handler);
-    hpet_start();
 
     for (;;)
         ;

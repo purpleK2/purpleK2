@@ -1,7 +1,7 @@
 #ifndef PCIE_H
 #define PCIE_H
 
-#include <fs/ustar/ustar.h>
+#include <fs/cpio/newc.h>
 #include <io.h>
 #include <memory/heap/kheap.h>
 #include <stddef.h>
@@ -53,15 +53,15 @@ typedef struct {
 
 extern pci_device_t *pci_devices_head;
 
-void pci_scan(ustar_file_tree_t *pci_ids);
-void pci_print_devices(ustar_file_tree_t *pci_ids);
+void pci_scan(cpio_file_t *pci_ids);
+void pci_print_devices(cpio_file_t *pci_ids);
 void pci_print_info(uint8_t bus, uint8_t device, uint8_t function);
 void pci_free_list();
 uint32_t pci_config_read(uint8_t bus, uint8_t device, uint8_t function,
                          uint8_t offset);
 
 pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
-                             ustar_file_tree_t *pci_ids);
+                             cpio_file_t *pci_ids);
 void pci_lookup_vendor_device(pci_device_t *dev, const char *pci_ids,
                               size_t length);
 void pci_print_list();

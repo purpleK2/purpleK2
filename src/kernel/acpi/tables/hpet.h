@@ -2,6 +2,7 @@
 #define HPET_H 1
 
 #include "interrupts/irq.h"
+#include <stdbool.h>
 #include <stdint.h>
 
 #define SET_BIT(x, bit)   ((x) |= (1ULL << (bit)))
@@ -38,6 +39,8 @@ typedef struct hpet_timer {
     int irq_num;
 } hpet_timer_t;
 
+extern bool hpet_initialized;
+
 int hpet_init(void);
 
 void register_hpet_irq(int timer, irq_handler handler);
@@ -45,8 +48,9 @@ uint64_t hpet_timer_get_value(int timer);
 void hpet_halt(void);
 uint64_t hpet_start(void);
 uint64_t hpet_get_base(void);
+uint64_t hpet_get_main_counter(void);
 uint64_t hpet_get_counter(void);
 
-void hpet_test_handler(void *ctx);
+void hpet_main_timer(void *ctx);
 
 #endif // HPET_H

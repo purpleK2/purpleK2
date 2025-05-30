@@ -291,3 +291,50 @@ void strcpy(char dest[], const char source[]) {
         i++;
     }
 }
+
+#include <stddef.h>
+#include <stdint.h>
+
+uint64_t strtoull(const char *str, const char **endptr, int base) {
+    uint64_t result = 0;
+    int digit;
+
+    // Skip whitespace
+    while (*str == ' ' || *str == '\t' || *str == '\n' || *str == '\v' ||
+           *str == '\f' || *str == '\r') {
+        str++;
+    }
+
+    // Optional "0x" or "0X" prefix for hex
+    if ((base == 0 || base == 16) && str[0] == '0' &&
+        (str[1] == 'x' || str[1] == 'X')) {
+        base  = 16;
+        str  += 2;
+    }
+
+    // Default base
+    if (base == 0)
+        base = (str[0] == '0') ? 8 : 10;
+
+    while (*str) {
+        if (*str >= '0' && *str <= '9')
+            digit = *str - '0';
+        else if (*str >= 'a' && *str <= 'f')
+            digit = *str - 'a' + 10;
+        else if (*str >= 'A' && *str <= 'F')
+            digit = *str - 'A' + 10;
+        else
+            break;
+
+        if (digit >= base)
+            break;
+
+        result = result * base + digit;
+        str++;
+    }
+
+    if (endptr)
+        *endptr = str;
+
+    return result;
+}

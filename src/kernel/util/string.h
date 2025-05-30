@@ -45,4 +45,6 @@ static const char *const memory_block_type[] = {"USABLE",
                                                 "KERNEL_AND_MODULES",
                                                 "FRAMEBUFFER"};
 
+uint64_t strtoull(const char *str, const char **endptr, int base);
+
 #endif

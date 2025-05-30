@@ -15,7 +15,7 @@ BUILD_DIR=build
 ISO_DIR=iso
 OBJS_DIR=$(BUILD_DIR)/objs
 INITRD_DIR=target
-INITRD=initrd.img
+INITRD=initrd.cpio
 
 KCONFIG_CONFIG = .config
 KCONFIG_DEPS = Kconfig
@@ -204,10 +204,10 @@ libs:
 	@$(MAKE) limine_build
 
 # Create initrd image
-# Create initrd image
-$(BUILD_DIR)/$(INITRD): $(shell find $(INITRD_DIR) -type f)
-	tar -cvf $@ --format=ustar $(INITRD_DIR)/*
-	@echo "--> Initrd:	" $@
+$(BUILD_DIR)/$(INITRD):
+	cd $(INITRD_DIR) && \
+		find . -type f | cpio -H newc -o > ../$(BUILD_DIR)/$(INITRD) && \
+		cd ..
 
 # Link rules for the final kernel executable.
 $(BUILD_DIR)/$(KERNEL): $(SRC_DIR)/linker.ld $(OBJ)
