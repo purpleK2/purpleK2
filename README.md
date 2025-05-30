@@ -76,7 +76,7 @@ The following packages are required to build the kernel:
 > [!NOTE]
 > Fedora users: if you know how to read a `PKGBUILD` file, you can follow the commands in the AUR to install the latest version of `kconfig-frontends` (4.11.0.1 at the time of writing this) to your `/usr/bin`
 - [OPTIONAL] `edk2-ovmf`: useful for running QEMU with UEFI support
-- [OPTIONAL] `mtools`: for formatting and managing the files in the virtual disk image
+- [OPTIONAL] `mtools` and `sgdisk`: for partitioning and managing the files in the virtual disk image
 
 
 ### Setting up a cross compiler
