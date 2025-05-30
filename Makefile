@@ -205,9 +205,7 @@ libs:
 
 # Create initrd image
 $(BUILD_DIR)/$(INITRD):
-	cd $(INITRD_DIR) && \
-		find . -type f | cpio -H newc -o > ../$(BUILD_DIR)/$(INITRD) && \
-		cd ..
+		find $(INITRD_DIR) -type f | cpio -H newc -o > $(BUILD_DIR)/$(INITRD)
 
 # Link rules for the final kernel executable.
 $(BUILD_DIR)/$(KERNEL): $(SRC_DIR)/linker.ld $(OBJ)
@@ -284,9 +282,11 @@ debug: $(OS_CODENAME).iso
 debug-hdd: $(OS_CODENAME).hdd
 	gdb -x debug_hdd.gdb $(BUILD_DIR)/$(KERNEL)
 
-# Remove object files and the final executable.
-.PHONY: clean
+# Remove object files.
+.PHONY: clean distclean
 
 clean:
-	rm -rf $(ISO_DIR)
-	rm -rf $(BUILD_DIR)
+	rm -rf $(OS_CODENAME).iso $(OS_CODENAME).hdd
+
+distclean:
+	rm -rf $(BUILD_DIR) $(ISO_DIR) *.iso *.hdd
