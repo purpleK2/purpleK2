@@ -132,7 +132,7 @@ all: $(OS_CODENAME).iso
 all-hdd: $(OS_CODENAME).hdd
 
 # Define the ISO image file as an explicit target with dependencies
-$(OS_CODENAME).iso: $(ISO_DIR)/$(KERNEL) $(ISO_DIR)/$(INITRD) $(ISO_DIR)/boot/limine/limine-bios-cd.bin $(ISO_DIR)/boot/limine/limine-uefi-cd.bin $(ISO_DIR)/EFI/BOOT/BOOTX64.EFI limine_build
+$(OS_CODENAME).iso: $(ISO_DIR)/$(KERNEL) $(ISO_DIR)/$(INITRD) $(ISO_DIR)/boot/limine.conf $(ISO_DIR)/boot/limine/limine-bios-cd.bin $(ISO_DIR)/boot/limine/limine-uefi-cd.bin $(ISO_DIR)/EFI/BOOT/BOOTX64.EFI $(ISO_DIR)/bg.png limine_build $(ISO_DIR)/boot/limine/limine-bios.sys
 	@# Create the bootable ISO.
 	xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin \
 		-no-emul-boot -boot-load-size 4 -boot-info-table \
@@ -172,21 +172,32 @@ $(ISO_DIR)/$(KERNEL): $(BUILD_DIR)/$(KERNEL)
 $(ISO_DIR)/$(INITRD): $(BUILD_DIR)/$(INITRD)
 	cp -v $< $@
 
+$(ISO_DIR)/boot/limine.conf: $(SRC_DIR)/limine.conf
+	mkdir -p "$$(dirname $@)"
+	cp -v $< $@
+
 # Copy Limine bootloader files
 $(ISO_DIR)/boot/limine/limine-bios-cd.bin: $(LIBS_DIR)/limine/limine-bios-cd.bin
-	mkdir -p $(ISO_DIR)/boot/limine
-	cp -v $(SRC_DIR)/limine.conf $(LIBS_DIR)/limine/limine-bios.sys $< $(ISO_DIR)/boot/limine/
+	mkdir -p "$$(dirname $@)"
+	cp -v $< $@
 
 $(ISO_DIR)/boot/limine/limine-uefi-cd.bin: $(LIBS_DIR)/limine/limine-uefi-cd.bin
-	mkdir -p $(ISO_DIR)/boot/limine
-	cp -v $< $(ISO_DIR)/boot/limine/
+	mkdir -p "$$(dirname $@)"
+	cp -v $< $@
+
+$(ISO_DIR)/boot/limine/limine-bios.sys: $(LIBS_DIR)/limine/limine-bios.sys
+	mkdir -p "$$(dirname $@)"
+	cp -v $< $@
 
 $(ISO_DIR)/EFI/BOOT/BOOTX64.EFI: $(LIBS_DIR)/limine/BOOTX64.EFI
-	mkdir -p $(ISO_DIR)/EFI/BOOT
+	mkdir -p "$$(dirname $@)"
 	cp -v $< $@
 
 $(ISO_DIR)/EFI/BOOT/BOOTIA32.EFI: $(LIBS_DIR)/limine/BOOTIA32.EFI
-	mkdir -p $(ISO_DIR)/EFI/BOOT
+	mkdir -p "$$(dirname $@)"
+	cp -v $< $@
+
+$(ISO_DIR)/bg.png: $(SRC_DIR)/bg.png
 	cp -v $< $@
 
 # Setup bootloader files
