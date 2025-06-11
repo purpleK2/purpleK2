@@ -316,6 +316,11 @@ void kstart(void) {
         debugf_debug("APIC is not supported. Going on with legacy PIC\n");
     }
 #endif
+    if (pcie_devices_init() != 0) {
+        kprintf_warn("Uhm no PCI, you're probably cooked\n");
+    } else {
+        kprintf_ok("PCI devices init done");
+    }
 #endif
 
     hpet_init();
