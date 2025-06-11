@@ -23,6 +23,7 @@
 #include <memory/vmm/vma.h>
 #include <memory/vmm/vmm.h>
 #include <paging/paging.h>
+#include <pcie/pcie.h>
 #include <scheduler/scheduler.h>
 #include <smp/ipi.h>
 #include <smp/smp.h>

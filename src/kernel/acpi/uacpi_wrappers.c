@@ -3,13 +3,13 @@
 #include <acpi/uacpi/types.h>
 #include <arch.h>
 #include <cpu.h>
-#include <dev/pcie/pcie.h>
 #include <interrupts/isr.h>
 #include <io.h>
 #include <kernel.h>
 #include <memory/heap/kheap.h>
 #include <memory/vmm/vma.h>
 #include <paging/paging.h>
+#include <pcie/pcie.h>
 #include <semaphore.h>
 #include <spinlock.h>
 #include <uacpi/status.h>
