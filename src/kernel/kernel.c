@@ -7,7 +7,6 @@
 #include <cpu.h>
 #include <dev/device.h>
 #include <dev/fs/initrd.h>
-#include <dev/pcie/pcie.h>
 #include <dev/port/e9/e9.h>
 #include <dev/port/parallel/parallel.h>
 #include <dev/port/serial/serial.h>
@@ -297,8 +296,8 @@ void kstart(void) {
         }
     }
 
-#ifdef CONFIG_ENABLE_APIC
 #if defined(__x86_64__)
+#ifdef CONFIG_ENABLE_APIC
 #include <apic/ioapic/ioapic.h>
 #include <apic/lapic/lapic.h>
 #include <interrupts/irq.h>
@@ -315,6 +314,7 @@ void kstart(void) {
     } else {
         debugf_debug("APIC is not supported. Going on with legacy PIC\n");
     }
+
 #endif
     if (pcie_devices_init() != 0) {
         kprintf_warn("Uhm no PCI, you're probably cooked\n");
