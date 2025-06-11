@@ -205,7 +205,9 @@ libs:
 
 # Create initrd image
 $(BUILD_DIR)/$(INITRD):
-		find $(INITRD_DIR) -type f | cpio -H newc -o > $(BUILD_DIR)/$(INITRD)
+		cd $(INITRD_DIR) && \
+		find . -type f | cpio -H newc -o > ../$(BUILD_DIR)/$(INITRD) && \
+		cd ..
 
 # Link rules for the final kernel executable.
 $(BUILD_DIR)/$(KERNEL): $(SRC_DIR)/linker.ld $(OBJ)
