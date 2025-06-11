@@ -104,7 +104,9 @@
         "beap.h": "c",
         "device.h": "c",
         "limits.h": "c",
-        "kheap.h": "c"
+        "kheap.h": "c",
+        "ioapic.h": "c",
+        "newc.h": "c"
     },
     "dotnet.defaultSolution": "disable",
     "cmake.configureOnOpen": false,
