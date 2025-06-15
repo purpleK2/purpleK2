@@ -1,6 +1,5 @@
 #include "kernel.h"
 
-
 #include <autoconf.h>
 
 #include <arch.h>
