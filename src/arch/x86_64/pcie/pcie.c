@@ -323,8 +323,7 @@ void pci_print_list() {
     }
 }
 
-void pcie_config_read(uint64_t bus, uint64_t device, uint64_t function) {
-}
+uint64_t get_pcie_addr(uint64_t ecam_addr);
 
 int pcie_devices_init() {
     struct uacpi_table *table = kmalloc(sizeof(struct uacpi_table));
