@@ -13,7 +13,7 @@
 
 #include <acpi/uacpi/types.h>
 
-#include <pcie/pcie.h>
+#include <pci/pci.h>
 
 #include <semaphore.h>
 #include <spinlock.h>

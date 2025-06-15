@@ -30,6 +30,7 @@
 #include <paging/paging.h>
 
 #include <pcie/pcie.h>
+#include <pci/pci.h>
 
 #include <scheduler/scheduler.h>
 
