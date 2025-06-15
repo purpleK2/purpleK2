@@ -1,6 +1,5 @@
 #include "kernel.h"
 
-#include "purplek2.h"
 
 #include <autoconf.h>
 
