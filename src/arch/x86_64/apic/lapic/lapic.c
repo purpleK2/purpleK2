@@ -56,7 +56,8 @@ void lapic_init() {
     }
     debugf_debug("LAPIC base: %llx\n", lapic_msr_phys);
 
-    lapic_base = PHYS_TO_VIRTUAL(lapic_msr_phys + HHDM_OFFSET);
+    lapic_base =
+        PHYS_TO_VIRTUAL(lapic_msr_phys + limine_parsed_data.hhdm_offset);
     map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), lapic_msr_phys,
                        lapic_base, 0x1000, PMLE_KERNEL_READ_WRITE);
 

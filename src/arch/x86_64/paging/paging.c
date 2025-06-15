@@ -1,11 +1,15 @@
 #include "paging.h"
 
 #include <autoconf.h>
-#include <cpu.h>
 #include <kernel.h>
 #include <limine.h>
+
+#include <cpu.h>
+
 #include <memory/pmm/pmm.h>
+#include <memory/vmm/vflags.h>
 #include <smp/ipi.h>
+
 #include <util/util.h>
 
 #include <stdint.h>
@@ -249,6 +253,35 @@ void copy_range_to_pagemap(uint64_t *dst_pml4, uint64_t *src_pml4,
                        virt_start, len, page_entry_flags);
 }
 
+// for VMM
+uint64_t vmo_to_page_flags(uint64_t vmo_flags) {
+    uint64_t pg_flags = 0x0;
+
+    if (vmo_flags & VMO_PRESENT)
+        pg_flags |= PMLE_PRESENT;
+    if (vmo_flags & VMO_RW)
+        pg_flags |= PMLE_WRITE;
+    if (vmo_flags & VMO_USER)
+        pg_flags |= PMLE_USER;
+    if (vmo_flags & VMO_NX)
+        pg_flags |= PMLE_NOT_EXECUTABLE;
+
+    return pg_flags;
+}
+
+uint64_t page_to_vmo_flags(uint64_t pg_flags) {
+    uint64_t vmo_flags = 0x0;
+
+    if (pg_flags & PMLE_PRESENT)
+        vmo_flags |= VMO_PRESENT;
+    if (pg_flags & PMLE_WRITE)
+        vmo_flags |= VMO_RW;
+    if (pg_flags & PMLE_USER)
+        vmo_flags |= VMO_USER;
+
+    return vmo_flags;
+}
+
 // Paging initialization
 
 uint64_t *limine_pml4; // Limine's PML4 table
@@ -273,13 +306,17 @@ void paging_init(uint64_t *kernel_pml4) {
     limine_pml4 = _get_pml4();
     debugf_debug("Limine's PML4 sits at %llp\n", limine_pml4);
 
+    /*  TBH it doesn't even make sense to apply a custom PAT if i don't have any
+    idea on why i should
+
     // set up a custom PAT
     debugf_debug("PAT MSR: %.16llx\n", _cpu_get_msr(0x277));
 
     uint64_t custom_pat = PAT_WRITEBACK | (PAT_WRITE_THROUGH << 8) |
-                          (PAT_WRITE_COMBINING << 16) | (PAT_UNCACHEABLE << 24);
+    (PAT_WRITE_COMBINING << 16) | (PAT_UNCACHEABLE << 24);
     _cpu_set_msr(0x277, custom_pat);
     debugf_debug("Custom PAT has been set up: %.16llx\n", _cpu_get_msr(0x277));
+    */
 
     /*
             24/12/2024

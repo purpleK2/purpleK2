@@ -109,6 +109,9 @@ void map_region_to_page(uint64_t *pml4_table, uint64_t physical_start,
 void copy_range_to_pagemap(uint64_t *dst_pml4, uint64_t *src_pml4,
                            uint64_t virt_start, size_t len);
 
+uint64_t vmo_to_page_flags(uint64_t vmo_flags);
+uint64_t page_to_vmo_flags(uint64_t pg_flags);
+
 void paging_init(uint64_t *kernel_pml4);
 
 #endif

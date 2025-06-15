@@ -1,5 +1,6 @@
 #include "kheap.h"
 
+#include <memory/vmm/vflags.h>
 #include <memory/vmm/vma.h>
 #include <memory/vmm/vmm.h>
 
@@ -77,7 +78,7 @@ static block_header_t *request_new_page(size_t size_class_idx) {
     if (blocks_per_page == 0)
         blocks_per_page = 1; // at least 1 block per page
 
-    void *page = vma_alloc(get_current_ctx(), 1, NULL);
+    void *page = valloc(get_current_ctx(), 1, VMO_KERNEL_RW | VMO_NX, NULL);
     if (!page)
         return NULL;
 
@@ -139,7 +140,8 @@ void *kmalloc(size_t size) {
         // Large alloc: allocate whole pages
         size_t pages =
             (size + sizeof(block_header_t) + PAGE_SIZE - 1) / PAGE_SIZE;
-        void *ptr = vma_alloc(get_current_ctx(), pages, NULL);
+        void *ptr =
+            valloc(get_current_ctx(), pages, VMO_KERNEL_RW | VMO_NX, NULL);
         if (!ptr)
             return NULL;
         // Use block header at start of allocated pages
@@ -175,7 +177,7 @@ void kfree(void *ptr) {
         size_t pages =
             (size + sizeof(block_header_t) + PAGE_SIZE - 1) / PAGE_SIZE;
         stats.current_pages_used -= pages;
-        vma_free(get_current_ctx(), block, true);
+        vfree(get_current_ctx(), block, true);
         return;
     }
 

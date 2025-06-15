@@ -26,6 +26,7 @@
 
 #include <memory/heap/kheap.h>
 #include <memory/pmm/pmm.h>
+#include <memory/vmm/vflags.h>
 #include <memory/vmm/vma.h>
 #include <memory/vmm/vmm.h>
 #include <paging/paging.h>

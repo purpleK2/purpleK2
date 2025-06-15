@@ -1,18 +1,25 @@
 #include "uacpi/kernel_api.h"
 
-#include <acpi/uacpi/types.h>
 #include <arch.h>
 #include <cpu.h>
 #include <interrupts/isr.h>
 #include <io.h>
 #include <kernel.h>
+
 #include <memory/heap/kheap.h>
+#include <memory/vmm/vflags.h>
 #include <memory/vmm/vma.h>
 #include <paging/paging.h>
+
+#include <acpi/uacpi/types.h>
+
 #include <pcie/pcie.h>
+
 #include <semaphore.h>
 #include <spinlock.h>
+
 #include <uacpi/status.h>
+
 #include <util/assert.h>
 #include <util/util.h>
 
@@ -43,7 +50,8 @@ void *uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
     size_t actual_len = len + offset; // this is BYTES!!!
     size_t pages      = ROUND_UP(actual_len, PFRAME_SIZE) / PFRAME_SIZE;
 
-    void *virt = vma_alloc(get_current_ctx(), pages, (void *)aligned);
+    void *virt = valloc(get_current_ctx(), pages, VMO_KERNEL_RW | VMO_NX,
+                        (void *)aligned);
 
     // re-align the pointer to original addr offset
 
@@ -56,7 +64,7 @@ void uacpi_kernel_unmap(void *addr, uacpi_size len) {
     uint64_t aligned = ROUND_DOWN((uint64_t)addr, PFRAME_SIZE);
     UNUSED(len);
 
-    vma_free(get_current_ctx(), (void *)aligned, false);
+    vfree(get_current_ctx(), (void *)aligned, false);
 }
 
 #ifndef UACPI_FORMATTED_LOGGING

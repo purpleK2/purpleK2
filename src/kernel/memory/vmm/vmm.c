@@ -1,11 +1,16 @@
 #include "vmm.h"
 
+#include "vma.h"
+
 #include <autoconf.h>
 #include <cpu.h>
 #include <kernel.h>
-#include <memory/vmm/vma.h>
+
+#include "vflags.h"
 #include <paging/paging.h>
+
 #include <spinlock.h>
+
 #include <util/util.h>
 
 #include <stdint.h>
@@ -134,32 +139,6 @@ void vmm_ctx_destroy(vmm_context_t *ctx) {
     pmm_free(ctx, vmcsize_aligned / PFRAME_SIZE);
 
     ctx->pml4_table = NULL;
-}
-
-uint64_t vmo_to_page_flags(uint64_t vmo_flags) {
-    uint64_t pg_flags = 0x0;
-
-    if (vmo_flags & VMO_PRESENT)
-        pg_flags |= PMLE_PRESENT;
-    if (vmo_flags & VMO_RW)
-        pg_flags |= PMLE_WRITE;
-    if (vmo_flags & VMO_USER)
-        pg_flags |= PMLE_USER;
-
-    return pg_flags;
-}
-
-uint64_t page_to_vmo_flags(uint64_t pg_flags) {
-    uint64_t vmo_flags = 0x0;
-
-    if (pg_flags & PMLE_PRESENT)
-        vmo_flags |= VMO_PRESENT;
-    if (pg_flags & PMLE_WRITE)
-        vmo_flags |= VMO_RW;
-    if (pg_flags & PMLE_USER)
-        vmo_flags |= VMO_USER;
-
-    return vmo_flags;
 }
 
 // @param len after how many pages should we split the VMO

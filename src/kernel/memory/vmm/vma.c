@@ -1,8 +1,11 @@
 #include "vma.h"
 
 #include <autoconf.h>
+
+#include "vflags.h"
 #include <memory/pmm/pmm.h>
 #include <paging/paging.h>
+
 #include <spinlock.h>
 #include <util/util.h>
 
@@ -11,7 +14,7 @@
 
 // @param phys optional parameter, maps the newly allocated virtual address to
 // such physical address
-void *vma_alloc(vmm_context_t *ctx, size_t pages, void *phys) {
+void *valloc(vmm_context_t *ctx, size_t pages, uint8_t flags, void *phys) {
 
     void *ptr = NULL;
 
@@ -39,7 +42,7 @@ void *vma_alloc(vmm_context_t *ctx, size_t pages, void *phys) {
         if (!cur_vmo->next) {
             uint64_t offset = (uint64_t)(cur_vmo->len * PFRAME_SIZE);
             new_vmo         = vmo_init(cur_vmo->base + offset, pages,
-                                       cur_vmo->flags & ~(VMO_ALLOCATED));
+                                       flags & ~(VMO_ALLOCATED));
             cur_vmo->next   = new_vmo;
             new_vmo->prev   = cur_vmo;
 #ifdef CONFIG_VMM_DEBUG
@@ -61,26 +64,35 @@ void *vma_alloc(vmm_context_t *ctx, size_t pages, void *phys) {
 
     ptr = (void *)(cur_vmo->base);
 
-    void *phys_to_map = phys != NULL ? phys : pmm_alloc_pages(pages);
+    void *phys_al = NULL;
+    size_t offset = 0;
+    if (phys) {
+        phys_al = (void *)ROUND_DOWN((size_t)phys, PFRAME_SIZE);
+        offset  = (size_t)(phys_al - phys);
+    }
+
+    void *phys_to_map = phys_al ? phys_al : pmm_alloc_pages(pages);
     map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(ctx->pml4_table),
                        (uint64_t)phys_to_map, (uint64_t)ptr,
                        (uint64_t)(pages * PFRAME_SIZE),
-                       vmo_to_page_flags(cur_vmo->flags));
+                       vmo_to_page_flags(flags));
 
 #ifdef CONFIG_VMM_DEBUG
     debugf_debug("Returning pointer %p\n", ptr);
 #endif
 
-    return ptr;
+    return (ptr + offset);
 }
 
 // @param free do you want to give back the physical address of `ptr` back to
 // the PMM? (this will zero out that region on next allocation)
-void vma_free(vmm_context_t *ctx, void *ptr, bool free) {
+void vfree(vmm_context_t *ctx, void *ptr, bool free) {
 
 #ifdef CONFIG_VMM_DEBUG
     debugf_debug("Deallocating pointer %p\n", ptr);
 #endif
+
+    ptr = (void *)ROUND_DOWN((uint64_t)ptr, PFRAME_SIZE);
 
     virtmem_object_t *cur_vmo = ctx->root_vmo;
     for (; cur_vmo != NULL; cur_vmo = cur_vmo->next) {

@@ -323,6 +323,9 @@ void pci_print_list() {
     }
 }
 
+void pcie_config_read(uint64_t bus, uint64_t device, uint64_t function) {
+}
+
 int pcie_devices_init() {
     struct uacpi_table *table = kmalloc(sizeof(struct uacpi_table));
 
@@ -334,7 +337,7 @@ int pcie_devices_init() {
     }
 
     struct acpi_mcfg *mcfg = (struct acpi_mcfg *)table->hdr;
-    struct acpi_mcfg_allocation *mcfg_space;
+    struct acpi_mcfg_allocation mcfg_space;
 
     int mcfg_spaces =
         (mcfg->hdr.length - (sizeof(mcfg->hdr) + sizeof(mcfg->rsvd))) /
@@ -343,11 +346,11 @@ int pcie_devices_init() {
     debugf_debug("Found %d config spaces\n", mcfg_spaces);
 
     for (int i = 0; i < mcfg_spaces; i++) {
-        mcfg_space = &mcfg->entries[i];
-        kprintf_info(
-            "PCI device ADDR: %llx; SEGMENT: %hu; BUS_RANGE: %hhu - %hhu\n",
-            mcfg_space->address, mcfg_space->segment, mcfg_space->start_bus,
-            mcfg_space->end_bus);
+        mcfg_space = mcfg->entries[i];
+        debugf_debug(
+            "PCI device %d ADDR: %llx; SEGMENT: %hu; BUS_RANGE: %hhu - %hhu\n",
+            i + 1, mcfg_space.address, mcfg_space.segment, mcfg_space.start_bus,
+            mcfg_space.end_bus);
     }
 
     kfree(table);
