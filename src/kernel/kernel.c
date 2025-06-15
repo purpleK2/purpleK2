@@ -1,35 +1,49 @@
 #include "kernel.h"
 
+#include "purplek2.h"
+
+#include <autoconf.h>
+
+#include <arch.h>
+#include <cpu.h>
+#include <io.h>
+#include <limine.h>
+
 #include <acpi/acpi.h>
 #include <ahci/ahci.h>
-#include <arch.h>
-#include <autoconf.h>
-#include <cpu.h>
+
 #include <dev/device.h>
 #include <dev/fs/initrd.h>
 #include <dev/port/e9/e9.h>
 #include <dev/port/parallel/parallel.h>
 #include <dev/port/serial/serial.h>
 #include <dev/std/helper.h>
+
 #include <fs/cpio/newc.h>
 #include <fs/fakefs/fakefs.h>
 #include <fs/vfs/devfs/devfs.h>
 #include <fs/vfs/vfs.h>
-#include <io.h>
-#include <limine.h>
+
 #include <memory/heap/kheap.h>
 #include <memory/pmm/pmm.h>
 #include <memory/vmm/vma.h>
 #include <memory/vmm/vmm.h>
 #include <paging/paging.h>
+
 #include <pcie/pcie.h>
+
 #include <scheduler/scheduler.h>
+
 #include <smp/ipi.h>
 #include <smp/smp.h>
+
 #include <tables/hpet.h>
+
 #include <terminal/psf.h>
 #include <terminal/terminal.h>
+
 #include <tsc/tsc.h>
+
 #include <util/assert.h>
 #include <util/macro.h>
 
@@ -47,26 +61,35 @@ USED SECTION(".requests") static volatile LIMINE_BASE_REVISION(3);
 
 USED SECTION(".requests") static volatile struct limine_framebuffer_request
     framebuffer_request = {.id = LIMINE_FRAMEBUFFER_REQUEST, .revision = 0};
+
 USED SECTION(".requests") static volatile struct limine_memmap_request
     memmap_request = {.id = LIMINE_MEMMAP_REQUEST, .revision = 0};
+
 USED SECTION(".requests") static volatile struct limine_paging_mode_request
     paging_mode_request = {.id = LIMINE_PAGING_MODE_REQUEST, .revision = 0};
+
 USED SECTION(".requests") static volatile struct limine_hhdm_request
     hhdm_request = {.id = LIMINE_HHDM_REQUEST, .revision = 0};
+
 USED SECTION(".requests") static volatile struct limine_kernel_address_request
     kernel_address_request = {.id       = LIMINE_KERNEL_ADDRESS_REQUEST,
                               .revision = 0};
+
 USED SECTION(".requests") static volatile struct limine_rsdp_request
     rsdp_request = {.id = LIMINE_RSDP_REQUEST, .revision = 0};
+
 USED SECTION(".requests") static volatile struct limine_module_request
     module_request = {.id = LIMINE_MODULE_REQUEST, .revision = 0};
+
 USED SECTION(".requests") static volatile struct limine_firmware_type_request
     firmware_type_request = {.id = LIMINE_FIRMWARE_TYPE_REQUEST, .revision = 0};
+
 USED SECTION(".requests") static volatile struct limine_smp_request
     smp_request = {.id = LIMINE_SMP_REQUEST, .revision = 0};
 
 USED SECTION(
     ".requests_start_marker") static volatile LIMINE_REQUESTS_START_MARKER;
+
 USED SECTION(".requests_end_marker") static volatile LIMINE_REQUESTS_END_MARKER;
 
 struct limine_framebuffer *framebuffer;
@@ -109,10 +132,6 @@ void kstart(void) {
 
     set_screen_bg_fg(DEFAULT_BG, DEFAULT_FG); // black-ish, white-ish
     clearscreen();
-
-    kprintf("Welcome to purpleK2!\n");
-
-    debugf_debug("Kernel built on %s\n", __DATE__);
 
 #ifndef CONFIG_ENABLE_64_BIT
     kprintf_panic("Kernel wasn't configured with 64-Bit support!\n");
@@ -316,11 +335,6 @@ void kstart(void) {
     }
 
 #endif
-    if (pcie_devices_init() != 0) {
-        kprintf_warn("Uhm no PCI, you're probably cooked\n");
-    } else {
-        kprintf_ok("PCI devices init done");
-    }
 #endif
 
     hpet_init();
@@ -410,24 +424,23 @@ void kstart(void) {
 #ifdef CONFIG_DEVFS_ENABLE
     // devfs_init();
 
-    device_t *dev_e9       = get_device("e9");
-    device_t *dev_serial   = get_device("com1");
-    device_t *dev_parallel = get_device("lpt1");
-    device_t *dev_initrd   = get_device("ram0");
-    device_t *dev_null     = get_device("null");
-
 #ifdef CONFIG_DEVFS_ENABLE_E9
+    // device_t *dev_e9       = get_device("e9");
     // devfs_add_dev(dev_e9);
 #endif
 
 #ifdef CONFIG_DEVFS_ENABLE_PORTIO
+    // device_t *dev_serial   = get_device("com1");
     // devfs_add_dev(dev_serial);
+    // device_t *dev_parallel = get_device("lpt1");
     // devfs_add_dev(dev_parallel);
 #endif
 
+    // device_t *dev_initrd   = get_device("ram0");
     // devfs_add_dev(dev_initrd);
 
-#ifdef CONFIG_DEVFS_ENABLE_NULL
+#ifdef CONFIG_DEVFS_ENABLE_b0000000NULL
+    // device_t *dev_null     = get_device("null");
     // devfs_add_dev(dev_null);
 #endif
 #endif
@@ -445,6 +458,11 @@ void kstart(void) {
 
     pci_scan(pci_ids);
     pci_print_list();
+    if (pcie_devices_init() != 0) {
+        kprintf_warn("Uhm no PCI, you're probably cooked\n");
+    } else {
+        kprintf_ok("PCI devices init done\n");
+    }
 
     limine_parsed_data.boot_time = get_ms(system_startup_time);
 
