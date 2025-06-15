@@ -8,9 +8,10 @@
 
 #define stringify(sumthin) #sumthin
 
-#define BIT_SET(x, bit)     ((x) |= (1ULL << (bit)))
-#define BIT_CLEAR(x, bit)   ((x) &= ~(1ULL << (bit)))
-#define BIT_GET(x, bit)     (((x) >> (bit)) & 1)
+#define BIT_SET(x, bit)   ((x) |= (1ULL << (bit)))
+#define BIT_CLEAR(x, bit) ((x) &= ~(1ULL << (bit)))
+#define BIT_GET(x, bit)   (((x) >> (bit)) & 1)
+
 #define FLAG_SET(x, flag)   ((x) |= (flag))
 #define FLAG_UNSET(x, flag) ((x) &= ~(flag))
 

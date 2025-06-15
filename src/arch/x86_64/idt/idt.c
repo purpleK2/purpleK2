@@ -2,7 +2,7 @@
 
 #include <gdt/gdt.h>
 
-#include <util/binary.h>
+#include <util/macro.h>
 #include <util/util.h>
 
 #include <stdbool.h>
