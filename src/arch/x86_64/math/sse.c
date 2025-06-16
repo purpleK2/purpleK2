@@ -17,7 +17,7 @@ void init_sse() {
         _hcf();
     }
 
-    if (!check_sse()) {
+    if (!check_sse2()) {
         kprintf_panic("SSE2 not available!\n");
         _hcf();
     }
