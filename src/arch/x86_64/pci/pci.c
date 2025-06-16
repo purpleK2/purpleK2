@@ -262,39 +262,39 @@ void pci_print_info(uint8_t bus, uint8_t device, uint8_t function) {
 void pci_print_list() {
     pci_device_t *dev = pci_devices_head;
     while (dev) {
-        debugf("PCI Device: Bus %d, Device %d, Function %d\n", dev->bus,
-               dev->device, dev->function);
-        debugf("  %s %s (%04x:%04x)\n", dev->vendor_str, dev->device_str,
-               dev->vendor_id, dev->device_id);
-        debugf("  %s; %s (Class: 0x%02x, Sub-Class: 0x%02x)\n",
-               pci_get_class_name(dev->class_code),
-               pci_get_subclass_name(dev->class_code, dev->subclass),
-               dev->class_code, dev->subclass);
-        debugf("  %s\n",
-               dev->header_type == 0 ? "Single Function" : "Multi-Function");
-        debugf("  %s\n", dev->prog_if == 0 ? "No Programming Interface"
+        mprintf("PCI Device: Bus %d, Device %d, Function %d\n", dev->bus,
+                dev->device, dev->function);
+        mprintf("\t%s %s (%04x:%04x)\n", dev->vendor_str, dev->device_str,
+                dev->vendor_id, dev->device_id);
+        mprintf("\t%s; %s (Class: 0x%02x, Sub-Class: 0x%02x)\n",
+                pci_get_class_name(dev->class_code),
+                pci_get_subclass_name(dev->class_code, dev->subclass),
+                dev->class_code, dev->subclass);
+        mprintf("\t%s\n",
+                dev->header_type == 0 ? "Single Function" : "Multi-Function");
+        debugf("\t%s\n", dev->prog_if == 0 ? "No Programming Interface"
                                            : "Programming Interface");
 
         switch (dev->irq_pin) {
         case 1:
-            debugf("  IRQ INTA\n");
+            mprintf("\tIRQ INTA\n");
             break;
         case 2:
-            debugf("  IRQ INTB\n");
+            mprintf("\tIRQ INTB\n");
             break;
         case 3:
-            debugf("  IRQ INTC\n");
+            mprintf("\tIRQ INTC\n");
             break;
         case 4:
-            debugf("  IRQ INTD\n");
+            mprintf("\tIRQ INTD\n");
             break;
         default:
-            debugf("  No IRQ (%d)\n", dev->irq_pin);
+            mprintf("\tNo IRQ (%d)\n", dev->irq_pin);
             break;
         }
 
         if (dev->irq_pin != 0 && dev->irq_pin <= 4) {
-            debugf("  IRQ %d\n", dev->irq_line);
+            mprintf("\tIRQ %d\n", dev->irq_line);
         }
 
         for (int i = 0; i < 6; i++) {
@@ -313,7 +313,7 @@ void pci_print_list() {
                 bar_type_str = "Unknown";
                 break;
             }
-            debugf("  BAR%d: 0x%08x (%s)\n", i, dev->bar[i], bar_type_str);
+            mprintf("\tBAR%d: 0x%08x (%s)\n", i, dev->bar[i], bar_type_str);
         }
         dev = dev->next;
     }
