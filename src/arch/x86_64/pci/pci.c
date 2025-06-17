@@ -109,6 +109,7 @@ pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
     new_dev->class_code  = (class_info >> 24) & 0xFF;
     new_dev->subclass    = (class_info >> 16) & 0xFF;
     new_dev->prog_if     = (class_info >> 8) & 0xFF;
+    new_dev->header_type = pci_config_read(bus, device, function, 0x0C) & 0xFF;
     pci_lookup_vendor_device(new_dev, pci_ids->data, pci_ids->filesize);
 
     // Initialize BARs and BAR types to zero
@@ -144,8 +145,8 @@ pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
     uint8_t irq_pin      = (config_data >> 8) & 0xFF; // Interrupt Pin at 0x3D
 
     if (irq_pin > 4) {
-        kprintf("Warning: Invalid IRQ Pin %d for device %d:%d:%d\n", irq_pin,
-                bus, device, function);
+        debugf_warn("Invalid IRQ Pin %d for device %d:%d:%d\n", irq_pin, bus,
+                    device, function);
         irq_pin = 0; // Handle as no interrupt
     }
 
@@ -255,51 +256,51 @@ void pci_print_info(uint8_t bus, uint8_t device, uint8_t function) {
     while (dev) {
         if (dev->bus == bus && dev->device == device &&
             dev->function == function) {
-            kprintf("PCI Device: %s %s (%04x:%04x)\n", dev->vendor_str,
+            mprintf("PCI Device: %s %s (%04x:%04x)\n", dev->vendor_str,
                     dev->device_str, dev->vendor_id, dev->device_id);
             return;
         }
         dev = dev->next;
     }
-    kprintf("PCI Device not found.\n");
+    debugf_warn("PCI Device not found.\n");
 }
 
 void pci_print_list() {
     pci_device_t *dev = pci_devices_head;
     while (dev) {
-        mprintf("PCI Device: Bus %d, Device %d, Function %d\n", dev->bus,
-                dev->device, dev->function);
+        debugf("PCI Device: Bus %d, Device %d, Function %d\n", dev->bus,
+               dev->device, dev->function);
         mprintf("\t%s %s (%04x:%04x)\n", dev->vendor_str, dev->device_str,
                 dev->vendor_id, dev->device_id);
-        mprintf("\t%s; %s (Class: 0x%02x, Sub-Class: 0x%02x)\n",
-                pci_get_class_name(dev->class_code),
-                pci_get_subclass_name(dev->class_code, dev->subclass),
-                dev->class_code, dev->subclass);
-        mprintf("\t%s\n",
-                dev->header_type == 0 ? "Single Function" : "Multi-Function");
+        debugf("\t%s; %s (Class: 0x%02x, Sub-Class: 0x%02x)\n",
+               pci_get_class_name(dev->class_code),
+               pci_get_subclass_name(dev->class_code, dev->subclass),
+               dev->class_code, dev->subclass);
+        debugf("\t%s\n",
+               dev->header_type == 0 ? "Single Function" : "Multi-Function");
         debugf("\t%s\n", dev->prog_if == 0 ? "No Programming Interface"
                                            : "Programming Interface");
 
         switch (dev->irq_pin) {
         case 1:
-            mprintf("\tIRQ INTA\n");
+            debugf("\tIRQ INTA\n");
             break;
         case 2:
-            mprintf("\tIRQ INTB\n");
+            debugf("\tIRQ INTB\n");
             break;
         case 3:
-            mprintf("\tIRQ INTC\n");
+            debugf("\tIRQ INTC\n");
             break;
         case 4:
-            mprintf("\tIRQ INTD\n");
+            debugf("\tIRQ INTD\n");
             break;
         default:
-            mprintf("\tNo IRQ (%d)\n", dev->irq_pin);
+            debugf("\tNo IRQ (%d)\n", dev->irq_pin);
             break;
         }
 
         if (dev->irq_pin != 0 && dev->irq_pin <= 4) {
-            mprintf("\tIRQ %d\n", dev->irq_line);
+            debugf("\tIRQ %d\n", dev->irq_line);
         }
 
         for (int i = 0; i < 6; i++) {
@@ -318,7 +319,7 @@ void pci_print_list() {
                 bar_type_str = "Unknown";
                 break;
             }
-            mprintf("\tBAR%d: 0x%08x (%s)\n", i, dev->bar[i], bar_type_str);
+            debugf("\tBAR%d: 0x%08x (%s)\n", i, dev->bar[i], bar_type_str);
         }
         dev = dev->next;
     }
