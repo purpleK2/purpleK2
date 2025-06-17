@@ -22,13 +22,17 @@ bool init                                 = false;
 uint32_t bg_color[3] = {0x00, 0x00, 0x00};
 uint32_t fg_color[3] = {0xFF, 0xFF, 0xFF};
 
+// TODO: probably a struct is better
 static char screen_buffer[MAX_ROWS][MAX_COLS];
+static uint32_t rgb_buffer[MAX_ROWS][MAX_COLS];
+
 static uint64_t scroll_base = 0;
 
-static void draw_char_at(uint64_t x, uint64_t y, char c) {
+static void draw_char_at(uint64_t x, uint64_t y, char c, uint32_t r, uint32_t g,
+                         uint32_t b) {
     uint64_t px = x * 8;
     uint64_t py = y * 14;
-    psfPutC(c, px, py, fg_color[0], fg_color[1], fg_color[2]);
+    psfPutC(c, px, py, r, g, b);
 }
 
 void _term_set_bg(uint32_t rgb) {
@@ -53,8 +57,14 @@ static void render_screen() {
     for (uint64_t y = 0; y < terminal_ctx.rows; y++) {
         uint64_t real_row = (scroll_base + y) % MAX_ROWS;
         for (uint64_t x = 0; x < terminal_ctx.columns; x++) {
-            char c = screen_buffer[real_row][x];
-            draw_char_at(x, y, c);
+            char c       = screen_buffer[real_row][x];
+            uint32_t rgb = rgb_buffer[real_row][x];
+
+            uint32_t r = (rgb >> framebuffer_86->red_mask_shift) & 0xFF;
+            uint32_t g = (rgb >> framebuffer_86->green_mask_shift) & 0xFF;
+            uint32_t b = (rgb >> framebuffer_86->blue_mask_shift) & 0xFF;
+
+            draw_char_at(x, y, c, r, g, b);
         }
     }
 }
@@ -127,21 +137,24 @@ void _term_putc(char c) {
     if (c == '\n') {
         // 8 should be the char width
         for (; char_cursor_x < terminal_ctx.columns;) {
-            draw_char_at(char_cursor_x, char_cursor_y, ' ');
+            draw_char_at(char_cursor_x, char_cursor_y, ' ', fg_color[0],
+                         fg_color[1], fg_color[2]);
             char_cursor_x++;
         }
 
         char_cursor_x = 0;
         char_cursor_y++;
     } else if (c == '\r') {
-        draw_char_at(char_cursor_x, char_cursor_y, ' ');
+        draw_char_at(char_cursor_x, char_cursor_y, ' ', fg_color[0],
+                     fg_color[1], fg_color[2]);
         char_cursor_x = 0;
     } else if (c == '\b') {
         if (char_cursor_x > 0) {
             char_cursor_x--;
             uint64_t row = (scroll_base + char_cursor_y) % MAX_ROWS;
             screen_buffer[row][char_cursor_x] = ' ';
-            draw_char_at(char_cursor_x, char_cursor_y, ' ');
+            draw_char_at(char_cursor_x, char_cursor_y, ' ', fg_color[0],
+                         fg_color[1], fg_color[2]);
         }
     } else if (c == '\t') {
         for (int i = 0; i < 4; i++) {
@@ -150,7 +163,14 @@ void _term_putc(char c) {
     } else {
         uint64_t row = (scroll_base + char_cursor_y) % MAX_ROWS;
         screen_buffer[row][char_cursor_x] = c;
-        draw_char_at(char_cursor_x, char_cursor_y, c);
+
+        uint32_t color = (fg_color[0] << framebuffer_86->red_mask_shift) |
+                         (fg_color[1] << framebuffer_86->green_mask_shift) |
+                         (fg_color[2] << framebuffer_86->blue_mask_shift);
+        rgb_buffer[row][char_cursor_x] = color;
+
+        draw_char_at(char_cursor_x, char_cursor_y, c, fg_color[0], fg_color[1],
+                     fg_color[2]);
         char_cursor_x++;
     }
 
