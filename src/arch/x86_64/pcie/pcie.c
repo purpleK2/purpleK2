@@ -89,8 +89,8 @@ int pcie_devices_init() {
     struct acpi_mcfg *mcfg = (struct acpi_mcfg *)table->hdr;
     struct acpi_mcfg_allocation mcfg_space;
 
-    int mcfg_spaces =
-        (mcfg->hdr.length - 0x2c) / sizeof(struct acpi_mcfg_allocation);
+    int mcfg_spaces = (mcfg->hdr.length - sizeof(mcfg->hdr)) /
+                      sizeof(struct acpi_mcfg_allocation);
 
     debugf_debug("Found %d config space%s\n", mcfg_spaces,
                  mcfg_spaces == 1 ? "" : "s");

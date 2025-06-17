@@ -99,7 +99,7 @@ int printf(void (*putc_function)(const char *, int), const char *fmt, ...);
 #define kprintf_ok(fmt, ...)                                                   \
     ({                                                                         \
         uint32_t prev_fg = fb_get_fg();                                        \
-        fb_set_fg(0x00e826);                                                   \
+        fb_set_fg(SUCCESS_FG);                                                 \
         if (!(pit)) {                                                          \
             kprintf("early: (%s:%d) " fmt, __FUNCTION__, __LINE__,             \
                     ##__VA_ARGS__);                                            \
