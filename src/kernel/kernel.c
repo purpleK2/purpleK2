@@ -29,8 +29,8 @@
 #include <memory/vmm/vmm.h>
 #include <paging/paging.h>
 
-#include <pcie/pcie.h>
 #include <pci/pci.h>
+#include <pcie/pcie.h>
 
 #include <scheduler/scheduler.h>
 
@@ -458,10 +458,11 @@ void kstart(void) {
 
     pci_scan(pci_ids);
     pci_print_list();
+    kprintf_ok("PCI devices parsing done\n");
     if (pcie_devices_init() != 0) {
-        kprintf_warn("Uhm no PCI, you're probably cooked\n");
+        kprintf_warn("Uhm no PCIe, you're probably cooked\n");
     } else {
-        kprintf_ok("PCI devices init done\n");
+        kprintf_ok("PCIe devices parsing done\n");
     }
 
     limine_parsed_data.boot_time = get_ms(system_startup_time);
