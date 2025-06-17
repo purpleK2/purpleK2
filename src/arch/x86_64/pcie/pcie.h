@@ -8,6 +8,15 @@
 #define PCIE_HEADT1_BARS 2
 
 typedef enum {
+    PCIE_STATUS_OK        = 0,
+    PCIE_STATUS_ENOMCFG   = -1,
+    PCIE_STATUS_ENOPCIENF = -2,
+    PCIE_STATUS_ENOCFGSP  = -3,
+    PCIE_STATUS_ENOTBLPTR = -4,
+    PCIE_STATUS_EUNKNOWN  = -5,
+} pcie_status;
+
+typedef enum {
     PCIE_HEADER_T0 = 0,
     PCIE_HEADER_T1 = 1
 } pcie_header_type;
@@ -88,6 +97,7 @@ typedef struct {
     uint8_t irq_line;
 } pcie_header1_t;
 
-int pcie_devices_init();
+pcie_status dump_pcie_info(void *pcie_addr);
+pcie_status pcie_devices_init();
 
 #endif

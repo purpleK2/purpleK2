@@ -18,7 +18,7 @@
 
 #include <stdio.h>
 
-int dump_pcie_info(void *pcie_addr) {
+pcie_status dump_pcie_info(void *pcie_addr) {
     pcie_header_t *pcie_header = kmalloc(sizeof(pcie_header_t));
     memcpy(pcie_header, pcie_addr, sizeof(pcie_header_t));
 
@@ -61,29 +61,32 @@ int dump_pcie_info(void *pcie_addr) {
         debugf_warn("Unknown PCIe header type %.02d!",
                     pcie_header->header_type);
         kfree(pcie_header);
-        return -1;
+        return PCIE_STATUS_EUNKNOWN;
     }
 
     kfree(pcie_header);
-    return 0;
+    return PCIE_STATUS_OK;
 }
 
-int pcie_devices_init() {
+pcie_status pcie_devices_init() {
     struct uacpi_table *table = kmalloc(sizeof(struct uacpi_table));
+    memset(table, 0, sizeof(struct uacpi_table));
 
     if (uacpi_table_find_by_signature(ACPI_MCFG_SIGNATURE, table) !=
         UACPI_STATUS_OK) {
 
-        debugf_warn("No such table %s\n", ACPI_MCFG_SIGNATURE);
+        debugf_warn("Couldn't find table '%s' successfully\n",
+                    ACPI_MCFG_SIGNATURE);
 
         kfree(table);
-        return -1;
+        return PCIE_STATUS_ENOMCFG;
     }
 
     if (!table->hdr) {
         debugf_warn("Invalid %s table pointer!\n", ACPI_MCFG_SIGNATURE);
+
         kfree(table);
-        return -1;
+        return PCIE_STATUS_ENOTBLPTR;
     }
 
     struct acpi_mcfg *mcfg = (struct acpi_mcfg *)table->hdr;
@@ -113,11 +116,18 @@ int pcie_devices_init() {
             debugf_warn("Couldn't parse PCIe device info!\n");
 
             kfree(table);
-            return -2;
+            return PCIE_STATUS_ENOPCIENF;
         }
+    }
+
+    if (mcfg_spaces < 1) {
+        kprintf_warn("No valid config spaces were found!\n");
+
+        kfree(table);
+        return PCIE_STATUS_ENOCFGSP;
     }
 
     kfree(table);
 
-    return 0;
+    return PCIE_STATUS_OK;
 }
