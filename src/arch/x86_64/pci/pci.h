@@ -47,7 +47,7 @@ typedef struct {
     const char *subclass_name;
 } pci_subclass_t;
 
-extern pci_device_t *pci_devices_head;
+pci_device_t *get_pcihead();
 
 void pci_scan(cpio_file_t *pci_ids);
 void pci_print_devices(cpio_file_t *pci_ids);

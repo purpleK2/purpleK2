@@ -9,6 +9,10 @@
 
 pci_device_t *pci_devices_head = NULL;
 
+pci_device_t *get_pcihead() {
+    return pci_devices_head;
+}
+
 static const pci_class_t pci_classes[] = {
     {0x0, "Unclassified"},
     {0x1, "Mass Storage Controller"},
