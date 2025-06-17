@@ -106,7 +106,8 @@
         "limits.h": "c",
         "kheap.h": "c",
         "ioapic.h": "c",
-        "newc.h": "c"
+        "newc.h": "c",
+        "mutex.h": "c"
     },
     "dotnet.defaultSolution": "disable",
     "cmake.configureOnOpen": false,
