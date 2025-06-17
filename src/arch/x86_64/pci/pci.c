@@ -97,17 +97,18 @@ pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
     if ((vendor_device & 0xFFFF) == 0xFFFF)
         return NULL;
 
-    pci_device_t *new_dev = (pci_device_t *)kmalloc(sizeof(pci_device_t));
-    new_dev->bus          = bus;
-    new_dev->device       = device;
-    new_dev->function     = function;
-    new_dev->vendor_id    = vendor_device & 0xFFFF;
-    new_dev->device_id    = (vendor_device >> 16) & 0xFFFF;
-    uint32_t class_info   = pci_config_read(bus, device, function, 8);
-    new_dev->class_code   = (class_info >> 24) & 0xFF;
-    new_dev->subclass     = (class_info >> 16) & 0xFF;
-    new_dev->prog_if      = (class_info >> 8) & 0xFF;
-    new_dev->header_type  = pci_config_read(bus, device, function, 0x0C) & 0xFF;
+    pci_device_t *new_dev = kmalloc(sizeof(pci_device_t));
+    memset(new_dev, 0, sizeof(pci_device_t));
+
+    new_dev->bus         = bus;
+    new_dev->device      = device;
+    new_dev->function    = function;
+    new_dev->vendor_id   = vendor_device & 0xFFFF;
+    new_dev->device_id   = (vendor_device >> 16) & 0xFFFF;
+    uint32_t class_info  = pci_config_read(bus, device, function, 8);
+    new_dev->class_code  = (class_info >> 24) & 0xFF;
+    new_dev->subclass    = (class_info >> 16) & 0xFF;
+    new_dev->prog_if     = (class_info >> 8) & 0xFF;
     pci_lookup_vendor_device(new_dev, pci_ids->data, pci_ids->filesize);
 
     // Initialize BARs and BAR types to zero
