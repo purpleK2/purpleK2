@@ -47,4 +47,9 @@ static const char *const memory_block_type[] = {"USABLE",
 
 uint64_t strtoull(const char *str, const char **endptr, int base);
 
+// atoi but you specify the length of the string
+int natoi(char *s, size_t n);
+// natoi but for string with hex numbers
+int nxatoi(char *s, size_t n);
+
 #endif

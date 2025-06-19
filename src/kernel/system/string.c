@@ -3,6 +3,8 @@
 #include <io.h>
 #include <memory/heap/kheap.h>
 
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 
 // GCC and Clang reserve the right to generate calls to the following
@@ -294,9 +296,6 @@ void strcpy(char dest[], const char source[]) {
     }
 }
 
-#include <stddef.h>
-#include <stdint.h>
-
 uint64_t strtoull(const char *str, const char **endptr, int base) {
     uint64_t result = 0;
     int digit;
@@ -339,4 +338,50 @@ uint64_t strtoull(const char *str, const char **endptr, int base) {
         *endptr = str;
 
     return result;
+}
+
+int nnatoi(char *s, size_t n, size_t base) {
+    int a = 0;
+
+    for (int i = 0; i < n; i++) {
+        int num = s[i] - '0';
+
+        a *= base;
+        a += num;
+    }
+
+    return a;
+}
+
+int natoi(char *s, size_t n) {
+    return nnatoi(s, n, 10);
+}
+
+int nxatoi(char *s, size_t n) {
+    int a = 0;
+
+    for (int i = 0; i < n; i++) {
+        int num;
+
+        switch (s[i]) {
+        case 'a' ... 'f':
+            num = (s[i] - 'a') + 10;
+            break;
+        case 'A' ... 'F':
+            num = (s[i] - 'A') + 10;
+            break;
+
+        case '0' ... '9':
+            num = s[i] - '0';
+            break;
+
+        default:
+            return 0;
+        }
+
+        a *= 16;
+        a += num;
+    }
+
+    return a;
 }
