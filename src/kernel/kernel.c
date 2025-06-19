@@ -439,7 +439,7 @@ void kstart(void) {
     // device_t *dev_initrd   = get_device("ram0");
     // devfs_add_dev(dev_initrd);
 
-#ifdef CONFIG_DEVFS_ENABLE_b0000000NULL
+#ifdef CONFIG_DEVFS_ENABLE_NULL
     // device_t *dev_null     = get_device("null");
     // devfs_add_dev(dev_null);
 #endif
