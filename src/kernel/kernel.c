@@ -459,7 +459,7 @@ void kstart(void) {
     pci_scan(pci_ids);
     pci_print_list();
     kprintf_ok("PCI devices parsing done\n");
-    if (pcie_devices_init() != 0) {
+    if (pcie_devices_init(pci_ids) != 0) {
         kprintf_warn("Uhm no PCIe, you're probably cooked\n");
     } else {
         kprintf_ok("PCIe devices parsing done\n");

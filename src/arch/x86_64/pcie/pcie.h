@@ -4,15 +4,20 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <fs/cpio/newc.h>
+
 #define PCIE_HEADT0_BARS 6
 #define PCIE_HEADT1_BARS 2
+
+#define PCIE_MAX_VENDOR_NAME 128
+#define PCIE_MAX_DEVICE_NAME 128
 
 typedef enum {
     PCIE_STATUS_OK        = 0,
     PCIE_STATUS_ENOMCFG   = -1,
     PCIE_STATUS_ENOPCIENF = -2,
     PCIE_STATUS_ENOCFGSP  = -3,
-    PCIE_STATUS_ENOTBLPTR = -4,
+    PCIE_STATUS_ENULLPTR  = -4,
     PCIE_STATUS_EUNKNOWN  = -5,
 } pcie_status;
 
@@ -21,7 +26,7 @@ typedef enum {
     PCIE_HEADER_T1 = 1
 } pcie_header_type;
 
-typedef struct {
+typedef struct pcie_header {
     uint16_t vendor_id;
     uint16_t device_id;
 
@@ -41,7 +46,7 @@ typedef struct {
     uint8_t cache_line_size;
 } pcie_header_t;
 
-typedef struct {
+typedef struct pcie_header0 {
     uint32_t bars[PCIE_HEADT0_BARS];
 
     uint32_t reserved0;
@@ -59,7 +64,7 @@ typedef struct {
     uint8_t irq_line;
 } pcie_header0_t;
 
-typedef struct {
+typedef struct pcie_header1 {
     uint32_t bars[PCIE_HEADT1_BARS];
 
     uint8_t slt; // Secondary Latency Timer
@@ -97,7 +102,25 @@ typedef struct {
     uint8_t irq_line;
 } pcie_header1_t;
 
-pcie_status dump_pcie_info(void *pcie_addr);
-pcie_status pcie_devices_init();
+typedef struct pcie_device {
+    uint8_t bus, device, function;
+    uint16_t vendor_id, device_id;
+    uint32_t class_code;
+
+    pcie_header_type header_type;
+
+    char *vendor_str;
+    char *device_str;
+
+    uint32_t *bar; // number of BARs depend on the PCIe header type;
+
+    uint8_t irq_line, irq_pin;
+
+    struct pcie_device *next;
+} pcie_device_t;
+
+pcie_status pcie_devices_init(cpio_file_t *pci_ids);
+
+pcie_status dump_pcie_info(void *pcie_addr, cpio_file_t *pci_ids);
 
 #endif

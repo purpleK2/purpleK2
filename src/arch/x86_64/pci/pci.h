@@ -5,8 +5,8 @@
 
 #include <fs/cpio/newc.h>
 
-#define MAX_VENDOR_NAME 128
-#define MAX_DEVICE_NAME 128
+#define PCI_MAX_VENDOR_NAME 128
+#define PCI_MAX_DEVICE_NAME 128
 
 #define PCI_CONFIG_ADDRESS 0xCF8
 #define PCI_CONFIG_DATA    0xCFC
@@ -26,8 +26,8 @@ typedef struct pci_device {
 
     uint8_t class_code, subclass, prog_if, header_type;
 
-    char vendor_str[MAX_VENDOR_NAME];
-    char device_str[MAX_DEVICE_NAME];
+    char vendor_str[PCI_MAX_VENDOR_NAME];
+    char device_str[PCI_MAX_DEVICE_NAME];
 
     uint32_t bar[6];
     uint8_t bar_type[6]; // New field to store type of each BAR
