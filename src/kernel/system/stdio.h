@@ -230,4 +230,28 @@ int printf(void (*putc_function)(const char *, int), const char *fmt, ...);
         }                                                                      \
     })
 
+#define mprintf_info(fmt, ...)                                                 \
+    ({                                                                         \
+        kprintf_info(fmt, ##__VA_ARGS__);                                      \
+        debugf_debug(FMT, ##__VA_ARGS__);                                      \
+    })
+
+#define mprintf_ok(fmt, ...)                                                   \
+    ({                                                                         \
+        kprintf_ok(fmt, ##__VA_ARGS__);                                        \
+        debugf_ok(FMT, ##__VA_ARGS__);                                         \
+    })
+
+#define mprintf_warn(fmt, ...)                                                 \
+    ({                                                                         \
+        kprintf_warn(fmt, ##__VA_ARGS__);                                      \
+        debugf_warn(fmt, ##__VA_ARGS__);                                       \
+    })
+
+#define mprintf_panic(fmt, ...)                                                \
+    ({                                                                         \
+        kprintf_panic(fmt, ##__VA_ARGS__);                                     \
+        debugf_panic(fmt, ##__VA_ARGS__);                                      \
+    })
+
 #endif
