@@ -55,7 +55,8 @@ int printf(void (*putc_function)(const char *, int), const char *fmt, ...);
 
 // snprintf and such are copied from nanoprintf directly
 
-#define sprintf(buf, fmt, ...) npf_snprintf(buf, 0xFFFFFFFF, fmt, ##__VA_ARGS__)
+#define sprintf(buf, fmt, ...)                                                 \
+    npf_snprintf(buf, sizeof(buf), fmt, ##__VA_ARGS__)
 #define vsnprintf(buf, len, fmt, ...)                                          \
     npf_vsnprintf(buf, len, fmt, ##__VA_ARGS__)
 #define snprintf(buf, len, fmt, ...) npf_snprintf(buf, len, fmt, ##__VA_ARGS__)
