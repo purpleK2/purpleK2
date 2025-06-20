@@ -268,9 +268,8 @@ void pci_print_info(uint8_t bus, uint8_t device, uint8_t function) {
 void pci_print_list() {
     pci_device_t *dev = pci_devices_head;
     while (dev) {
-        debugf("PCI Device: Bus %d, Device %d, Function %d\n", dev->bus,
-               dev->device, dev->function);
-        mprintf("\t%s %s (%04x:%04x)\n", dev->vendor_str, dev->device_str,
+        mprintf("[%.02hhx:%.02hhx.%.01hhx] %s %s (%04x:%04x)\n", dev->bus,
+                dev->device, dev->function, dev->vendor_str, dev->device_str,
                 dev->vendor_id, dev->device_id);
         debugf("\t%s; %s (Class: 0x%02x, Sub-Class: 0x%02x)\n",
                pci_get_class_name(dev->class_code),
