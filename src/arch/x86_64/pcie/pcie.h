@@ -22,6 +22,8 @@ typedef enum {
     PCIE_STATUS_EINVALID  = -6,
 } pcie_status;
 
+#define PCIE_OFFSET(b, d, f) ((b << 20) | (d << 15) | (f << 12))
+
 typedef enum {
     PCIE_HEADER_T0 = 0,
     PCIE_HEADER_T1 = 1
@@ -107,6 +109,8 @@ typedef struct pcie_device {
     uint8_t bus, device, function;
     uint16_t vendor_id, device_id;
     uint32_t class_code;
+
+    uint8_t revision;
 
     pcie_header_type header_type;
 

@@ -50,8 +50,31 @@ pcie_status pcie_lookup_vendor_device(pcie_header_t *header,
         return PCIE_STATUS_ENULLPTR;
     }
 
-    // will be used later for making sure that we already found vendor and/or
-    // device
+    if (header->vendor_id == 0xFFFF) {
+        // debugf_warn("Found illegal vendor %hx!\n", header->vendor_id);
+        return PCIE_STATUS_EINVALID;
+    }
+
+    // special treatment :)
+    // also very wacky, we'll be fine for now
+    if (header->vendor_id == 0x1234) {
+        strncpy(vendor_out, "QEMU", strlen("QEMU") + 1);
+        if (header->device_id == 0x1111) {
+            strncpy(device_out, "Emulated VGA Display Controller",
+                    strlen("Emulated VGA Display Controller") + 1);
+        } else if (header->device_id == 0x0001) {
+            strncpy(device_out, "Virtio Block Device",
+                    strlen("Virtio Block Device") + 1);
+        } else if (header->device_id == 0x0002) {
+            strncpy(device_out, "Virtio Network Device",
+                    strlen("Virtio Network Device") + 1);
+        }
+
+        return PCIE_STATUS_OK;
+    }
+
+    // will be used later for making sure that we already found vendor
+    // and/or device
     vendor_out[0] = '\0';
     device_out[0] = '\0';
 
@@ -141,6 +164,7 @@ pcie_status pcie_lookup_vendor_device(pcie_header_t *header,
 
         case 1:
             if (device_out[0] != '\0') {
+                // we're done
                 return PCIE_STATUS_OK;
             }
 
@@ -185,11 +209,9 @@ pcie_status dump_pcie_dev_info(pcie_device_t *pcie) {
         return PCIE_STATUS_ENULLPTR;
     }
 
-    debugf("PCIe bus %hhu, device %hhu, function %hhu\n", pcie->bus,
-           pcie->device, pcie->function);
-
-    mprintf("\t(%.04hx:%.04hx) %s %s\n", pcie->vendor_id, pcie->device_id,
-            pcie->vendor_str, pcie->device_str);
+    mprintf("[%.02hhx:%.02hhx.%.01hhx] %s %s (%.04hx:%.04hx) (rev %.02hhu)\n",
+            pcie->bus, pcie->device, pcie->function, pcie->vendor_str,
+            pcie->device_str, pcie->vendor_id, pcie->device_id, pcie->revision);
 
     switch (pcie->header_type) {
     case PCIE_HEADER_T0:
@@ -225,22 +247,21 @@ pcie_status add_pcie_device(void *pcie_addr, cpio_file_t *pci_ids,
     memset(vendor, 0, PCIE_MAX_VENDOR_NAME);
     memset(device, 0, PCIE_MAX_VENDOR_NAME);
 
-    if (pcie_lookup_vendor_device(pcie_header, pci_ids, vendor, device) !=
-        PCIE_STATUS_OK) {
-        mprintf_warn("Couldn't lookup PCIe vendor and/or device name!\n");
+    switch (pcie_lookup_vendor_device(pcie_header, pci_ids, vendor, device)) {
+    case PCIE_STATUS_OK:
+        break;
+
+    case PCIE_STATUS_EINVALID:
+        // debugf_warn("Attempted to lookup for a non-existent device!\n");
+        return PCIE_STATUS_EINVALID;
+
+    default:
+        debugf_warn("Couldn't lookup PCIe vendor and/or device name!\n");
+        return PCIE_STATUS_ENOPCIENF;
     }
 
     pcie_device_t *pcie_device = kmalloc(sizeof(pcie_device_t));
     memset(pcie_device, 0, sizeof(pcie_device_t));
-
-    if (!pcie_devices_head) {
-        // initialization state, we should be here only once
-        pcie_devices_head = pcie_device;
-        pcie_dev_tail     = pcie_device;
-    } else {
-        pcie_dev_tail->next = pcie_device;
-        pcie_dev_tail       = pcie_dev_tail->next;
-    }
 
     pcie_device->vendor_id = pcie_header->vendor_id;
     pcie_device->device_id = pcie_header->device_id;
@@ -256,14 +277,16 @@ pcie_status add_pcie_device(void *pcie_addr, cpio_file_t *pci_ids,
     uint64_t pcie_addr_phys = pg_virtual_to_phys(
         (uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uint64_t)pcie_addr);
 
-    pcie_device->device   = (uint8_t)((pcie_addr_phys >> 15) & 0x5);
-    pcie_device->function = (uint8_t)((pcie_addr_phys >> 12) & 0x3);
+    pcie_device->device   = (uint8_t)((pcie_addr_phys >> 15) & 0x1f);
+    pcie_device->function = (uint8_t)((pcie_addr_phys >> 12) & 0x7);
 
     pcie_device->bus = (uint8_t)((pcie_addr_phys >> 20) & bus_range);
 
-    void *p = (pcie_addr + sizeof(pcie_header_t));
+    pcie_device->revision = pcie_header->revision_id;
 
     uint32_t *bars = NULL;
+
+    void *p = (pcie_addr + sizeof(pcie_header_t));
 
     switch (pcie_header->header_type) {
     case PCIE_HEADER_T0:
@@ -303,6 +326,15 @@ pcie_status add_pcie_device(void *pcie_addr, cpio_file_t *pci_ids,
         return PCIE_STATUS_EUNKNOWN;
     }
 
+    if (!pcie_devices_head) {
+        // initialization state, we should be here only once
+        pcie_devices_head = pcie_device;
+        pcie_dev_tail     = pcie_device;
+    } else {
+        pcie_dev_tail->next = pcie_device;
+        pcie_dev_tail       = pcie_dev_tail->next;
+    }
+
     dump_pcie_dev_info(pcie_device);
 
     kfree(pcie_header);
@@ -339,6 +371,13 @@ pcie_status pcie_devices_init(cpio_file_t *pci_ids) {
     debugf_debug("Found %d config space%s\n", mcfg_spaces,
                  mcfg_spaces == 1 ? "" : "s");
 
+    if (mcfg_spaces < 1) {
+        kprintf_warn("No valid config spaces were found!\n");
+
+        kfree(table);
+        return PCIE_STATUS_ENOCFGSP;
+    }
+
     for (int i = 0; i < mcfg_spaces; i++) {
         mcfg_space = mcfg->entries[i];
         debugf("PCIe BASE_ADDR: %llx; SEGMENT: %hu; BUS_RANGE: "
@@ -346,28 +385,39 @@ pcie_status pcie_devices_init(cpio_file_t *pci_ids) {
                mcfg_space.address, mcfg_space.segment, mcfg_space.start_bus,
                mcfg_space.end_bus);
 
-        // we should map the base address
-        // according to the spec, each device is 4K long
-        map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()),
-                           mcfg_space.address,
-                           PHYS_TO_VIRTUAL(mcfg_space.address), 0x1000,
-                           PMLE_KERNEL_READ_WRITE);
+        for (uint8_t device = 0; device < 32; device++) {
+            for (uint8_t function = 0; function < 8; function++) {
+                uint64_t addr =
+                    (mcfg_space.address) + PCIE_OFFSET(0, device, function);
 
-        if (add_pcie_device((void *)PHYS_TO_VIRTUAL(mcfg_space.address),
-                            pci_ids,
-                            mcfg_space.end_bus - mcfg_space.start_bus) != 0) {
-            debugf_warn("Couldn't parse PCIe device info!\n");
+                // we should map the base address
+                // according to the spec, each device is 4K long
+                map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()),
+                                   addr, PHYS_TO_VIRTUAL(addr), 0x1000,
+                                   PMLE_KERNEL_READ_WRITE);
 
-            kfree(table);
-            return PCIE_STATUS_ENOPCIENF;
+                switch (add_pcie_device((void *)PHYS_TO_VIRTUAL(addr), pci_ids,
+                                        mcfg_space.end_bus -
+                                            mcfg_space.start_bus)) {
+                case PCIE_STATUS_OK:
+                    continue;
+
+                case PCIE_STATUS_EINVALID:
+                    // debugf_debug("Non-existent PCIe device at "
+                    //              "[%.02hhx:%.02hhx.%.01hhx]\n",
+                    //              0, device, function);
+                    continue;
+
+                default:
+                    // debugf_warn("Couldn't parse info for PCIe device "
+                    //             "[%.02hhx:%.02hhx.%.01hhx]!\n",
+                    //             0, device, function);
+                    //
+                    kfree(table);
+                    return PCIE_STATUS_ENOPCIENF;
+                }
+            }
         }
-    }
-
-    if (mcfg_spaces < 1) {
-        kprintf_warn("No valid config spaces were found!\n");
-
-        kfree(table);
-        return PCIE_STATUS_ENOCFGSP;
     }
 
     kfree(table);
