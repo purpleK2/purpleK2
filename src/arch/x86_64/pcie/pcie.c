@@ -17,6 +17,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <math.h>
+
+pcie_device_t *pcie_devices_head;
+
 // @param pci_ids pointer to a CPIO-type pci.ids file
 // @param vendor_out a 128-byte (minimum size) string that will contain the
 // vendor name
@@ -169,7 +173,8 @@ pcie_status pcie_lookup_vendor_device(pcie_header_t *header,
     return PCIE_STATUS_ENOPCIENF;
 }
 
-pcie_status dump_pcie_info(void *pcie_addr, cpio_file_t *pci_ids) {
+pcie_status dump_pcie_info(void *pcie_addr, cpio_file_t *pci_ids,
+                           uint8_t bus_range) {
     pcie_header_t *pcie_header = kmalloc(sizeof(pcie_header_t));
     memcpy(pcie_header, pcie_addr, sizeof(pcie_header_t));
 
@@ -183,7 +188,35 @@ pcie_status dump_pcie_info(void *pcie_addr, cpio_file_t *pci_ids) {
         mprintf_warn("Couldn't lookup PCIe vendor and/or device name!\n");
     }
 
-    kprintf("%s %s\n", vendor, device);
+    pcie_device_t *pcie_device = kmalloc(sizeof(pcie_device_t));
+    memset(pcie_device, 0, sizeof(pcie_device_t));
+
+    if (pcie_devices_head) {
+        pcie_device_t *dev;
+        for (dev = pcie_devices_head; dev->next != NULL; dev = dev->next)
+            ;
+
+        dev->next = pcie_device;
+    } else {
+        pcie_devices_head = pcie_device;
+    }
+
+    pcie_device->vendor_id = pcie_header->vendor_id;
+    pcie_device->device_id = pcie_header->device_id;
+
+    pcie_device->vendor_str = vendor;
+    pcie_device->device_str = device;
+
+    pcie_device->header_type = pcie_header->header_type;
+
+    pcie_device->class_code =
+        (pcie_header->classcode_lo) | (pcie_header->classcode_lo << 8);
+
+    uint64_t pcie_addr_phys = pg_virtual_to_phys(
+        (uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uint64_t)pcie_addr);
+
+    pcie_device->device   = (uint8_t)((pcie_addr_phys >> 15) & 0x5);
+    pcie_device->function = (uint8_t)((pcie_addr_phys >> 12) & 0x3);
 
     void *p = (pcie_addr + sizeof(pcie_header_t));
 
@@ -258,7 +291,7 @@ pcie_status pcie_devices_init(cpio_file_t *pci_ids) {
                            PMLE_KERNEL_READ_WRITE);
 
         if (dump_pcie_info((void *)PHYS_TO_VIRTUAL(mcfg_space.address),
-                           pci_ids) != 0) {
+                           pci_ids, ) != 0) {
             debugf_warn("Couldn't parse PCIe device info!\n");
 
             kfree(table);
