@@ -451,7 +451,6 @@ void kstart(void) {
     scheduler_init();
 
     // smp_init();
-
     // limine_parsed_data.smp_enabled = true;
 
     cpio_file_t *pci_ids = cpio_fs_get_file(&fs, "pci.ids");
@@ -460,7 +459,7 @@ void kstart(void) {
     pci_print_list();
     kprintf_ok("PCI devices parsing done\n");
     if (pcie_devices_init(pci_ids) != 0) {
-        kprintf_warn("Uhm no PCIe, you're probably cooked\n");
+        kprintf_warn("Failed to parse PCIe devices!\n");
     } else {
         kprintf_ok("PCIe devices parsing done\n");
     }
