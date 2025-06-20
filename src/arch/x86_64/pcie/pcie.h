@@ -19,6 +19,7 @@ typedef enum {
     PCIE_STATUS_ENOCFGSP  = -3,
     PCIE_STATUS_ENULLPTR  = -4,
     PCIE_STATUS_EUNKNOWN  = -5,
+    PCIE_STATUS_EINVALID  = -6,
 } pcie_status;
 
 typedef enum {
@@ -112,15 +113,19 @@ typedef struct pcie_device {
     char *vendor_str;
     char *device_str;
 
-    uint32_t *bar; // number of BARs depend on the PCIe header type;
+    uint32_t *bars; // number of BARs depend on the PCIe header type;
 
     uint8_t irq_line, irq_pin;
 
     struct pcie_device *next;
 } pcie_device_t;
 
+pcie_device_t *get_pcie_dev_head();
+
 pcie_status pcie_devices_init(cpio_file_t *pci_ids);
 
-pcie_status dump_pcie_info(void *pcie_addr, cpio_file_t *pci_ids);
+pcie_status dump_pcie_dev_info(pcie_device_t *pcie);
+pcie_status add_pcie_device(void *pcie_addr, cpio_file_t *pci_ids,
+                            uint8_t bus_range);
 
 #endif

@@ -19,7 +19,13 @@
 
 #include <math.h>
 
-pcie_device_t *pcie_devices_head;
+pcie_device_t *pcie_devices_head = NULL;
+pcie_device_t *get_pcie_dev_head() {
+    return pcie_devices_head;
+}
+
+// FOR INTERNAL USE ONLY
+pcie_device_t *pcie_dev_tail = NULL;
 
 // @param pci_ids pointer to a CPIO-type pci.ids file
 // @param vendor_out a 128-byte (minimum size) string that will contain the
@@ -173,8 +179,44 @@ pcie_status pcie_lookup_vendor_device(pcie_header_t *header,
     return PCIE_STATUS_ENOPCIENF;
 }
 
-pcie_status dump_pcie_info(void *pcie_addr, cpio_file_t *pci_ids,
-                           uint8_t bus_range) {
+pcie_status dump_pcie_dev_info(pcie_device_t *pcie) {
+    if (!pcie) {
+        debugf_warn("Invalid PCIe device pointer!\n");
+        return PCIE_STATUS_ENULLPTR;
+    }
+
+    debugf("PCIe bus %hhu, device %hhu, function %hhu\n", pcie->bus,
+           pcie->device, pcie->function);
+
+    mprintf("\t(%.04hx:%.04hx) %s %s\n", pcie->vendor_id, pcie->device_id,
+            pcie->vendor_str, pcie->device_str);
+
+    switch (pcie->header_type) {
+    case PCIE_HEADER_T0:
+        for (int i = 0; i < PCIE_HEADT0_BARS; i++) {
+            debugf("\tBAR%d: 0x%.08lx\n", i, pcie->bars[i]);
+        }
+        break;
+
+    case PCIE_HEADER_T1:
+        for (int i = 0; i < PCIE_HEADT1_BARS; i++) {
+            debugf("\tBAR%d: 0x%.08lx\n", i, pcie->bars[i]);
+        }
+        break;
+
+    default:
+        debugf_warn("Unknown PCIe header type %.02d\n!", pcie->header_type);
+        return PCIE_STATUS_EINVALID;
+    }
+
+    debugf("\tIRQ Line:%hhu\n", pcie->irq_line);
+    debugf("\tIRQ Pin:%hhu\n", pcie->irq_pin);
+
+    return PCIE_STATUS_OK;
+}
+
+pcie_status add_pcie_device(void *pcie_addr, cpio_file_t *pci_ids,
+                            uint8_t bus_range) {
     pcie_header_t *pcie_header = kmalloc(sizeof(pcie_header_t));
     memcpy(pcie_header, pcie_addr, sizeof(pcie_header_t));
 
@@ -191,14 +233,13 @@ pcie_status dump_pcie_info(void *pcie_addr, cpio_file_t *pci_ids,
     pcie_device_t *pcie_device = kmalloc(sizeof(pcie_device_t));
     memset(pcie_device, 0, sizeof(pcie_device_t));
 
-    if (pcie_devices_head) {
-        pcie_device_t *dev;
-        for (dev = pcie_devices_head; dev->next != NULL; dev = dev->next)
-            ;
-
-        dev->next = pcie_device;
-    } else {
+    if (!pcie_devices_head) {
+        // initialization state, we should be here only once
         pcie_devices_head = pcie_device;
+        pcie_dev_tail     = pcie_device;
+    } else {
+        pcie_dev_tail->next = pcie_device;
+        pcie_dev_tail       = pcie_dev_tail->next;
     }
 
     pcie_device->vendor_id = pcie_header->vendor_id;
@@ -218,12 +259,24 @@ pcie_status dump_pcie_info(void *pcie_addr, cpio_file_t *pci_ids,
     pcie_device->device   = (uint8_t)((pcie_addr_phys >> 15) & 0x5);
     pcie_device->function = (uint8_t)((pcie_addr_phys >> 12) & 0x3);
 
+    pcie_device->bus = (uint8_t)((pcie_addr_phys >> 20) & bus_range);
+
     void *p = (pcie_addr + sizeof(pcie_header_t));
+
+    uint32_t *bars = NULL;
 
     switch (pcie_header->header_type) {
     case PCIE_HEADER_T0:
         pcie_header0_t *header0 = kmalloc(sizeof(pcie_header0_t));
         memcpy(header0, p, sizeof(pcie_header0_t));
+
+        pcie_device->irq_line = header0->irq_line;
+        pcie_device->irq_pin  = header0->irq_pin;
+
+        bars = kmalloc(sizeof(uint32_t) * PCIE_HEADT0_BARS);
+        memcpy(bars, header0->bars, sizeof(uint32_t) * PCIE_HEADT0_BARS);
+
+        pcie_device->bars = bars;
 
         kfree(header0);
         break;
@@ -231,6 +284,14 @@ pcie_status dump_pcie_info(void *pcie_addr, cpio_file_t *pci_ids,
     case PCIE_HEADER_T1:
         pcie_header1_t *header1 = kmalloc(sizeof(pcie_header1_t));
         memcpy(header1, p, sizeof(pcie_header1_t));
+
+        pcie_device->irq_line = header1->irq_line;
+        pcie_device->irq_pin  = header1->irq_pin;
+
+        bars = kmalloc(sizeof(uint32_t) * PCIE_HEADT1_BARS);
+        memcpy(bars, header1->bars, sizeof(uint32_t) * PCIE_HEADT1_BARS);
+
+        pcie_device->bars = bars;
 
         kfree(header1);
         break;
@@ -241,6 +302,8 @@ pcie_status dump_pcie_info(void *pcie_addr, cpio_file_t *pci_ids,
         kfree(pcie_header);
         return PCIE_STATUS_EUNKNOWN;
     }
+
+    dump_pcie_dev_info(pcie_device);
 
     kfree(pcie_header);
     return PCIE_STATUS_OK;
@@ -278,10 +341,10 @@ pcie_status pcie_devices_init(cpio_file_t *pci_ids) {
 
     for (int i = 0; i < mcfg_spaces; i++) {
         mcfg_space = mcfg->entries[i];
-        mprintf("[PCIE::%.02d] PCIe BASE_ADDR: %llx; SEGMENT: %hu; BUS_RANGE: "
-                "%hhu - %hhu\n",
-                i, mcfg_space.address, mcfg_space.segment, mcfg_space.start_bus,
-                mcfg_space.end_bus);
+        debugf("PCIe BASE_ADDR: %llx; SEGMENT: %hu; BUS_RANGE: "
+               "%hhu - %hhu\n",
+               mcfg_space.address, mcfg_space.segment, mcfg_space.start_bus,
+               mcfg_space.end_bus);
 
         // we should map the base address
         // according to the spec, each device is 4K long
@@ -290,8 +353,9 @@ pcie_status pcie_devices_init(cpio_file_t *pci_ids) {
                            PHYS_TO_VIRTUAL(mcfg_space.address), 0x1000,
                            PMLE_KERNEL_READ_WRITE);
 
-        if (dump_pcie_info((void *)PHYS_TO_VIRTUAL(mcfg_space.address),
-                           pci_ids, ) != 0) {
+        if (add_pcie_device((void *)PHYS_TO_VIRTUAL(mcfg_space.address),
+                            pci_ids,
+                            mcfg_space.end_bus - mcfg_space.start_bus) != 0) {
             debugf_warn("Couldn't parse PCIe device info!\n");
 
             kfree(table);
