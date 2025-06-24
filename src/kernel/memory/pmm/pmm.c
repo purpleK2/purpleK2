@@ -126,7 +126,7 @@ void *pmm_alloc_page() {
 
     // if we've got here and nothing was found, then kernel panic
     if (cur_node == NULL) {
-        kprintf_panic("OUT OF MEMORY!!\n");
+        kprintf_panic("OUT OF MEMORY!");
         _hcf();
     }
 
