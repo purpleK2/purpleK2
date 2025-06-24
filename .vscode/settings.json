@@ -107,7 +107,8 @@
         "kheap.h": "c",
         "ioapic.h": "c",
         "newc.h": "c",
-        "mutex.h": "c"
+        "mutex.h": "c",
+        "errors.h": "c"
     },
     "dotnet.defaultSolution": "disable",
     "cmake.configureOnOpen": false,
