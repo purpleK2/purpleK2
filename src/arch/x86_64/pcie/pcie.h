@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <errors.h>
+
 #include <fs/cpio/newc.h>
 
 #define PCIE_HEADT0_BARS 6
@@ -13,13 +15,13 @@
 #define PCIE_MAX_DEVICE_NAME 128
 
 typedef enum {
-    PCIE_STATUS_OK        = 0,
-    PCIE_STATUS_ENOMCFG   = -1,
-    PCIE_STATUS_ENOPCIENF = -2,
-    PCIE_STATUS_ENOCFGSP  = -3,
-    PCIE_STATUS_ENULLPTR  = -4,
-    PCIE_STATUS_EUNKNOWN  = -5,
-    PCIE_STATUS_EINVALID  = -6,
+    PCIE_STATUS_OK        = EOK,
+    PCIE_STATUS_ENOMCFG   = -ENOCFG,
+    PCIE_STATUS_ENOPCIENF = -ENOCFG,
+    PCIE_STATUS_ENOCFGSP  = -ENOCFG,
+    PCIE_STATUS_ENULLPTR  = -ENULLPTR,
+    PCIE_STATUS_EUNKNOWN  = -EUNFB,
+    PCIE_STATUS_EINVALID  = -ENOCFG,
 } pcie_status;
 
 #define PCIE_OFFSET(b, d, f) ((b << 20) | (d << 15) | (f << 12))
