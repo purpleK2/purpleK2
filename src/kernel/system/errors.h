@@ -12,6 +12,7 @@
 #define ENOIMPL  8  // no implementation
 #define ENOTDIR  9  // no such directory
 #define ENULLPTR 10 // NULL pointer found
+#define ENOCFG   11 // invalid/no configuration
 
 #define EPCIENOENT 101 // special
 #endif                 // ERRORS_H
