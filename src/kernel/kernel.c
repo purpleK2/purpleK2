@@ -18,7 +18,6 @@
 #include <dev/std/helper.h>
 
 #include <fs/cpio/newc.h>
-#include <fs/fakefs/fakefs.h>
 #include <fs/vfs/devfs/devfs.h>
 #include <fs/vfs/vfs.h>
 
