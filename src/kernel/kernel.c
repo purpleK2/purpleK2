@@ -310,9 +310,6 @@ void kstart(void) {
             "Some errors occured during uACPI initialization. Halting...\n");
 
         _hcf();
-        for (;;) {
-            asm("hlt");
-        }
     }
 
 #if defined(__x86_64__)

@@ -145,8 +145,7 @@ void panic_common(void *ctx) {
     mprintf("\nPANIC LOG END --- HALTING ---\n");
     debugf(ANSI_COLOR_RESET);
     asm("cli");
-    for (;;)
-        _hcf();
+    _hcf();
 }
 
 void isr_handler(void *ctx) {
@@ -179,9 +178,6 @@ void isr_handler(void *ctx) {
         panic_common(regs);
 
         _hcf();
-        for (;;) {
-            asm("hlt");
-        }
     }
 }
 

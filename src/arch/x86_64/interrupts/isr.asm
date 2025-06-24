@@ -344,4 +344,6 @@ isr_stub_table:
 global _hcf
 _hcf:
     cli
+.hlt_loop:
     hlt
+    jmp .hlt_loop
