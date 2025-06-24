@@ -150,7 +150,7 @@ int printf(void (*putc_function)(const char *, int), const char *fmt, ...);
             kprintf("early: (%s:%d) " fmt " Halting...", __FUNCTION__,         \
                     __LINE__, ##__VA_ARGS__);                                  \
         } else {                                                               \
-            kprintf("[%llu.%03llu] %s:%d) " fmt " Halting...",                 \
+            kprintf("[%llu.%03llu] (%s:%d) " fmt " Halting...",                \
                     get_ticks() / 1000, get_ticks() % 1000, __FUNCTION__,      \
                     __LINE__, ##__VA_ARGS__);                                  \
         }                                                                      \
