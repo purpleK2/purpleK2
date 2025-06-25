@@ -35,7 +35,8 @@ At the beginning of July 2024, after watching some videos about OSDev, I decided
 The bootloader part is done by Limine, which offers a 64-bit environment out of the box (GRUB simply doesn't and you'll need to make your own "jump" from 32-bit to 64-bit), which is fine for our purpose of simply understanding how an OS works.
 
 ## Current Development Status
-For the current development status check the [Roadmap Document](docs/Roadmap.md) or [The GitHub Project](about:blank)
+For the current development status check the [Roadmap Document](docs/Roadmap.md) or [The GitHub Project](https://github.com/orgs/purpleK2/projects/2)
+(I, Omar, recommend the latter since it's easier to update rather than committing changes to a file every single time)
 
 ## The base of the Kenrel
 The base of the kernel is the [Limine Bare Bones Template](https://wiki.osdev.org/Limine_Bare_Bones) on the [OSDev Wiki](https://wiki.osdev.org/Expanded_Main_Page) which is a fundamental source when doing OS Development
@@ -45,11 +46,11 @@ The base of the kernel is the [Limine Bare Bones Template](https://wiki.osdev.or
 > [!CAUTION]
 > The building of this project has been only properly tested on Linux, but if you can report anything about other platforms (Windows, MacOS, Ubuntu, ...) feel free to open an issue/PR! Here is a list of currently tested (and supported) platorms
 
-- Fedora 42 XFCE (at least one build per week)
-- OS X Mavericks (last tested: January 2024)
-- Arch Linux (last tested: December 2024)
+- Endeavour OS (at least one build per week)
+- Arch Linux (at least one build per week)
 - Debian 12 on WSL2 (Windows 10 21H2 build 19044, last tested: September 2024)
 - Ubuntu 24.04 on WSL2 (Windows 11 24H2 build 26100.2033, last tested: March 2025)
+- OS X Mavericks (last tested: January 2024)
 
 > [!NOTE]  
 > If you installed the cross compiler from HomeBrew/MacPorts you should compile the project with `make KCC=x86_64-elf-gcc KLD=x86_64-elf-ld`
@@ -62,7 +63,7 @@ The hardware being tested on is the following:
 - 16GB RAM
 - Sapphire Radeon R9 280
 
-If you want to try the kernel with legacy booting, make sure you run `limine bios-install <your target drive>`.
+~~If you want to try the kernel with legacy booting, make sure you run `limine bios-install <your target drive>`.~~ There's no need to re-install Limine's MBR to your target drive.
 
 ### Prequisites
 You need to install the following packages to build the kernel and its components. You also need a cross-compiler, the installation of the cross-compiler is in [Setting up a cross compiler](#setting-up-a-cross-compiler)
@@ -73,6 +74,7 @@ The following packages are required to build the kernel:
 - `nasm`: The assembler used by this kernel
 - `xorriso` and `mkisofs`: To create the ISO disk image
 - `kconfig`: or more likely `kconfig-frontends` to use the `menuconfig`
+- `cpio`: for creating the compressed CPIO archive
 > [!NOTE]
 > Fedora users: if you know how to read a `PKGBUILD` file, you can follow the commands in the AUR to install the latest version of `kconfig-frontends` (4.11.0.1 at the time of writing this) to your `/usr/bin`
 - [OPTIONAL] `edk2-ovmf`: useful for running QEMU with UEFI support
@@ -135,8 +137,8 @@ When you installed the cross-compiler and the dependencies you can build now bui
 
 1. Clone the Repository and `cd` into it:
 ```bash
-git clone --recursive https://github.com/RepubblicaTech/rtos.git
-cd rtos
+git clone --recursive https://github.com/purpleK2/purpleK2.git
+cd purpleK2
 ```
 
 2. Get the dependencies and build the Limine executable 
