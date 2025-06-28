@@ -213,7 +213,10 @@ pcie_status dump_pcie_dev_info(pcie_device_t *pcie) {
             pcie->bus, pcie->device, pcie->function, pcie->vendor_str,
             pcie->device_str, pcie->vendor_id, pcie->device_id, pcie->revision);
 
-    switch (pcie->header_type) {
+    debugf("\tClass/Subclass: %.02lx/%.02lx\n", pcie->class_code,
+           pcie->subclass_code);
+
+    switch (pcie->header_type & 0x1) {
     case PCIE_HEADER_T0:
         for (int i = 0; i < PCIE_HEADT0_BARS; i++) {
             debugf("\tBAR%d: 0x%.08lx\n", i, pcie->bars[i]);
@@ -227,13 +230,39 @@ pcie_status dump_pcie_dev_info(pcie_device_t *pcie) {
         break;
 
     default:
-        debugf_warn("Unknown PCIe header type %.02d\n!", pcie->header_type);
-        return PCIE_STATUS_EINVALID;
+        debugf_warn("Unknown PCIe header type %.02d!\n", pcie->header_type);
+        break;
     }
 
     debugf("\tIRQ Line:%hhu\n", pcie->irq_line);
     debugf("\tIRQ Pin:%hhu\n", pcie->irq_pin);
 
+    return PCIE_STATUS_OK;
+}
+
+pcie_status check_pcie_function(void *pcie_addr) {
+    pcie_header_t *pcie_header = kmalloc(sizeof(pcie_header_t));
+    memcpy(pcie_header, pcie_addr, sizeof(pcie_header_t));
+
+    if (pcie_header->header_type & 0x80) {
+        kfree(pcie_header);
+
+        return PCIE_STATUS_MULTIFUN;
+    } else {
+        switch (pcie_header->header_type) {
+        case PCIE_HEADER_T0:
+        case PCIE_HEADER_T1:
+            // nothing, we're good
+            break;
+
+        default:
+            // everything else is reserved
+            // we'll ignore it
+            break;
+        }
+    }
+
+    kfree(pcie_header);
     return PCIE_STATUS_OK;
 }
 
@@ -253,10 +282,20 @@ pcie_status add_pcie_device(void *pcie_addr, cpio_file_t *pci_ids,
 
     case PCIE_STATUS_EINVALID:
         // debugf_warn("Attempted to lookup for a non-existent device!\n");
+
+        kfree(pcie_header);
+        kfree(vendor);
+        kfree(device);
+
         return PCIE_STATUS_EINVALID;
 
     default:
         debugf_warn("Couldn't lookup PCIe vendor and/or device name!\n");
+
+        kfree(pcie_header);
+        kfree(vendor);
+        kfree(device);
+
         return PCIE_STATUS_ENOPCIENF;
     }
 
@@ -271,8 +310,8 @@ pcie_status add_pcie_device(void *pcie_addr, cpio_file_t *pci_ids,
 
     pcie_device->header_type = pcie_header->header_type;
 
-    pcie_device->class_code =
-        (pcie_header->classcode_lo) | (pcie_header->classcode_lo << 8);
+    pcie_device->class_code    = pcie_header->class_code;
+    pcie_device->subclass_code = pcie_header->subclass_code;
 
     uint64_t pcie_addr_phys = pg_virtual_to_phys(
         (uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uint64_t)pcie_addr);
@@ -288,7 +327,7 @@ pcie_status add_pcie_device(void *pcie_addr, cpio_file_t *pci_ids,
 
     void *p = (pcie_addr + sizeof(pcie_header_t));
 
-    switch (pcie_header->header_type) {
+    switch (pcie_header->header_type & 0b1) {
     case PCIE_HEADER_T0:
         pcie_header0_t *header0 = kmalloc(sizeof(pcie_header0_t));
         memcpy(header0, p, sizeof(pcie_header0_t));
@@ -322,6 +361,11 @@ pcie_status add_pcie_device(void *pcie_addr, cpio_file_t *pci_ids,
     default:
         debugf_warn("Unknown PCIe header type %.02d!",
                     pcie_header->header_type);
+
+        kfree(vendor);
+        kfree(device);
+
+        kfree(pcie_device);
         kfree(pcie_header);
         return PCIE_STATUS_EUNKNOWN;
     }
@@ -338,6 +382,63 @@ pcie_status add_pcie_device(void *pcie_addr, cpio_file_t *pci_ids,
     dump_pcie_dev_info(pcie_device);
 
     kfree(pcie_header);
+    return PCIE_STATUS_OK;
+}
+
+pcie_status pcie_check_buses(struct acpi_mcfg_allocation *ecam,
+                             cpio_file_t *pci_ids) {
+    for (uint16_t bus = ecam->start_bus; bus < (ecam->end_bus + 1); bus++) {
+        for (uint8_t device = 0; device < 32; device++) {
+            for (uint8_t function = 0; function < 8; function++) {
+                uint64_t addr =
+                    (ecam->address) + PCIE_OFFSET(bus, device, function);
+
+                // we should map the base address
+                // according to the spec, each device is 4K long
+                map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()),
+                                   addr, PHYS_TO_VIRTUAL(addr), 0x1000,
+                                   PMLE_KERNEL_READ_WRITE);
+
+                switch (add_pcie_device((void *)PHYS_TO_VIRTUAL(addr), pci_ids,
+                                        ecam->end_bus - ecam->start_bus)) {
+                case PCIE_STATUS_OK:
+                    break;
+
+                case PCIE_STATUS_EINVALID:
+                    // debugf_debug("Non-existent PCIe device at "
+                    //              "[%.02hhx:%.02hhx.%.01hhx]\n",
+                    //              0, device, function);
+                    unmap_region((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()),
+                                 PHYS_TO_VIRTUAL(addr), 0x1000);
+                    continue;
+
+                default:
+                    debugf_warn("Couldn't parse info for PCIe device "
+                                "[%.02hhx:%.02hhx.%.01hhx]!\n",
+                                bus, device, function);
+
+                    break;
+                    // return PCIE_STATUS_ENOPCIENF;
+                }
+
+                switch (check_pcie_function((void *)PHYS_TO_VIRTUAL(addr))) {
+                case PCIE_STATUS_OK:
+                    // device is not multifunction
+                    function = 8;
+                    break;
+
+                case PCIE_STATUS_MULTIFUN:
+                    // we're good
+                    debugf("Device is multifunction\n");
+                    break;
+
+                default:
+                    break;
+                }
+            }
+        }
+    }
+
     return PCIE_STATUS_OK;
 }
 
@@ -385,38 +486,12 @@ pcie_status pcie_devices_init(cpio_file_t *pci_ids) {
                mcfg_space.address, mcfg_space.segment, mcfg_space.start_bus,
                mcfg_space.end_bus);
 
-        for (uint8_t device = 0; device < 32; device++) {
-            for (uint8_t function = 0; function < 8; function++) {
-                uint64_t addr =
-                    (mcfg_space.address) + PCIE_OFFSET(0, device, function);
+        switch (pcie_check_buses(&mcfg_space, pci_ids)) {
+        case PCIE_STATUS_OK:
+            break;
 
-                // we should map the base address
-                // according to the spec, each device is 4K long
-                map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()),
-                                   addr, PHYS_TO_VIRTUAL(addr), 0x1000,
-                                   PMLE_KERNEL_READ_WRITE);
-
-                switch (add_pcie_device((void *)PHYS_TO_VIRTUAL(addr), pci_ids,
-                                        mcfg_space.end_bus -
-                                            mcfg_space.start_bus)) {
-                case PCIE_STATUS_OK:
-                    continue;
-
-                case PCIE_STATUS_EINVALID:
-                    // debugf_debug("Non-existent PCIe device at "
-                    //              "[%.02hhx:%.02hhx.%.01hhx]\n",
-                    //              0, device, function);
-                    continue;
-
-                default:
-                    // debugf_warn("Couldn't parse info for PCIe device "
-                    //             "[%.02hhx:%.02hhx.%.01hhx]!\n",
-                    //             0, device, function);
-                    //
-                    kfree(table);
-                    return PCIE_STATUS_ENOPCIENF;
-                }
-            }
+        default:
+            return PCIE_STATUS_EINVALID;
         }
     }
 

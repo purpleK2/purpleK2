@@ -22,9 +22,21 @@ typedef enum {
     PCIE_STATUS_ENULLPTR  = -ENULLPTR,
     PCIE_STATUS_EUNKNOWN  = -EUNFB,
     PCIE_STATUS_EINVALID  = -ENOCFG,
+    PCIE_STATUS_MULTIFUN  = 1,
 } pcie_status;
 
+typedef enum {
+    // bit 0
+    PCIE_BAR_MMIO = 0,
+    PCIE_BAR_PIO  = 1,
+
+    // bits 1-2
+    PCIE_BAR_MM32 = 0,
+    PCIE_BAR_MM64 = 2,
+} pcie_bar_flags;
+
 #define PCIE_OFFSET(b, d, f) ((b << 20) | (d << 15) | (f << 12))
+// #define PCIE_BAR_ADDR()
 
 typedef enum {
     PCIE_HEADER_T0 = 0,
@@ -38,8 +50,9 @@ typedef struct pcie_header {
     uint16_t status_reg;
     uint16_t command_reg;
 
-    uint16_t classcode_hi;
-    uint8_t classcode_lo;
+    uint8_t class_code;
+    uint8_t subclass_code;
+    uint8_t programming_interface;
 
     uint8_t revision_id;
 
@@ -110,7 +123,7 @@ typedef struct pcie_header1 {
 typedef struct pcie_device {
     uint8_t bus, device, function;
     uint16_t vendor_id, device_id;
-    uint32_t class_code;
+    uint8_t class_code, subclass_code;
 
     uint8_t revision;
 
