@@ -287,6 +287,7 @@ void strcpy(char dest[], const char source[]) {
         dest[i] = source[i];
 
         if (dest[i] == '\0') {
+            dest[i] = '\0';
             break;
         }
 
