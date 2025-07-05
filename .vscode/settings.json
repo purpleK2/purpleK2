@@ -108,7 +108,8 @@
         "ioapic.h": "c",
         "newc.h": "c",
         "mutex.h": "c",
-        "errors.h": "c"
+        "errors.h": "c",
+        "vmware_svga.h": "c"
     },
     "dotnet.defaultSolution": "disable",
     "cmake.configureOnOpen": false,
