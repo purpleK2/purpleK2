@@ -505,3 +505,30 @@ pcie_status pcie_devices_init(cpio_file_t *pci_ids) {
 
     return PCIE_STATUS_OK;
 }
+
+pcie_status pcie_find_device(uint16_t vendor_id, uint16_t device_id,
+                             pcie_device_t *out) {
+
+    memset(out, 0, sizeof(pcie_device_t));
+
+    if (!out) {
+        return PCIE_STATUS_ENULLPTR;
+    }
+
+    if (vendor_id == 0xffff || device_id == 0xffff) {
+        debugf_warn("Why are you searching for the illegal vendor??\n");
+        return PCIE_STATUS_EINVALID;
+    }
+
+    for (pcie_device_t *dev = pcie_devices_head; dev != NULL; dev = dev->next) {
+        if ((dev->device_id == device_id) && (dev->vendor_id == vendor_id)) {
+            break;
+        } else {
+            // if it doesn't match ...
+            if (!dev->next) // is this the last structure in the list
+                return PCIE_STATUS_ENOPCIENF;
+        }
+    }
+
+    return PCIE_STATUS_OK;
+}

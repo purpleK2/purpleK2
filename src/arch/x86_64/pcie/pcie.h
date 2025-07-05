@@ -147,5 +147,7 @@ pcie_status dump_pcie_dev_info(pcie_device_t *pcie);
 
 pcie_status pcie_add_device(void *pcie_addr, cpio_file_t *pci_ids,
                             uint8_t bus_range);
+pcie_status pcie_find_device(uint16_t vendor_id, uint16_t device_id,
+                             pcie_device_t *out);
 
 #endif
