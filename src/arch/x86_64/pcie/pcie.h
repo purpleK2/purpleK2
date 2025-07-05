@@ -36,7 +36,7 @@ typedef enum {
 } pcie_bar_flags;
 
 #define PCIE_OFFSET(b, d, f) ((b << 20) | (d << 15) | (f << 12))
-// #define PCIE_BAR_ADDR()
+#define PCIE_BAR_ADDR(b)     (b & ~(0x7))
 
 typedef enum {
     PCIE_HEADER_T0 = 0,
@@ -144,7 +144,8 @@ pcie_device_t *get_pcie_dev_head();
 pcie_status pcie_devices_init(cpio_file_t *pci_ids);
 
 pcie_status dump_pcie_dev_info(pcie_device_t *pcie);
-pcie_status add_pcie_device(void *pcie_addr, cpio_file_t *pci_ids,
+
+pcie_status pcie_add_device(void *pcie_addr, cpio_file_t *pci_ids,
                             uint8_t bus_range);
 
 #endif

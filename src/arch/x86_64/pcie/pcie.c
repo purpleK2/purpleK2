@@ -219,13 +219,19 @@ pcie_status dump_pcie_dev_info(pcie_device_t *pcie) {
     switch (pcie->header_type & 0x1) {
     case PCIE_HEADER_T0:
         for (int i = 0; i < PCIE_HEADT0_BARS; i++) {
-            debugf("\tBAR%d: 0x%.08lx\n", i, pcie->bars[i]);
+            debugf("\tBAR%d: 0x%.08lx (%s)\n", i, PCIE_BAR_ADDR(pcie->bars[i]),
+                   (pcie->bars[i] != 0
+                        ? ((pcie->bars[i] & PCIE_BAR_PIO) ? "PIO" : "MMIO")
+                        : "Unused"));
         }
         break;
 
     case PCIE_HEADER_T1:
         for (int i = 0; i < PCIE_HEADT1_BARS; i++) {
-            debugf("\tBAR%d: 0x%.08lx\n", i, pcie->bars[i]);
+            debugf("\tBAR%d: 0x%.08lx (%s)\n", i, PCIE_BAR_ADDR(pcie->bars[i]),
+                   (pcie->bars[i] != 0
+                        ? (pcie->bars[i] & PCIE_BAR_MMIO ? "PIO" : "MMIO")
+                        : "Unused"));
         }
         break;
 
@@ -266,7 +272,7 @@ pcie_status check_pcie_function(void *pcie_addr) {
     return PCIE_STATUS_OK;
 }
 
-pcie_status add_pcie_device(void *pcie_addr, cpio_file_t *pci_ids,
+pcie_status pcie_add_device(void *pcie_addr, cpio_file_t *pci_ids,
                             uint8_t bus_range) {
     pcie_header_t *pcie_header = kmalloc(sizeof(pcie_header_t));
     memcpy(pcie_header, pcie_addr, sizeof(pcie_header_t));
@@ -399,7 +405,7 @@ pcie_status pcie_check_buses(struct acpi_mcfg_allocation *ecam,
                                    addr, PHYS_TO_VIRTUAL(addr), 0x1000,
                                    PMLE_KERNEL_READ_WRITE);
 
-                switch (add_pcie_device((void *)PHYS_TO_VIRTUAL(addr), pci_ids,
+                switch (pcie_add_device((void *)PHYS_TO_VIRTUAL(addr), pci_ids,
                                         ecam->end_bus - ecam->start_bus)) {
                 case PCIE_STATUS_OK:
                     break;
