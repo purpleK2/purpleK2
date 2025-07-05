@@ -460,6 +460,14 @@ void kstart(void) {
         kprintf_ok("PCIe devices parsing done\n");
     }
 
+#include <drv/vmware_svga.h>
+
+    if (svga2_init() != 0) {
+        kprintf_warn("Couldn't initialize the VMware SVGA II card!\n");
+    } else {
+        kprintf_ok("VMware SVGAII card initialized\n");
+    }
+
     limine_parsed_data.boot_time = get_ms(system_startup_time);
 
     kprintf("System started: Time took: %llu seconds %llu ms.\n",
