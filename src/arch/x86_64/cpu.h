@@ -135,6 +135,8 @@ typedef struct cpuid_ctx {
 } cpuid_ctx_t;
 
 const char *get_cpu_vendor();
+int get_cpu_name(char *out);
+
 
 // returns the value from the requested MSR
 extern uint64_t _cpu_get_msr(uint32_t msr);

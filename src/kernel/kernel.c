@@ -336,17 +336,11 @@ void kstart(void) {
     hpet_init();
     kprintf_ok("HPET initialized\n");
 
-    {
-        char *cpu_name = kmalloc(49);
-
-        unsigned int data[4];
-        memset(cpu_name, 0, 49);
-
-        for (int i = 0; i < 3; i++) {
-            __asm__("cpuid"
-                    : "=a"(data[0]), "=b"(data[1]), "=c"(data[2]), "=d"(data[3])
-                    : "a"(0x80000002 + i));
-            memcpy(cpu_name + i * 16, data, 16);
+    char *cpu_name = kmalloc(49);
+    get_cpu_name(cpu_name);
+    kprintf("CPU: %s %s @ %llu MHz\n", get_cpu_vendor(), cpu_name,
+            tsc_frequency / 1000 / 1000);
+    kfree(cpu_name);
         }
 
         kprintf("CPU Name: %s @ %llu MHz\n", cpu_name,
