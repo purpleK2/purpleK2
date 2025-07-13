@@ -125,12 +125,23 @@ bool check_fpu();
 bool check_sse2();
 bool check_fxsr();
 
+typedef struct cpuid_ctx {
+    uint32_t leaf;
+
+    uint32_t eax;
+    uint32_t ebx;
+    uint32_t ecx;
+    uint32_t edx;
+} cpuid_ctx_t;
+
 const char *get_cpu_vendor();
 
 // returns the value from the requested MSR
 extern uint64_t _cpu_get_msr(uint32_t msr);
 // sets a MSR to the given value
 extern void _cpu_set_msr(uint32_t msr, uint64_t value);
+
+extern int _cpu_cpuid(cpuid_ctx_t *ctx);
 
 // returns the value of RFLAGS register
 uint64_t _get_cpu_flags();

@@ -62,3 +62,33 @@ _set_cpu_flags:
     popfq       ; put them into RFLAGS :)
 
     ret
+
+; int _cpu_cpuid(cpuid_ctx_t *ctx)
+global _cpu_cpuid
+_cpu_cpuid:
+    cmp rdi, 0
+    je .nullptr
+
+    push rbx
+    push rcx
+    push rdx
+
+    xor eax, eax
+    mov eax, [rdi]
+    cpuid
+
+    mov [rdi + 4], eax
+    mov [rdi + 8], ebx
+    mov [rdi + 12], ecx
+    mov [rdi + 16], edx
+
+    pop rdx
+    pop rcx
+    pop rbx
+
+    mov rax, 0
+    ret
+
+.nullptr:
+    mov rax, -1
+    ret
