@@ -137,6 +137,10 @@ typedef struct cpuid_ctx {
 const char *get_cpu_vendor();
 int get_cpu_name(char *out);
 
+// check if we're running on a hypervisor
+bool check_hypervisor();
+// get hypervisor name
+int get_hypervisor(char *out);
 
 // returns the value from the requested MSR
 extern uint64_t _cpu_get_msr(uint32_t msr);

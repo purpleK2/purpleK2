@@ -64,6 +64,35 @@ uint32_t cpu_reg_read(uint32_t *reg) {
     return *reg;
 }
 
+bool check_hypervisor() {
+    unsigned int data[4];
+
+    __get_cpuid(0x1, &data[0], &data[1], &data[2], &data[3]);
+
+    return (data[2] >> 31) & 0x1;
+}
+
+// @note `out` parameter must be AT LEAST 13 bytes
+int get_hypervisor(char *out) {
+    if (!out) {
+        return -1;
+    }
+
+    if (!check_hypervisor()) {
+        return -2;
+    }
+
+    cpuid_ctx_t hypervisor_ctx = {
+        .leaf = 0x40000000, .eax = 0, .ebx = 0, .ecx = 0, .edx = 0};
+
+    _cpu_cpuid(&hypervisor_ctx);
+
+    memcpy(out, &hypervisor_ctx.ebx, 12);
+    out[12] = '\0'; // Null-terminate the string
+
+    return 0;
+}
+
 const char *get_cpu_vendor() {
     unsigned int eax, ebx, ecx, edx;
     static char vendor[13];

@@ -341,14 +341,14 @@ void kstart(void) {
     kprintf("CPU: %s %s @ %llu MHz\n", get_cpu_vendor(), cpu_name,
             tsc_frequency / 1000 / 1000);
     kfree(cpu_name);
+
+    // hypervisor
+    if (check_hypervisor()) {
+        char hv[13];
+        if (get_hypervisor(hv) == 0) {
+            kprintf("Running on hypervisor: %s\n\n", hv);
         }
-
-        kprintf("CPU Name: %s @ %llu MHz\n", cpu_name,
-                tsc_frequency / 1000 / 1000);
-        kfree(cpu_name);
     }
-
-    kprintf("CPU Vendor: %s\n", get_cpu_vendor());
 
     kprintf("Total Memory: 0x%llx (%lu MBytes)\n",
             limine_parsed_data.memory_total,
