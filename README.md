@@ -71,7 +71,7 @@ You need to install the following packages to build the kernel and its component
 
 The following packages are required to build the kernel:
 
-- `nasm`: The assembler used by this kernel
+- `fasm`: The assembler used by this kernel
 - `xorriso` and `mkisofs`: To create the ISO disk image
 - `kconfig`: or more likely `kconfig-frontends` to use the `menuconfig`
 - `cpio`: for creating the compressed CPIO archive
