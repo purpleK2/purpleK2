@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y nasm xorriso diffutils patch kconfig-frontends mtools
+          sudo apt install -y xorriso diffutils patch kconfig-frontends mtools fasm
 
       - name: Kconfig
         run: |
