@@ -57,6 +57,9 @@ typedef struct bootloader_data {
 
     // scheduler
     bool scheduler_enabled;
+
+    void *kernel_file_data;
+    size_t kernel_file_size;
 } bootloader_data;
 
 struct bootloader_data *get_bootloader_data();

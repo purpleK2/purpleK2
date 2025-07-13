@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "elf/sym.h"
 
 #include <autoconf.h>
 
@@ -86,6 +87,9 @@ USED SECTION(".requests") static volatile struct limine_firmware_type_request
 USED SECTION(".requests") static volatile struct limine_smp_request
     smp_request = {.id = LIMINE_SMP_REQUEST, .revision = 0};
 
+USED SECTION(".requests") static volatile struct limine_kernel_file_request
+    kernel_file_request = {.id = LIMINE_KERNEL_FILE_REQUEST, .revision = 0};
+
 USED SECTION(
     ".requests_start_marker") static volatile LIMINE_REQUESTS_START_MARKER;
 
@@ -99,6 +103,7 @@ struct limine_kernel_address_response *kernel_address_response;
 struct limine_paging_mode_response *paging_mode_response;
 struct limine_rsdp_response *rsdp_response;
 struct limine_module_response *module_response;
+struct limine_file *kernel_file;
 
 struct bootloader_data limine_parsed_data;
 
@@ -131,6 +136,11 @@ void kstart(void) {
 
     set_screen_bg_fg(DEFAULT_BG, DEFAULT_FG); // black-ish, white-ish
     clearscreen();
+
+    limine_parsed_data.kernel_file_data =
+        kernel_file_request.response->kernel_file->address;
+    limine_parsed_data.kernel_file_size =
+        kernel_file_request.response->kernel_file->size;
 
 #ifndef CONFIG_ENABLE_64_BIT
     kprintf_panic("Kernel wasn't configured with 64-Bit support!\n");
@@ -460,6 +470,16 @@ void kstart(void) {
         kprintf_warn("Couldn't initialize the VMware SVGA II card!\n");
     } else {
         kprintf_ok("VMware SVGAII card initialized\n");
+    }
+
+    const char *test_name = resolve_symbol_name(
+        kernel_file_request.response->kernel_file->address,
+        kernel_file_request.response->kernel_file->size, 0xffffffff80000000);
+
+    if (test_name) {
+        kprintf("Kernel file name: %s\n", test_name);
+    } else {
+        kprintf_warn("Couldn't resolve kernel file name!\n");
     }
 
     limine_parsed_data.boot_time = get_ms(system_startup_time);

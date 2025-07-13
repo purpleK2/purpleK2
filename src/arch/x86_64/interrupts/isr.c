@@ -1,4 +1,5 @@
 #include "isr.h"
+#include "elf/sym.h"
 
 #include <apic/lapic/lapic.h>
 #include <gdt/gdt.h>
@@ -103,42 +104,30 @@ void panic_common(void *ctx) {
     uint64_t *rbp = (uint64_t *)regs->rbp;
     int frame     = 0;
 
-    bootloader_data *bootloader_data = get_bootloader_data();
+    const char *rip_name =
+        resolve_symbol_name(get_bootloader_data()->kernel_file_data,
+                            get_bootloader_data()->kernel_file_size, regs->rip);
+    mprintf("[RIP][%p] %s\n", regs->rip, rip_name ? rip_name : "unknown");
 
     while (rbp) {
-        // In x86_64 calling convention:
-        // rbp[0] = previous rbp
-        // rbp[1] = return address
-
         uint64_t return_addr =
             rbp[1]; // Return address (points after call instruction)
         uint64_t *prev_rbp = (uint64_t *)rbp[0];
 
-        // Approximate function address calculation
-        // Note: This is a simplification - normally you'd use debug info
-        // The function address is typically a few bytes before the return
-        // address
-        uint64_t approx_func_addr =
-            return_addr - 5; // Typical x86_64 call instruction is 5 bytes
+        uint64_t approx_func_addr = return_addr;
 
-        // If this is in the higher-half kernel space, convert to physical
-        // address
-        uint64_t phys_addr = 0;
-        if (return_addr >= bootloader_data->kernel_base_virtual) {
-            // Using HHDM offset from limine bootloader
-            phys_addr = return_addr - bootloader_data->kernel_base_virtual;
-            mprintf("Frame %d: [%p] func addr: %llx (phys: %llx)\n", frame, rbp,
-                    approx_func_addr, phys_addr);
+        const char *func_name = resolve_symbol_name(
+            get_bootloader_data()->kernel_file_data,
+            get_bootloader_data()->kernel_file_size, approx_func_addr);
+        if (func_name) {
+            mprintf("[%d][%p] %s", frame, rbp, func_name);
         } else {
-            mprintf("Frame %d: [%p] func addr: %llx\n", frame, rbp,
-                    approx_func_addr);
+            mprintf("[%d][%p] func addr: %llx", frame, rbp, approx_func_addr);
         }
 
-        // Move to previous frame
         rbp = prev_rbp;
         frame++;
 
-        // Guard against invalid pointers or corrupted stack
         if (frame > 20 || !rbp || (uint64_t)rbp < 0x1000)
             break;
     }
