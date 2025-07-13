@@ -1,7 +1,8 @@
-[bits 64]
+format ELF64
+section '.text' executable align 16
 
 ; uint64_t _cpu_get_msr(uint32_t msr)
-global _cpu_get_msr
+public _cpu_get_msr
 _cpu_get_msr:
     ; first argument's lower 32 bits (-> rdi & 0x0000FFFF)
     mov ecx, edi
@@ -22,7 +23,7 @@ _cpu_get_msr:
     ret
 
 ; _cpu_set_msr(uint32_t msr, uint64_t value)
-global _cpu_set_msr
+public _cpu_set_msr
 _cpu_set_msr:
     ; first argument (MSR)
     mov ecx, edi
@@ -45,7 +46,7 @@ _cpu_set_msr:
     ret
 
 ; uint64_t _get_cpu_flags()
-global _get_cpu_flags
+public _get_cpu_flags
 _get_cpu_flags:
     xor rax, rax
 
@@ -55,7 +56,7 @@ _get_cpu_flags:
     ret
 
 ; void _set_cpu_flags(uint64_t flags)
-global _set_cpu_flags
+public _set_cpu_flags
 _set_cpu_flags:
     push rdi    ; flags
 
@@ -64,7 +65,7 @@ _set_cpu_flags:
     ret
 
 ; int _cpu_cpuid(cpuid_ctx_t *ctx)
-global _cpu_cpuid
+public _cpu_cpuid
 _cpu_cpuid:
     cmp rdi, 0
     je .nullptr

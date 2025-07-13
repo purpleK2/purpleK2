@@ -244,7 +244,7 @@ $(OBJS_DIR)/%.S.o: $(SRC_DIR)/%.S
 # Compilation rules for *.asm (nasm) files.
 $(OBJS_DIR)/%.asm.o: $(SRC_DIR)/%.asm
 	mkdir -p "$$(dirname $@)"
-	nasm $(KNASMFLAGS) $< -o $@
+	fasm $< $@
 	@echo "--> Assembled:	" $<
 
 run: $(OS_CODENAME).iso

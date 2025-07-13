@@ -1,17 +1,18 @@
-[bits 64]
+format ELF64
+section '.text' executable align 16
 
 ; void _load_gdt(gdt_pointer_t* descriptor)
-global _load_gdt
+public _load_gdt
 _load_gdt:
     lgdt [rdi]
     ret
 
 ; void _reload_segments(uint64_t cs, uint64_t ds)
-global _reload_segments
+public _reload_segments
 _reload_segments:
     push rdi        ; cs (rdi & 0xFF)
 
-    lea rax, [rel .reload_cs]
+    lea rax, [.reload_cs]
     push rax
 
     retfq
