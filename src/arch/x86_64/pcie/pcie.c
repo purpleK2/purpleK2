@@ -19,6 +19,8 @@
 
 #include <math.h>
 
+#include <autoconf.h>
+
 pcie_device_t *pcie_devices_head = NULL;
 pcie_device_t *get_pcie_dev_head() {
     return pcie_devices_head;
@@ -192,46 +194,59 @@ pcie_status pcie_lookup_vendor_device(pcie_header_t *header,
             break;
 
         default:
+#ifdef CONFIG_PCIE_DEBUG
             debugf_warn("Invalid PCIe parsing mode! (expected 0/1, found %d)\n",
                         parsing_mode);
+#endif
             parsing_mode = 0;
             break;
         }
     }
-
+#ifdef CONFIG_PCIE_DEBUG
     debugf_warn("Unable to lookup the PCIe vendor/device!\n");
+#endif
     return PCIE_STATUS_ENOPCIENF;
 }
 
 pcie_status dump_pcie_dev_info(pcie_device_t *pcie) {
     if (!pcie) {
+#ifdef CONFIG_PCIE_DEBUG
         debugf_warn("Invalid PCIe device pointer!\n");
+#endif
         return PCIE_STATUS_ENULLPTR;
     }
 
+#ifdef CONFIG_PCIE_DEBUG
     mprintf("[%.02hhx:%.02hhx.%.01hhx] %s %s (%.04hx:%.04hx) (rev %.02hhu)\n",
             pcie->bus, pcie->device, pcie->function, pcie->vendor_str,
             pcie->device_str, pcie->vendor_id, pcie->device_id, pcie->revision);
-
     debugf("\tClass/Subclass: %.02lx/%.02lx\n", pcie->class_code,
            pcie->subclass_code);
-
+#else
+    mprintf("[%.02hhx:%.02hhx.%.01hhx] %s %s (%.04hx:%.04hx) (rev %.02hhu)\n",
+            pcie->bus, pcie->device, pcie->function, pcie->vendor_str,
+            pcie->device_str, pcie->vendor_id, pcie->device_id, pcie->revision);
+#endif
     switch (pcie->header_type & 0x1) {
     case PCIE_HEADER_T0:
         for (int i = 0; i < PCIE_HEADT0_BARS; i++) {
+#ifdef CONFIG_PCIE_DEBUG
             debugf("\tBAR%d: 0x%.08lx (%s)\n", i, PCIE_BAR_ADDR(pcie->bars[i]),
                    (pcie->bars[i] != 0
                         ? ((pcie->bars[i] & PCIE_BAR_PIO) ? "PIO" : "MMIO")
                         : "Unused"));
+#endif
         }
         break;
 
     case PCIE_HEADER_T1:
         for (int i = 0; i < PCIE_HEADT1_BARS; i++) {
+#ifdef CONFIG_PCIE_DEBUG
             debugf("\tBAR%d: 0x%.08lx (%s)\n", i, PCIE_BAR_ADDR(pcie->bars[i]),
                    (pcie->bars[i] != 0
                         ? (pcie->bars[i] & PCIE_BAR_MMIO ? "PIO" : "MMIO")
                         : "Unused"));
+#endif
         }
         break;
 
@@ -239,9 +254,10 @@ pcie_status dump_pcie_dev_info(pcie_device_t *pcie) {
         debugf_warn("Unknown PCIe header type %.02d!\n", pcie->header_type);
         break;
     }
-
+#ifdef CONFIG_PCIE_DEBUG
     debugf("\tIRQ Line:%hhu\n", pcie->irq_line);
     debugf("\tIRQ Pin:%hhu\n", pcie->irq_pin);
+#endif
 
     return PCIE_STATUS_OK;
 }
@@ -430,12 +446,16 @@ pcie_status pcie_check_buses(struct acpi_mcfg_allocation *ecam,
                 switch (check_pcie_function((void *)PHYS_TO_VIRTUAL(addr))) {
                 case PCIE_STATUS_OK:
                     // device is not multifunction
+                    // let's imagine that we already scanned through all 8
+                    // functions :trollface:
                     function = 8;
                     break;
 
                 case PCIE_STATUS_MULTIFUN:
-                    // we're good
+// we're good
+#ifdef CONFIG_PCIE_DEBUG
                     debugf("Device is multifunction\n");
+#endif
                     break;
 
                 default:
@@ -463,7 +483,7 @@ pcie_status pcie_devices_init(cpio_file_t *pci_ids) {
     }
 
     if (!table->hdr) {
-        debugf_warn("Invalid %s table pointer!\n", ACPI_MCFG_SIGNATURE);
+        debugf_warn("Invalid '%s' table pointer!\n", ACPI_MCFG_SIGNATURE);
 
         kfree(table);
         return PCIE_STATUS_ENULLPTR;
@@ -475,8 +495,10 @@ pcie_status pcie_devices_init(cpio_file_t *pci_ids) {
     int mcfg_spaces = (mcfg->hdr.length - sizeof(mcfg->hdr)) /
                       sizeof(struct acpi_mcfg_allocation);
 
+#ifdef CONFIG_PCIE_DEBUG
     debugf_debug("Found %d config space%s\n", mcfg_spaces,
                  mcfg_spaces == 1 ? "" : "s");
+#endif
 
     if (mcfg_spaces < 1) {
         kprintf_warn("No valid config spaces were found!\n");
@@ -487,16 +509,19 @@ pcie_status pcie_devices_init(cpio_file_t *pci_ids) {
 
     for (int i = 0; i < mcfg_spaces; i++) {
         mcfg_space = mcfg->entries[i];
-        debugf("PCIe BASE_ADDR: %llx; SEGMENT: %hu; BUS_RANGE: "
-               "%hhu - %hhu\n",
-               mcfg_space.address, mcfg_space.segment, mcfg_space.start_bus,
-               mcfg_space.end_bus);
+#ifdef CONFIG_PCIE_DEBUG
+        debugf_debug("\t[%d] BASE_ADDR: %llx; SEGMENT: %hu; BUS_RANGE: "
+                     "%hhu - %hhu\n",
+                     i + 1, mcfg_space.address, mcfg_space.segment,
+                     mcfg_space.start_bus, mcfg_space.end_bus);
+#endif
 
         switch (pcie_check_buses(&mcfg_space, pci_ids)) {
         case PCIE_STATUS_OK:
             break;
 
         default:
+            kfree(table);
             return PCIE_STATUS_EINVALID;
         }
     }

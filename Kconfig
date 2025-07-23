@@ -86,5 +86,17 @@ config SCHED_DEBUG
 	default n
 	help
 		Outputs detailed info about scheduler-related operations
+
+config PCI_DEBUG
+	bool "Enable PCI debugging"
+	default n
+	help
+		Outputs detailed info about PCI initialization and PCI devices operations
+
+config PCIE_DEBUG
+	bool "Enable PCIe debugging"
+	default n
+	help
+		Outputs detailed info about PCIe initialization and PCIe devices operations
 	
 endmenu # Advanced debugging

@@ -7,6 +7,8 @@
 
 #include <io.h>
 
+#include <autoconf.h>
+
 pci_device_t *pci_devices_head = NULL;
 
 pci_device_t *get_pcihead() {
@@ -256,8 +258,13 @@ void pci_print_info(uint8_t bus, uint8_t device, uint8_t function) {
     while (dev) {
         if (dev->bus == bus && dev->device == device &&
             dev->function == function) {
+#ifdef CONFIG_PCI_DEBUG
             mprintf("PCI Device: %s %s (%04x:%04x)\n", dev->vendor_str,
                     dev->device_str, dev->vendor_id, dev->device_id);
+#else
+            kprintf("PCI Device: %s %s (%04x:%04x)\n", dev->vendor_str,
+                    dev->device_str, dev->vendor_id, dev->device_id);
+#endif
             return;
         }
         dev = dev->next;
@@ -268,6 +275,7 @@ void pci_print_info(uint8_t bus, uint8_t device, uint8_t function) {
 void pci_print_list() {
     pci_device_t *dev = pci_devices_head;
     while (dev) {
+#ifdef CONFIG_PCI_DEBUG
         mprintf("[%.02hhx:%.02hhx.%.01hhx] %s %s (%04x:%04x)\n", dev->bus,
                 dev->device, dev->function, dev->vendor_str, dev->device_str,
                 dev->vendor_id, dev->device_id);
@@ -279,27 +287,43 @@ void pci_print_list() {
                dev->header_type == 0 ? "Single Function" : "Multi-Function");
         debugf("\t%s\n", dev->prog_if == 0 ? "No Programming Interface"
                                            : "Programming Interface");
-
+#else
+        mprintf("[%.02hhx:%.02hhx.%.01hhx] %s %s (%04x:%04x)\n", dev->bus,
+                dev->device, dev->function, dev->vendor_str, dev->device_str,
+                dev->vendor_id, dev->device_id);
+#endif
         switch (dev->irq_pin) {
         case 1:
+#ifdef CONFIG_PCI_DEBUG
             debugf("\tIRQ INTA\n");
+#endif
             break;
         case 2:
+#ifdef CONFIG_PCI_DEBUG
             debugf("\tIRQ INTB\n");
+#endif
             break;
         case 3:
+#ifdef CONFIG_PCI_DEBUG
             debugf("\tIRQ INTC\n");
+#endif
             break;
         case 4:
+#ifdef CONFIG_PCI_DEBUG
             debugf("\tIRQ INTD\n");
+#endif
             break;
         default:
+#ifdef CONFIG_PCI_DEBUG
             debugf("\tNo IRQ (%d)\n", dev->irq_pin);
+#endif
             break;
         }
 
         if (dev->irq_pin != 0 && dev->irq_pin <= 4) {
+#ifdef CONFIG_PCI_DEBUG
             debugf("\tIRQ %d\n", dev->irq_line);
+#endif
         }
 
         for (int i = 0; i < 6; i++) {
@@ -318,7 +342,9 @@ void pci_print_list() {
                 bar_type_str = "Unknown";
                 break;
             }
+#ifdef CONFIG_PCI_DEBUG
             debugf("\tBAR%d: 0x%08x (%s)\n", i, dev->bar[i], bar_type_str);
+#endif
         }
         dev = dev->next;
     }
