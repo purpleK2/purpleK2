@@ -1,7 +1,7 @@
 #ifndef SCHEDULER_H
 #define SCHEDULER_H 1
 
-#include <fs/vfs/vfs.h>
+// #include <fs/vfs/vfs.h>
 #include <interrupts/isr.h>
 
 #include <limits.h>

@@ -1,7 +1,7 @@
 #include "scheduler.h"
 
 #include <autoconf.h>
-#include <fs/vfs/vfs.h>
+// #include <fs/vfs/vfs.h>
 #include <gdt/gdt.h>
 #include <interrupts/isr.h>
 #include <kernel.h>

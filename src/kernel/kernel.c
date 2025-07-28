@@ -19,8 +19,7 @@
 #include <dev/std/helper.h>
 
 #include <fs/cpio/newc.h>
-#include <fs/vfs/devfs/devfs.h>
-#include <fs/vfs/vfs.h>
+// #include <fs/vfs/vfs.h>
 
 #include <memory/heap/kheap.h>
 #include <memory/pmm/pmm.h>
