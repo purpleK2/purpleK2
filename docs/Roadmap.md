@@ -6,7 +6,7 @@ A build (`.iso` file) will be released every time a Milestone is completed. The 
 ## 3rd Milestone
 
 - GUI
-  - [ ]lots of sketches and ideas
+  - [ ] lots of sketches and ideas
 
 
 ## 2nd Milestone
@@ -71,26 +71,26 @@ A build (`.iso` file) will be released every time a Milestone is completed. The 
       - [X] Actual VMM stuff (allocating, freeing virtual memory regions)
     - [X] Kernel heap (`kmalloc`, `kfree`)
 
-- [Adaptive Driver Interface](https://github.com/project-adi)
-  - [ ] Implementation
-  - [ ] FS metalang
+- ~~[Adaptive Driver Interface](https://github.com/project-adi)~~ SCRAPPED
 
 - PCI/PCIe support
   - [X] PCI(e) devices parsing
-  - [ ] API for future drivers
+  - [ ] API for drivers
 
 - [ ] AHCI driver
-  (we can then read from the disk :fire:)
+  (we can then read from the disk 🔥)
 
 - File systems
   - ~~USTAR~~ CPIO
     - [X] Initial initrd creation
     - [X] File lookup
-  - Virtual File System
-    - [X] Design
-    - [ ] Implementation
   - RAMFS
-    - [ ] (un)loading files in safe-to-use memory
+    - [ ] Base structures
+    - [ ] File I/O (`open`, `read`, ...)
+  - Virtual File System
+    - [X] (Re)Design
+    - [ ] Initialization
+    - [ ] File I/O (`fopen`, `fread`)
 
 - [ ] Scheduler
   - [ ] with threads and stuff
