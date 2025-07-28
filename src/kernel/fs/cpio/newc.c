@@ -187,3 +187,82 @@ void cpio_fs_free(cpio_fs_t *fs) {
     fs->files      = NULL;
     fs->file_count = 0;
 }
+
+// create a RAMFS structure from the given CPIO archive
+int cpio_ramfs_init(cpio_fs_t *fs, ramfs_t *ramfs) {
+    if (!fs || !ramfs) {
+        debugf_warn("Missing CPIO archive or RAMFS root struct!\n");
+        return -1;
+    }
+
+    ramfs_node_t *cur_node;
+    ramfs_node_t *next_node;
+
+    for (size_t i = 0; i < fs->file_count; i++) {
+        cpio_file_t *file = &fs->files[i];
+
+        char *path = kmalloc(file->namesize);
+        memcpy(path, file->filename, file->namesize);
+        path[file->namesize - 1] = '\0';
+
+        // use this to check for parents, and eventually create them
+        char *name_dup = strdup(path);
+        char *temp     = name_dup;
+        char *dir;
+
+        // debugf_debug("[%d] path: '%s'\n", i, path);
+
+        // j = level of current node
+        for (int j = 0; *temp; j++) {
+            dir = strtok_r(NULL, "/", &temp);
+            // debugf_debug("\tstrtok:'%s'; temp:'%s'\n", dir, temp);
+
+            ramfs_ftype_t rt;
+            // if there's something in temp, it means we need to create
+            // directories
+            if (*temp) {
+                rt = RAMFS_DIRECTORY;
+            } else {
+                rt = RAMFS_FILE;
+            }
+
+            switch (ramfs_find_or_create_node(ramfs, dir, rt, &next_node)) {
+            case 0: // a node was found
+                break;
+
+            case 1: // a node has been created
+                next_node->name = strdup(dir);
+                if (rt == RAMFS_FILE) {
+                    next_node->size = file->filesize;
+                    next_node->data = file->data;
+                }
+
+                if (j == 0 && i == 0) { // create the first node
+                    cur_node         = next_node;
+                    ramfs->root_node = cur_node;
+
+                    continue;
+                }
+
+                break;
+
+            default:
+                debugf_warn("Invalid return code\n");
+                return -1;
+            }
+
+            if (j == 0 && cur_node != next_node) {
+                cur_node->sibling = next_node;
+                cur_node          = cur_node->sibling;
+            } else if (j > 0) {
+                ramfs_append_child(cur_node, next_node);
+                if (*temp)
+                    cur_node = next_node;
+            }
+        }
+
+        kfree(name_dup);
+    }
+
+    return 0;
+}

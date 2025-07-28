@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <fs/ramfs/ramfs.h>
+
 typedef struct {
     char cmagic[6];     // "070701" or "070702"
     uint64_t ino;       // Inode number
@@ -36,5 +38,7 @@ size_t cpio_fs_read(cpio_fs_t *fs, const char *filename, void *buffer,
                     size_t bufsize);
 void cpio_fs_free(cpio_fs_t *fs);
 cpio_file_t *cpio_fs_get_file(cpio_fs_t *fs, const char *filename);
+
+int cpio_ramfs_init(cpio_fs_t *fs, ramfs_t *ramfs);
 
 #endif // NEWC_H

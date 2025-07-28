@@ -19,6 +19,7 @@
 #include <dev/std/helper.h>
 
 #include <fs/cpio/newc.h>
+#include <fs/ramfs/ramfs.h>
 // #include <fs/vfs/vfs.h>
 
 #include <memory/heap/kheap.h>
@@ -412,6 +413,15 @@ void kstart(void) {
                 (int)read_size, buffer);
     } else {
         kprintf_warn("Failed to read test.txt from initrd.cpio\n");
+    }
+
+    // create the RAMFS
+    ramfs_t *cpio_ramfs = ramfs_create();
+    if (cpio_ramfs_init(&fs, cpio_ramfs) != 0) {
+        kprintf_warn("CPIO to RAMFS conversion failed!\n");
+    } else {
+        ramfs_print(cpio_ramfs->root_node, 0);
+        kprintf_ok("CPIO to RAMFS conversion done\n");
     }
 
     register_std_devices();
