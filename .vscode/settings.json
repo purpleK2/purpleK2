@@ -109,7 +109,9 @@
         "newc.h": "c",
         "mutex.h": "c",
         "errors.h": "c",
-        "vmware_svga.h": "c"
+        "vmware_svga.h": "c",
+        "pci.h": "c",
+        "ipi.h": "c"
     },
     "dotnet.defaultSolution": "disable",
     "cmake.configureOnOpen": false,
