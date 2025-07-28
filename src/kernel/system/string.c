@@ -139,12 +139,7 @@ char *strncpy(char *dest, const char *src, size_t n) {
 }
 
 char *strdup(const char *s) {
-    size_t len = 0;
-
-    // Calculate the length of the string
-    while (s[len] != '\0') {
-        len++;
-    }
+    size_t len = strlen(s);
 
     // Allocate memory for the copy (+1 for null terminator)
     char *copy = (char *)kmalloc(len + 1);
@@ -153,9 +148,9 @@ char *strdup(const char *s) {
     }
 
     // Copy the string
-    for (size_t i = 0; i <= len; i++) {
-        copy[i] = s[i];
-    }
+    strcpy(copy, s);
+
+    copy[len] = '\0';
 
     return copy;
 }
@@ -287,7 +282,7 @@ void strcpy(char dest[], const char source[]) {
         dest[i] = source[i];
 
         if (dest[i] == '\0') {
-            dest[i] = '\0';
+            // dest[i] = '\0'; what?
             break;
         }
 
