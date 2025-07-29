@@ -12,7 +12,7 @@
 // VMO flags
 #define VMO_PRESENT (1 << 0)
 #define VMO_RW      (1 << 1)
-#define VMO_USER    (1 << 2)
+#define VMO_USR     (1 << 2)
 #define VMO_NX      (1 << 3)
 
 // this flag get's set when the VMO gets allocated
@@ -23,6 +23,7 @@
 // VMO "macro"flags
 #define VMO_KERNEL    VMO_PRESENT
 #define VMO_KERNEL_RW VMO_RW | VMO_KERNEL
-#define VMO_USER_RW   VMO_PRESENT | VMO_RW | VMO_USER
+#define VMO_USER      VMO_PRESENT | VMO_USR
+#define VMO_USER_RW   VMO_USER | VMO_RW
 
 #endif
