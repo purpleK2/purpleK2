@@ -141,7 +141,7 @@ void vmm_ctx_destroy(vmm_context_t *ctx) {
     ctx->pml4_table = NULL;
 }
 
-// @param len after how many pages should we split the VMO
+// @param where after how many pages should we split the VMO
 virtmem_object_t *split_vmo_at(virtmem_object_t *src_vmo, size_t where) {
     virtmem_object_t *new_vmo;
 
