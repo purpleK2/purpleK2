@@ -374,7 +374,7 @@ void kstart(void) {
 
     module_response = module_request.response;
 
-    struct limine_file *initrd;
+    struct limine_file *initrd = NULL;
 
     for (uint64_t module = 0; module < module_response->module_count;
          module++) {
