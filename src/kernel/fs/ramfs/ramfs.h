@@ -1,6 +1,9 @@
 #ifndef RAMFS_H
 #define RAMFS_H 1
 
+#include <fs/vfs/vfs.h>
+
+#include <stdbool.h>
 #include <stddef.h>
 
 typedef enum ramfs_ftype {
@@ -27,12 +30,20 @@ typedef struct ramfs {
 
 ramfs_t *ramfs_create();
 ramfs_node_t *ramfs_create_node(ramfs_ftype_t ftype);
-
+int ramfs_find_node(ramfs_t *ramfs, char *path, ramfs_node_t **out);
 int ramfs_find_or_create_node(ramfs_t *ramfs, char *path,
                               ramfs_ftype_t ramfs_ftype, ramfs_node_t **out);
 
 int ramfs_append_child(ramfs_node_t *parent, ramfs_node_t *child);
 
 int ramfs_print(ramfs_node_t *node, int lvl);
+
+vfs_t *ramfs_vfs_init(ramfs_t *ramfs, char *mount_path);
+
+int ramfs_open(vnode_t **vnode_r, int flags, bool clone);
+int ramfs_close(vnode_t *vnode, int flags, bool clone);
+
+int ramfs_read(vnode_t *vnode, size_t bytes, size_t offset, void *out);
+int ramfs_write(vnode_t *vnode, void *buf, size_t bytes, size_t offset);
 
 #endif
