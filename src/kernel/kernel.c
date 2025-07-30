@@ -20,7 +20,7 @@
 
 #include <fs/cpio/newc.h>
 #include <fs/ramfs/ramfs.h>
-// #include <fs/vfs/vfs.h>
+#include <fs/vfs/vfs.h>
 
 #include <memory/heap/kheap.h>
 #include <memory/pmm/pmm.h>
@@ -424,11 +424,27 @@ void kstart(void) {
         kprintf_ok("CPIO to RAMFS conversion done\n");
     }
 
+    vfs_t *cpio_vfs = ramfs_vfs_init(cpio_ramfs, "/");
+
+    vnode_t *test_file;
+    if (vfs_open(cpio_vfs, "/directory/another.txt", 0, &test_file) != EOK) {
+        kprintf_warn("Couldn't open file!\n");
+    }
+    sprintf(buffer, "BTW this is not the original file content LOLLL\n");
+    vfs_write(test_file, buffer, strlen(buffer), 0);
+    vfs_read(test_file, sizeof(buffer), 0, buffer);
+    kprintf("VFS read test: %s", buffer);
+    if (vfs_close(test_file) == EOK) {
+        kprintf_ok("File operations completed successfully!\n");
+    }
+
+    /*
     register_std_devices();
     dev_initrd_init(initrd->address);
     dev_e9_init();
     dev_serial_init();
     dev_parallel_init();
+    */
 
 #ifdef CONFIG_DEVFS_ENABLE
     // devfs_init();
