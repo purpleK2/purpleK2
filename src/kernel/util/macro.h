@@ -20,4 +20,6 @@
 
 #define UNUSED(x) ((void)(x))
 
+#define ABS(x) ((x) >= 0 ? (x) : -(x))
+
 #endif // MACRO_H
