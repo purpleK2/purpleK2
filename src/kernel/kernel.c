@@ -489,14 +489,6 @@ void kstart(void) {
         kprintf_ok("PCIe devices parsing done\n");
     }
 
-#include <drv/vmware_svga.h>
-
-    if (svga2_init() != 0) {
-        kprintf_warn("Couldn't initialize the VMware SVGA II card!\n");
-    } else {
-        kprintf_ok("VMware SVGAII card initialized\n");
-    }
-
     const char *test_name = resolve_symbol_name(
         kernel_file_request.response->kernel_file->address,
         kernel_file_request.response->kernel_file->size, 0xffffffff80000000);
