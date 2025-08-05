@@ -230,8 +230,7 @@ static int check_type(HBA_PORT *port);
 void port_rebase(HBA_PORT *port, int portno);
 void start_cmd(HBA_PORT *port);
 void stop_cmd(HBA_PORT *port);
-bool read(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count,
-          uint16_t *buf);
+bool ahci_read(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer);
 int find_cmdslot(HBA_PORT *port);
 
 void test_ahci();
