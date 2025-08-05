@@ -19,6 +19,7 @@
 #include <dev/std/helper.h>
 
 #include <fs/cpio/newc.h>
+#include <fs/file_io.h>
 #include <fs/ramfs/ramfs.h>
 #include <fs/vfs/vfs.h>
 
@@ -420,21 +421,28 @@ void kstart(void) {
     if (cpio_ramfs_init(&fs, cpio_ramfs) != 0) {
         kprintf_warn("CPIO to RAMFS conversion failed!\n");
     } else {
+        kprintf("/\n", "NAME", "SIZE");
         ramfs_print(cpio_ramfs->root_node, 0);
         kprintf_ok("CPIO to RAMFS conversion done\n");
     }
 
-    vfs_t *cpio_vfs = ramfs_vfs_init(cpio_ramfs, "/");
+    // create the VFS for CPIO
+    ramfs_vfs_init(cpio_ramfs, "/cpio");
 
-    vnode_t *test_file;
-    if (vfs_open(cpio_vfs, "/directory/another.txt", 0, &test_file) != EOK) {
+    fileio_t *test_file = open("/cpio/directory/another.txt", 0);
+    if (!test_file) {
         kprintf_warn("Couldn't open file!\n");
     }
+
     sprintf(buffer, "BTW this is not the original file content LOLLL\n");
-    vfs_write(test_file, buffer, strlen(buffer), 0);
-    vfs_read(test_file, sizeof(buffer), 0, buffer);
+    write(test_file, buffer, strlen(buffer));
+
+    seek(test_file, 0, SEEK_SET); // go back to start of file
+
+    read(test_file, sizeof(buffer), buffer);
     kprintf("VFS read test: %s", buffer);
-    if (vfs_close(test_file) == EOK) {
+
+    if (close(test_file) == EOK) {
         kprintf_ok("File operations completed successfully!\n");
     }
 

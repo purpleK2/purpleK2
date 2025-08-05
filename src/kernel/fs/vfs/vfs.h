@@ -1,12 +1,16 @@
 #ifndef VFS_H
 #define VFS_H 1
 
+#include <fs/file_io.h>
 #include <fs/fsid.h>
 
 #include <spinlock.h>
 
 #include <stdbool.h>
 #include <stddef.h>
+
+#define V_CREATE (1 << 0)
+// #define V_DIR    (1 << 1)    no :3
 
 // compiler skill issue
 typedef struct vnode vnode_t;
@@ -51,6 +55,8 @@ typedef struct vfs_ops {
     int (*mount)(vfs_t *, char *, void *);
     int (*unmount)(vfs_t *);
 
+    int (*lookup)(vfs_t *, char *);
+
     int (*root)(vfs_t *, vnode_t **);
 
     int (*statfs)(vfs_t *, statfs_t *);
@@ -62,11 +68,16 @@ typedef struct vfs_ops {
 } vfsops_t;
 
 typedef struct vnode_ops {
-    int (*open)(vnode_t **, int, bool);
+    int (*open)(vnode_t **, int, bool, fileio_t **);
     int (*close)(vnode_t *, int, bool);
 
-    int (*read)(vnode_t *, size_t, size_t, void *);
-    int (*write)(vnode_t *, void *, size_t, size_t);
+    /*
+     * arguments:
+     * void* buf
+     * size_t* size, size_t* offset
+     */
+    int (*read)(vnode_t *, size_t *, size_t *, void *);
+    int (*write)(vnode_t *, void *, size_t *, size_t *);
     // TODO: the rest of the operations
 } vnops_t;
 
@@ -100,15 +111,15 @@ typedef struct vfs {
     struct vfs *next; // next VFS
 } vfs_t;
 
-// struct for open files (something like FILE*)
-
 vfs_t *vfs_create(vfs_fstype_t fs_type, void *fs_data);
-int vfs_mount(vfs_t *vfs, char *path, void *rootvn_data);
+vfs_t *vfs_mount(void *fs, vfs_fstype_t fs_type, char *path, void *rootvn_data);
 
 int vfs_append(vfs_t *vfs);
-vnode_t *vnode_create(char *path, void *data);
+vnode_t *vnode_create(vfs_t *root_vfs, char *path, void *data);
 
-int vfs_open(vfs_t *vfs, char *path, int flags, vnode_t **out);
+int vfs_resolve_mount(char *path, vfs_t **out);
+
+int vfs_open(vfs_t *vfs, char *path, int flags, fileio_t **out);
 int vfs_read(vnode_t *vnode, size_t size, size_t offset, void *out);
 int vfs_write(vnode_t *vnode, void *buf, size_t size, size_t offset);
 int vfs_close(vnode_t *vnode);
