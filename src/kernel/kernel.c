@@ -496,7 +496,9 @@ void kstart(void) {
 
     struct limine_framebuffer *fb =
         (struct limine_framebuffer *)get_device("fb0")->data;
-    load_bmp_to_framebuffer("/cpio/tenna.bmp", fb);
+    load_bmp_to_framebuffer("/cpio/spamtong.bmp", fb);
+
+    kprintf("Ha bet you didnt see that [[BIG SHOT]]!\n");
 
     for (;;)
         ;
