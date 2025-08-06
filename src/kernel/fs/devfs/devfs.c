@@ -29,7 +29,8 @@ devfs_node_t *devfs_create_node(devfs_ftype_t ftype) {
 }
 
 int devfs_find_node(devfs_t *devfs, char *path, devfs_node_t **out) {
-    devfs_node_t *cur_node = devfs->root_node;
+    // root node here is "/", actual devices are its children
+    devfs_node_t *cur_node = devfs->root_node->child;
     *out                   = NULL;
 
     // use this to check for parents, and eventually create them
