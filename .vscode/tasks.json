@@ -6,7 +6,7 @@
         {
             "label": "Build Kernel",
             "type": "shell",
-            "command": "make all && qemu-system-x86_64 -S -gdb tcp::1234 -debugcon file:qemu_gdb.log -M q35 -m 32M -smp 2 -cdrom kernel-v0.iso -daemonize",
+            "command": "make all && qemu-system-x86_64 -S -gdb tcp::1234 -debugcon file:qemu_gdb.log -M q35 -m 64M -smp 2 -cdrom kernel-v0.iso -daemonize",
         },
         {
             "label": "Build Kernel (UEFI)",
