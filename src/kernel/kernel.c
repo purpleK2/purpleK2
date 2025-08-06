@@ -1,6 +1,5 @@
 #include "kernel.h"
 #include "dev/display/fb/fbdev.h"
-#include "elf/sym.h"
 #include "fs/devfs/devfs.h"
 
 #include <autoconf.h>
@@ -49,6 +48,8 @@
 
 #include <util/assert.h>
 #include <util/macro.h>
+
+#include <test.h>
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -492,6 +493,10 @@ void kstart(void) {
             limine_parsed_data.boot_time % 1000);
 
     init_scheduler();
+
+    struct limine_framebuffer *fb =
+        (struct limine_framebuffer *)get_device("fb0")->data;
+    load_bmp_to_framebuffer("/cpio/tenna.bmp", fb);
 
     for (;;)
         ;

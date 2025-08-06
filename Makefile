@@ -21,7 +21,7 @@ KCONFIG_CONFIG = .config
 KCONFIG_DEPS = Kconfig
 KCONFIG_AUTOCONF = $(KERNEL_SRC_DIR)/autoconf.h
 
-QEMU_FLAGS = 	-m 64M \
+QEMU_FLAGS = 	-m 128M \
 			 	-debugcon stdio \
 				-M q35 \
 				-smp 2 \
