@@ -50,8 +50,6 @@ fileio_t *open(char *path, int flags) {
         return f;
     }
 
-    debugf("File pointer: %p\n", f);
-
     f->offset = 0;
 
     // the flags we opened the file with
