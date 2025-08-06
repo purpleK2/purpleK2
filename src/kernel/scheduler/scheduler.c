@@ -7,8 +7,8 @@
 #include <string.h>
 #include <system/kernel.h>
 
-static ThreadQueue_t thread_queues[MAX_CPUS];
-static TCB_t *current_threads[MAX_CPUS];
+static ThreadQueue_t *thread_queues;
+static TCB_t **current_threads;
 static int cpu_count;
 
 extern void context_switch(TaskContext **old_ctx, TaskContext *new_ctx);
@@ -22,6 +22,13 @@ __attribute__((noreturn)) void idle_loop() {
 
 int init_scheduler() {
     cpu_count = get_bootloader_data()->cpu_count;
+
+    thread_queues = kmalloc(sizeof(ThreadQueue_t) * cpu_count);
+    memset(thread_queues, 0, sizeof(ThreadQueue_t));
+
+    current_threads = kmalloc(sizeof(TCB_t *) * cpu_count);
+    memset(current_threads, 0, sizeof(TCB_t *));
+
     for (int i = 0; i < cpu_count; ++i)
         init_cpu_scheduler(i);
     return 0;
@@ -35,16 +42,21 @@ int init_cpu_scheduler(int cpu) {
     memset(idle_proc, 0, sizeof(PCB_t));
     idle_proc->pid = -1;
 
+    struct KernelStack *kstack = kmalloc(sizeof(struct KernelStack));
+    kstack->stack              = kmalloc(sizeof(uint8_t) * SCHED_KSTACK_SIZE);
+
     TCB_t *idle_thread = kmalloc(sizeof(TCB_t));
     memset(idle_thread, 0, sizeof(TCB_t));
     idle_thread->tid    = -1;
     idle_thread->state  = THREAD_RUNNING;
-    idle_thread->stack  = kmalloc(sizeof(struct KernelStack));
+    idle_thread->stack  = kstack;
     idle_thread->parent = idle_proc;
     idle_thread->flags  = 0;
 
-    TaskContext *ctx = (TaskContext *)((uint8_t *)idle_thread->stack +
-                                       SCHED_KSTACK_SIZE - sizeof(TaskContext));
+    TaskContext *ctx =
+        ((void *)(&kstack->stack[SCHED_KSTACK_SIZE]) - sizeof(TaskContext));
+    ctx = (TaskContext *)ROUND_DOWN((uint64_t)ctx, sizeof(TaskContext));
+
     memset(ctx, 0, sizeof(TaskContext));
     ctx->rip         = (uint64_t)&idle_loop;
     ctx->cs          = 0x08;

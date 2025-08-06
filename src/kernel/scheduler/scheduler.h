@@ -47,7 +47,7 @@ typedef enum TCB_State {
 } TCB_State_t;
 
 struct KernelStack {
-    uint8_t stack[SCHED_KSTACK_SIZE];
+    uint8_t *stack;
 };
 
 typedef struct TCB {
@@ -75,16 +75,16 @@ typedef struct PCB {
     int tid_counter;
     int fd_counter;
 
-    struct file_io *fds[SCHED_MAX_FD_CNT];
+    struct file_io **fds;
     struct file_io *cwd;
 
     int cpu; // the cpu the thread is running on
 
-    TCB_t *threads[SCHED_MAX_THREAD_CNT]; // threads[0] = main_thread;
+    TCB_t **threads; // threads[0] = main_thread;
 
     vmm_context_t *pagemap;
 
-    struct SigHandler signal_handlers[SIGCNT];
+    struct SigHandler *signal_handlers;
 
     lock_t lock;
     int flags;

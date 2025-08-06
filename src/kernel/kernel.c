@@ -512,7 +512,7 @@ void kstart(void) {
             limine_parsed_data.boot_time / 1000,
             limine_parsed_data.boot_time % 1000);
 
-    // init_scheduler();
+    init_scheduler();
 
     for (;;)
         ;
