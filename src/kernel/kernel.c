@@ -110,6 +110,7 @@ struct bootloader_data limine_parsed_data;
 
 struct bootloader_data *get_bootloader_data() {
     return &limine_parsed_data;
+    get_cpu();
 }
 
 vmm_context_t *kernel_vmm_ctx;
@@ -481,8 +482,6 @@ void kstart(void) {
     limine_parsed_data.cpu_count = smp_request.response->cpu_count;
     limine_parsed_data.cpus      = smp_request.response->cpus;
 
-    scheduler_init();
-
     // smp_init();
     // limine_parsed_data.smp_enabled = true;
 
@@ -512,6 +511,8 @@ void kstart(void) {
     kprintf("System started: Time took: %llu seconds %llu ms.\n",
             limine_parsed_data.boot_time / 1000,
             limine_parsed_data.boot_time % 1000);
+
+    init_scheduler();
 
     for (;;)
         ;

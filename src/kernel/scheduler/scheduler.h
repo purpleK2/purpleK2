@@ -1,97 +1,116 @@
 #ifndef SCHEDULER_H
-#define SCHEDULER_H 1
+#define SCHEDULER_H
 
-// #include <fs/vfs/vfs.h>
+#include <fs/file_io.h>
 #include <interrupts/isr.h>
+#include <memory/vmm/vmm.h>
+#include <scheduler/signals.h>
 
-#include <limits.h>
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <system/limits.h>
 #include <types.h>
 
-#define SCHED_PROC_USER            0x01
-#define SCHED_PROC_KERNEL_PAGE_MAP 0x02
-#define SCHED_PROC_KERNEL_STACK    0x04
+#define TF_MODE_USER 0x1
+#define TF_BUSY      0x2
+#define TF_DETACHED  0x4
 
-typedef enum proc_state {
-    PROC_STATE_READY,
-    PROC_STATE_RUNNING,
-    PROC_STATE_STOPPED
-} proc_state_t;
+#define TIME_SLICE_TICKS 10
+#define MAX_CPUS         64
 
-typedef struct proc {
-    pid_t pid;
+struct PCB;
+struct TCB;
 
-    struct {
-        uid_t user;
-        gid_t group;
-    } whoami;
+typedef struct TaskContext {
+    uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
+    uint64_t rsi, rdi, rbp, rbx, rdx, rcx, rax;
+    uint64_t rip, cs, rflags, rsp, ss;
+} TaskContext;
 
-    registers_t regs;
-    uint64_t *pml4;
+typedef struct ThreadQueue {
+    struct TCB *idle_proc;
 
-    uint64_t time_slice;
-    int sched_flags;
+    struct TCB *head;
+    int count;
+} ThreadQueue_t;
 
-    fd_t current_fd;
-    // fs_open_file_t **fd_table;
+typedef enum PCB_State {
+    PROC_RUNNING         = 0x0,
+    PROC_STARTABLE       = 0x1,
+    PROC_WAIT_FOR_THREAD = 0x2,
+    PROC_DEAD            = 0x3,
+} PCB_State_t;
 
-    int errno;
-    proc_state_t state;
+typedef enum TCB_State {
+    THREAD_RUNNING   = 0x0,
+    THREAD_STARTABLE = 0x1,
+    THREAD_WAITING   = 0x2,
+    THREAD_DEAD      = 0x3,
+} TCB_State_t;
 
-    uint8_t current_core;
-    uint8_t preferred_core;
-    struct proc *next;
-} proc_t;
+struct KernelStack {
+    uint8_t stack[SCHED_KSTACK_SIZE];
+};
 
-typedef struct core_scheduler {
-    uint8_t core_id;
-    proc_t *current_proc;
-    proc_t *idle_proc;
+typedef struct TCB {
+    int tid;
+    TaskContext *ctx;
+    struct PCB *parent;
 
-    proc_t *run_queue_head;
-    proc_t *run_queue_tail;
-    size_t run_queue_size;
+    void *entry_point;
+    TCB_State_t state;
 
-    uint64_t context_switches;
-    uint64_t last_schedule_time;
+    struct KernelStack *stack;
+    void *tls;
 
-    uint32_t flags;
-    uint64_t default_time_slice;
+    int signal_mask;
+    int flags;
 
     lock_t lock;
-} core_scheduler_t;
 
-typedef struct scheduler_manager {
-    core_scheduler_t **core_schedulers;
-    size_t core_count;
+    struct TCB *next;
+} TCB_t;
 
-    proc_t *process_list_head;
-    size_t process_count;
+typedef struct PCB {
+    int pid;
 
-    pid_t next_pid;
+    int tid_counter;
+    int fd_counter;
 
-    uint64_t load_balance_interval;
-    uint64_t last_load_balance;
+    struct file_io *fds[SCHED_MAX_FD_CNT];
+    struct file_io *cwd;
 
-    lock_t glob_lock;
-} scheduler_manager_t;
+    int cpu; // the cpu the thread is running on
 
-extern scheduler_manager_t *scheduler_manager;
+    TCB_t *threads[SCHED_MAX_THREAD_CNT]; // threads[0] = main_thread;
 
-void scheduler_init();
-void scheduler_init_cpu(uint8_t core);
+    vmm_context_t *pagemap;
 
-proc_t *scheduler_add(void (*entry_point)(), int flags);
-void scheduler_remove(proc_t *proc);
+    struct SigHandler signal_handlers[SIGCNT];
 
-proc_t *get_current_process();
-void scheduler_switch_context(proc_t *proc, registers_t *current_regs);
+    lock_t lock;
+    int flags;
 
-void scheduler_schedule(void *ctx);
+    PCB_State_t state;
 
-#define PROC_TIME_SLICE 10
+    struct PCB *parent; // Null if no parent
+    struct PCB **children;
+    int child_count; // diddy really likes this value >:)
 
-#endif
+    struct {
+        int uid;
+        int gid;
+    } owner;
+} PCB_t;
+
+int init_scheduler(); // inits the scheduler on every CPU with an idle process
+
+int init_cpu_scheduler(int cpu); // inits the scheduler for a specific CPU with
+                                 // an idle process and a thread queue
+
+int proc_create(int ppid, void *entry);
+int thread_create(PCB_t *proc, void *entry, int flags);
+int proc_exit(int pid);
+int thread_exit(int pid, int tid);
+
+void schedule(registers_t *regs); // gets called by the lapic timer on each cpu
+
+#endif // SCHEDULER_H

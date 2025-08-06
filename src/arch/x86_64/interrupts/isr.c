@@ -120,9 +120,9 @@ void panic_common(void *ctx) {
             get_bootloader_data()->kernel_file_data,
             get_bootloader_data()->kernel_file_size, approx_func_addr);
         if (func_name) {
-            mprintf("[%d][%p] %s", frame, rbp, func_name);
+            mprintf("[%d][%p] %s\n", frame, rbp, func_name);
         } else {
-            mprintf("[%d][%p] func addr: %llx", frame, rbp, approx_func_addr);
+            mprintf("[%d][%p] func addr: %llx\n", frame, rbp, approx_func_addr);
         }
 
         rbp = prev_rbp;

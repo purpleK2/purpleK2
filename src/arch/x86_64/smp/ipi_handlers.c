@@ -40,7 +40,6 @@ void ipi_handler_reschedule(void *ctx) {
     debugf_debug("Processor %lu rescheduled @ %.16llx\n", cpu,
                  ((registers_t *)ctx)->rip);
     lapic_send_eoi();
-    scheduler_schedule((registers_t *)ctx);
 }
 
 void ipi_handler_test(void *ctx) {

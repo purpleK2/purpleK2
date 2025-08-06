@@ -1,12 +1,8 @@
 #ifndef LIMITS_H
 #define LIMITS_H 1
 
-#define LIMIT_SCHEUDLER_PROC_MAX 1024
-#define LIMIT_FD_PROC_MAX        1024
-
-#define PROC_STACK_PAGES 4
-#define PROC_STACK_SIZE  (1 * PFRAME_SIZE)
-
-#define PROC_TIME_SLICE 10
+#define SCHED_MAX_FD_CNT     1024
+#define SCHED_MAX_THREAD_CNT 1024
+#define SCHED_KSTACK_SIZE    8192
 
 #endif // LIMITS_H

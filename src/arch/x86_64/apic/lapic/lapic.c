@@ -168,7 +168,5 @@ void lapic_timer_handler(void *ctx) {
 
     set_ticks(get_ticks() + 1);
 
-    scheduler_schedule(ctx);
-
     lapic_send_eoi();
 }
