@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "dev/display/fb/fbdev.h"
 #include "elf/sym.h"
 #include "fs/devfs/devfs.h"
 
@@ -453,6 +454,7 @@ void kstart(void) {
     dev_e9_init();
     dev_serial_init();
     dev_parallel_init();
+    dev_fb_init();
 
 #ifdef CONFIG_DEVFS_ENABLE
     devfs_t *devfs = devfs_create();
@@ -463,22 +465,6 @@ void kstart(void) {
     }
 
     devfs_print(devfs->root_node, 0);
-
-    fileio_t *dev_test_file = open("/dev/com1", 0);
-    if (!dev_test_file) {
-        kprintf_warn("Couldn't open /dev/com1!\n");
-    }
-
-    sprintf(buffer, "This is a test write to /dev/com1\n");
-    write(dev_test_file, buffer, strlen(buffer));
-
-    seek(dev_test_file, 0, SEEK_SET); // go back to start of fileio_t
-    read(dev_test_file, sizeof(buffer), buffer);
-    kprintf("DEVFS read test: %s", buffer);
-
-    if (close(dev_test_file) == EOK) {
-        kprintf_ok("DEVFS file operations completed successfully!\n");
-    }
 
 #endif
 
@@ -497,16 +483,6 @@ void kstart(void) {
         kprintf_warn("Failed to parse PCIe devices!\n");
     } else {
         kprintf_ok("PCIe devices parsing done\n");
-    }
-
-    const char *test_name = resolve_symbol_name(
-        kernel_file_request.response->kernel_file->address,
-        kernel_file_request.response->kernel_file->size, 0xffffffff80000000);
-
-    if (test_name) {
-        kprintf("Kernel file name: %s\n", test_name);
-    } else {
-        kprintf_warn("Couldn't resolve kernel file name!\n");
     }
 
     limine_parsed_data.boot_time = get_ms(system_startup_time);

@@ -21,44 +21,6 @@ config DEVFS_ENABLE
     help
       Enable the pseudo filesystem for devices 
 
-menu "DevFS Options"
-
-depends on DEVFS_ENABLE
-
-config DEVFS_MOUNT_PATH
-    string "DevFS Mount Path"
-    default "/dev"
-    help
-      Where to mount the DevFS pseudo filesystem
-
-comment "------------------------------"
-
-config DEVFS_ENABLE_NULL
-    bool "Enable the 'null' device in the DevFS"
-    default y
-    help
-      Enables the null device, on read it will return zeros (nulls)
-
-config DEVFS_ENABLE_RANDOM
-    bool "Enable the 'random' device in the DevFS"
-    default y
-    help
-      Enables the random device, on read it will return random bytes
-
-config DEVFS_ENABLE_PORTIO
-    bool "Enable the portio devices (e.g. 'com1')"
-    default y
-    help
-      Enables the portio devices like ('com1', 'lpt1')
-
-config DEVFS_ENABLE_E9
-    bool "Enable the E9 port for debugging on Hypervisors (like QEMU)"
-    default y
-    help
-      Enables the E9 hack port device for debugging on Hypervisors
-
-endmenu # DevFS Options
-
 endmenu # Filesystems
 
 menu "Advanced debugging"
