@@ -1,5 +1,6 @@
 #include "kernel.h"
 #include "elf/sym.h"
+#include "fs/devfs/devfs.h"
 
 #include <autoconf.h>
 
@@ -447,36 +448,38 @@ void kstart(void) {
         kprintf_ok("File operations completed successfully!\n");
     }
 
-    /*
     register_std_devices();
     dev_initrd_init(initrd->address);
     dev_e9_init();
     dev_serial_init();
     dev_parallel_init();
-    */
 
 #ifdef CONFIG_DEVFS_ENABLE
-    // devfs_init();
+    devfs_t *devfs = devfs_create();
+    if (devfs_vfs_init(devfs, "/dev") != EOK) {
+        kprintf_warn("Failed to initialize DEVFS!\n");
+    } else {
+        kprintf_ok("DEVFS initialized successfully!\n");
+    }
 
-#ifdef CONFIG_DEVFS_ENABLE_E9
-    // device_t *dev_e9       = get_device("e9");
-    // devfs_add_dev(dev_e9);
-#endif
+    devfs_print(devfs->root_node, 0);
 
-#ifdef CONFIG_DEVFS_ENABLE_PORTIO
-    // device_t *dev_serial   = get_device("com1");
-    // devfs_add_dev(dev_serial);
-    // device_t *dev_parallel = get_device("lpt1");
-    // devfs_add_dev(dev_parallel);
-#endif
+    fileio_t *dev_test_file = open("/dev/com1", 0);
+    if (!dev_test_file) {
+        kprintf_warn("Couldn't open /dev/com1!\n");
+    }
 
-    // device_t *dev_initrd   = get_device("ram0");
-    // devfs_add_dev(dev_initrd);
+    sprintf(buffer, "This is a test write to /dev/com1\n");
+    write(dev_test_file, buffer, strlen(buffer));
 
-#ifdef CONFIG_DEVFS_ENABLE_NULL
-    // device_t *dev_null     = get_device("null");
-    // devfs_add_dev(dev_null);
-#endif
+    seek(dev_test_file, 0, SEEK_SET); // go back to start of fileio_t
+    read(dev_test_file, sizeof(buffer), buffer);
+    kprintf("DEVFS read test: %s", buffer);
+
+    if (close(dev_test_file) == EOK) {
+        kprintf_ok("DEVFS file operations completed successfully!\n");
+    }
+
 #endif
 
     limine_parsed_data.cpu_count = smp_request.response->cpu_count;

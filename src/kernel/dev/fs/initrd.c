@@ -5,10 +5,11 @@
 void dev_initrd_init(void *ramfs_disk) {
     device_t *dev = kmalloc(sizeof(device_t));
     memcpy(dev->name, "ram0", DEVICE_NAME_MAX);
-    dev->type  = DEVICE_TYPE_BLOCK;
-    dev->read  = dev_initrd_read;
-    dev->write = dev_initrd_write;
-    dev->data  = ramfs_disk;
+    dev->type          = DEVICE_TYPE_BLOCK;
+    dev->read          = dev_initrd_read;
+    dev->write         = dev_initrd_write;
+    dev->dev_node_path = "zram0";
+    dev->data          = ramfs_disk;
     register_device(dev);
 }
 

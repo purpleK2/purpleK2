@@ -83,11 +83,12 @@ void dev_serial_init() {
 
     device_t *dev = kmalloc(sizeof(device_t));
     memcpy(dev->name, "com1", DEVICE_NAME_MAX);
-    dev->write = com1_write;
-    dev->read  = com1_read;
-    dev->ioctl = com1_ioctl;
-    dev->type  = DEVICE_TYPE_CHAR;
-    dev->data  = "com1;38400baud;8n1;irq;fifo;works";
+    dev->write         = com1_write;
+    dev->read          = com1_read;
+    dev->ioctl         = com1_ioctl;
+    dev->dev_node_path = "com1";
+    dev->type          = DEVICE_TYPE_CHAR;
+    dev->data          = "com1;38400baud;8n1;irq;fifo;works";
 
     register_device(dev);
 }

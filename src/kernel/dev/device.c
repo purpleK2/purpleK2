@@ -5,8 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 
-static device_t *device_table[DEVICES_MAX];
-static int device_count = 0;
+device_t *device_table[DEVICES_MAX];
+int device_count = 0;
 
 int register_device(device_t *dev) {
     if (device_count >= DEVICES_MAX) {

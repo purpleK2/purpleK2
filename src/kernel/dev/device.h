@@ -7,6 +7,19 @@
 #define DEVICES_MAX     1024
 #define DEVICE_NAME_MAX 32
 
+typedef struct device device_t;
+
+extern int device_count;
+extern device_t *device_table[DEVICES_MAX];
+
+/*
+ * Major device types:
+ * - 1: Psudo devices
+ * - 2: Block storage devices
+ * - 3: TTYs
+ * - 4: Screen related devices
+ */
+
 typedef enum {
     DEVICE_TYPE_BLOCK,
     DEVICE_TYPE_CHAR
@@ -14,6 +27,12 @@ typedef enum {
 
 typedef struct device {
     char name[DEVICE_NAME_MAX];
+
+    char *dev_node_path;
+
+    int major; // major device number see above for specification
+    int minor; // minor device number see above for specification
+
     device_type_t type;
     int (*read)(struct device *dev, void *buffer, size_t size, size_t offset);
     int (*write)(struct device *dev, const void *buffer, size_t size,

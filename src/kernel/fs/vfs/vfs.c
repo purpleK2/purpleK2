@@ -144,6 +144,16 @@ int vfs_write(vnode_t *vnode, void *buf, size_t size, size_t offset) {
     return ret;
 }
 
+int vfs_ioctl(vnode_t *vnode, int request, void *arg) {
+    if (!vnode) {
+        return ENULLPTR;
+    }
+
+    int ret = vnode->ops->ioctl(vnode, request, arg);
+
+    return ret;
+}
+
 int vfs_close(vnode_t *vnode) {
     if (!vnode) {
         return ENULLPTR;

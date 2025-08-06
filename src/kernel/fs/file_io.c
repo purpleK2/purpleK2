@@ -8,6 +8,8 @@
 
 #include <string.h>
 
+#include <stdio.h>
+
 #include <util/macro.h>
 
 int f2vflags(int fio_flags) {
@@ -40,11 +42,15 @@ fileio_t *open(char *path, int flags) {
     vfs_t *parent_vfs;
     if (vfs_resolve_mount(path, &parent_vfs) != 0) {
         f = NULL;
+        return f;
     }
 
     if (vfs_open(parent_vfs, path, f2vflags(flags), &f) != 0) {
         f = NULL;
+        return f;
     }
+
+    debugf("File pointer: %p\n", f);
 
     f->offset = 0;
 

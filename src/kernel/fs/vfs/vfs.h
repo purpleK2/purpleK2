@@ -21,6 +21,7 @@ typedef enum vfs_fstype {
     VFS_RAMFS,
     VFS_ISO9660,
     VFS_FAT32,
+    VFS_DEVFS,
     VFS_EXT, // TODO: maybe one for each version?
 } vfs_fstype_t;
 
@@ -29,6 +30,7 @@ typedef enum vnode_type {
     VNODE_REGULAR,
     VNODE_DIR,
     VNODE_BLOCK,
+    VNODE_CHAR,
     VNODE_LINK,
     VNODE_SOCKET,
     VNODE_BAD,
@@ -78,6 +80,7 @@ typedef struct vnode_ops {
      */
     int (*read)(vnode_t *, size_t *, size_t *, void *);
     int (*write)(vnode_t *, void *, size_t *, size_t *);
+    int (*ioctl)(vnode_t *, int, void *);
     // TODO: the rest of the operations
 } vnops_t;
 
@@ -122,6 +125,7 @@ int vfs_resolve_mount(char *path, vfs_t **out);
 int vfs_open(vfs_t *vfs, char *path, int flags, fileio_t **out);
 int vfs_read(vnode_t *vnode, size_t size, size_t offset, void *out);
 int vfs_write(vnode_t *vnode, void *buf, size_t size, size_t offset);
+int vfs_ioctl(vnode_t *vnode, int request, void *arg);
 int vfs_close(vnode_t *vnode);
 
 #endif

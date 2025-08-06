@@ -417,12 +417,24 @@ int ramfs_close(vnode_t *vnode, int flags, bool clone) {
     return EOK;
 }
 
+int ramfs_ioctl(vnode_t *vnode, int request, void *arg) {
+    if (!vnode) {
+        return ENULLPTR;
+    }
+
+    UNUSED(request);
+    UNUSED(arg);
+
+    return ENOIMPL;
+}
+
 vnops_t ramfs_vnops = {
     .open  = ramfs_open,
     .close = ramfs_close,
 
     .read  = ramfs_read,
     .write = ramfs_write,
+    .ioctl = ramfs_ioctl,
 };
 
 int ramfs_vfs_init(ramfs_t *ramfs, char *path) {
