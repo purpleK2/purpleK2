@@ -205,7 +205,7 @@ pcie_status pcie_lookup_vendor_device(pcie_header_t *header,
 #ifdef CONFIG_PCIE_DEBUG
     debugf_warn("Unable to lookup the PCIe vendor/device!\n");
 #endif
-    return PCIE_STATUS_ENOPCIENF;
+    return ENOCFG;
 }
 
 pcie_status dump_pcie_dev_info(pcie_device_t *pcie) {
@@ -318,7 +318,7 @@ pcie_status pcie_add_device(void *pcie_addr, cpio_file_t *pci_ids,
         kfree(vendor);
         kfree(device);
 
-        return PCIE_STATUS_ENOPCIENF;
+        return PCIE_STATUS_ENOCFG;
     }
 
     pcie_device_t *pcie_device = kmalloc(sizeof(pcie_device_t));
@@ -479,7 +479,7 @@ pcie_status pcie_devices_init(cpio_file_t *pci_ids) {
                     ACPI_MCFG_SIGNATURE);
 
         kfree(table);
-        return PCIE_STATUS_ENOMCFG;
+        return PCIE_STATUS_ENOCFG;
     }
 
     if (!table->hdr) {
@@ -504,7 +504,7 @@ pcie_status pcie_devices_init(cpio_file_t *pci_ids) {
         kprintf_warn("No valid config spaces were found!\n");
 
         kfree(table);
-        return PCIE_STATUS_ENOCFGSP;
+        return ENOCFG;
     }
 
     for (int i = 0; i < mcfg_spaces; i++) {
@@ -551,7 +551,7 @@ pcie_status pcie_find_device(uint16_t vendor_id, uint16_t device_id,
         } else {
             // if it doesn't match ...
             if (!dev->next) // is this the last structure in the list
-                return PCIE_STATUS_ENOPCIENF;
+                return ENOCFG;
         }
     }
 
