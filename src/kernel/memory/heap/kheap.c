@@ -78,7 +78,9 @@ static block_header_t *request_new_page(size_t size_class_idx) {
     if (blocks_per_page == 0)
         blocks_per_page = 1; // at least 1 block per page
 
-    void *page = valloc(get_current_ctx(), 1, VMO_KERNEL_RW | VMO_NX, NULL);
+    size_t pages = (ROUND_UP(block_size, PFRAME_SIZE) / PFRAME_SIZE);
+
+    void *page = valloc(get_current_ctx(), pages, VMO_KERNEL_RW | VMO_NX, NULL);
     if (!page)
         return NULL;
 
