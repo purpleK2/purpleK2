@@ -4,14 +4,14 @@
 #include <stddef.h>
 
 typedef enum fseek {
-    SEEK_SET, // start of file buffer
-    SEEK_CUR, // current offset of file buffer
-    SEEK_END  // end of file buffer
+    SEEK_SET = 0, // start of file buffer
+    SEEK_CUR = 1, // current offset of file buffer
+    SEEK_END = 2  // end of file buffer
 } fseek_t;
 
 typedef enum fcntl_cmd {
-    F_GETFL,
-    F_SETFL,
+    F_GETFL = 0,
+    F_SETFL = 1,
 } fcntl_cmd_t;
 
 #define O_APPEND (1 << 0) // append mode
