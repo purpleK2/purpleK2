@@ -122,6 +122,8 @@ void cf() {
     debugf("Hello :3\n");
 }
 
+extern void __sched_test(void);
+
 // kernel main function
 void kstart(void) {
     asm("cli");
@@ -504,6 +506,9 @@ void kstart(void) {
             limine_parsed_data.boot_time % 1000);
 
     init_scheduler(cf);
+
+    proc_create(__sched_test, 0);
+
     irq_registerHandler(0, scheduler_timer_tick);
 
     struct limine_framebuffer *fb =

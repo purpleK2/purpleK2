@@ -50,6 +50,11 @@ int proc_create(void (*entry)(), int flags) {
     proc->pid   = __sync_fetch_and_add(&global_pid, 1);
     proc->state = PROC_READY;
 
+    proc->fds = kmalloc(sizeof(fileio_t) * 32);
+    memset(proc->fds, 0, sizeof(fileio_t) * 32);
+
+    proc->fd_count = 0;
+
     uint64_t *pagemap = pmm_alloc_page();
     int vflags        = (flags & TF_MODE_USER ? VMO_USER_RW : VMO_KERNEL_RW);
     proc->vmm_ctx     = vmm_ctx_init(pagemap, vflags);
@@ -180,6 +185,12 @@ int thread_destroy(int pid, int tid) {
     t->state = THREAD_DEAD;
 
     return EOK;
+}
+
+pcb_t *get_current_pcb() {
+    int cpu        = get_cpu();
+    tcb_t *current = current_threads[cpu];
+    return current ? current->parent : NULL;
 }
 
 // destroys current process

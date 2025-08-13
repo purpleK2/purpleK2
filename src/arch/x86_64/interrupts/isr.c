@@ -1,5 +1,6 @@
 #include "isr.h"
 #include "elf/sym.h"
+#include "syscalls/syscall.h"
 
 #include <apic/lapic/lapic.h>
 #include <gdt/gdt.h>
@@ -50,12 +51,28 @@ static const char *const exceptions[] = {"Divide by zero error",
                                          "Security Exception",
                                          ""};
 
+void isr_syscall(void *ctx) {
+    registers_t *regs = ctx;
+
+    long syscall_num = regs->rax;
+    long arg1        = regs->rdi;
+    long arg2        = regs->rsi;
+    long arg3        = regs->rdx;
+    long arg4        = regs->r8;
+    long arg5        = regs->r9;
+    long arg6        = regs->r10;
+
+    long ret = handle_syscall(syscall_num, arg1, arg2, arg3, arg4, arg5, arg6);
+
+    regs->rax = ret;
+}
+
 void isr_init() {
     for (int i = 0; i < 256; i++) {
         idt_gate_enable(i);
     }
 
-    idt_gate_disable(0x80);
+    isr_registerHandler(0x80, isr_syscall);
 }
 
 void print_reg_dump(void *ctx) {

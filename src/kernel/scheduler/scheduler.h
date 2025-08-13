@@ -88,7 +88,7 @@ typedef struct process {
     struct owner {
         int gid;
         int uid;
-    };
+    } owner;
 
     void (*signal_handler)(int);
 } pcb_t;
@@ -126,6 +126,7 @@ int init_cpu_scheduler(int cpu,
 int proc_create(void (*entry)(), int flags);
 int thread_create(pcb_t *parent, void (*entry)(), int flags);
 int pcb_destroy(int pid);
+pcb_t *get_current_pcb();
 int thread_destroy(int pid, int tid);
 
 void yield(); // gets called by the lapic timer on each cpu
