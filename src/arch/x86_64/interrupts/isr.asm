@@ -33,7 +33,6 @@ isr_common:
     mov rdi, rsp
     call isr_handler
 
-    
     pop rbp
     mov bx, bp
     mov ds, bx
