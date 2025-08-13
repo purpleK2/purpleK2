@@ -10,6 +10,8 @@
 #include <memory/vmm/vflags.h>
 #include <smp/ipi.h>
 
+#include <scheduler/scheduler.h>
+
 #include <util/util.h>
 
 #include <stdint.h>
@@ -69,12 +71,16 @@ unrelated to ordinary paging.
         (C) RepubblicaTech 2024
 */
 void pf_handler(void *ctx) {
+    registers_t *regs      = ctx;
+    uint64_t pf_error_code = (uint64_t)regs->error;
+
+    if (PG_IF(pf_error_code)) {
+        // proc_exit() goes here
+        // return;
+    }
+
     stdio_panic_init();
     bsod_init();
-
-    registers_t *regs = ctx;
-
-    uint64_t pf_error_code = (uint64_t)regs->error;
 
     debugf(ANSI_COLOR_BLUE);
     mprintf("--- PANIC! ---\n");
