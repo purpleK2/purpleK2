@@ -163,24 +163,28 @@ void kstart(void) {
 
     if (firmware_type_request.response != NULL) {
         uint64_t firmware_type = firmware_type_request.response->firmware_type;
-        if (firmware_type == LIMINE_FIRMWARE_TYPE_X86BIOS) {
+        switch (firmware_type) {
+        case LIMINE_FIRMWARE_TYPE_X86BIOS:
             FIRMWARE_TYPE = "X86BIOS";
-        } else if (firmware_type == LIMINE_FIRMWARE_TYPE_UEFI32) {
+            break;
+
+        case LIMINE_FIRMWARE_TYPE_UEFI32:
             FIRMWARE_TYPE = "UEFI32";
-        } else if (firmware_type == LIMINE_FIRMWARE_TYPE_UEFI64) {
+            break;
+
+        case LIMINE_FIRMWARE_TYPE_UEFI64:
             FIRMWARE_TYPE = "UEFI64";
+            break;
+
+        default:
+            FIRMWARE_TYPE = "No firmware type found!";
+            break;
         }
     } else {
         FIRMWARE_TYPE = "No firmware type found!";
-        debugf_debug("Firmware type: %s\n", FIRMWARE_TYPE);
     }
 
-    if (firmware_type_request.response != NULL) {
-        debugf_debug("Firmware type: %s\n", FIRMWARE_TYPE);
-    } else {
-        FIRMWARE_TYPE = "No firmware type found!";
-        debugf_debug("%s\n", FIRMWARE_TYPE);
-    }
+    debugf_debug("%s\n", FIRMWARE_TYPE);
 
     debugf_debug("Current video mode is: %dx%d address: %p\n\n",
                  framebuffer->width, framebuffer->height, framebuffer->address);
