@@ -4,6 +4,8 @@
 #include <fs/vfs/vfs.h>
 #include <scheduler/scheduler.h>
 
+#include <memory/heap/kheap.h>
+
 #include <stdint.h>
 #include <util/macro.h>
 
@@ -20,7 +22,10 @@ int sys_open(char *path, int mode) {
         return -1;
     }
 
-    current->fds[current->fd_count++] = open(path, mode);
+    current->fds =
+        krealloc(current->fds, sizeof(fileio_t *) * (++current->fd_count));
+
+    current->fds[current->fd_count - 1] = open(path, mode);
     if (current->fds[current->fd_count - 1] == NULL) {
         return -1;
     }
@@ -72,6 +77,11 @@ int sys_close(int fd) {
 
     close(file);
     current->fds[fd] = NULL;
+
+    if (fd == current->fd_count - 1) {
+        current->fds =
+            krealloc(current->fds, sizeof(fileio_t *) * (--current->fd_count));
+    }
 
     return 0;
 }

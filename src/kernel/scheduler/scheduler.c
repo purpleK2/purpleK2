@@ -50,9 +50,7 @@ int proc_create(void (*entry)(), int flags) {
     proc->pid   = __sync_fetch_and_add(&global_pid, 1);
     proc->state = PROC_READY;
 
-    proc->fds = kmalloc(sizeof(fileio_t) * 32);
-    memset(proc->fds, 0, sizeof(fileio_t) * 32);
-
+    proc->fds      = NULL;
     proc->fd_count = 0;
 
     uint64_t *pagemap = pmm_alloc_page();
