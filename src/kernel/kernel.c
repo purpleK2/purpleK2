@@ -118,11 +118,12 @@ struct bootloader_data *get_bootloader_data() {
 
 vmm_context_t *kernel_vmm_ctx;
 
-void cf() {
-    debugf("Hello :3\n");
-}
-
 extern void __sched_test(void);
+
+void pk_init() {
+    proc_create(__sched_test, 0);
+    debugf_ok("Starting __sched_test\n");
+}
 
 // kernel main function
 void kstart(void) {
@@ -505,10 +506,7 @@ void kstart(void) {
             limine_parsed_data.boot_time / 1000,
             limine_parsed_data.boot_time % 1000);
 
-    init_scheduler(cf);
-
-    proc_create(__sched_test, 0);
-
+    init_scheduler(pk_init);
     irq_registerHandler(0, scheduler_timer_tick);
 
     struct limine_framebuffer *fb =
