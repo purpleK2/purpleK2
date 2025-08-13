@@ -53,6 +53,8 @@ int smp_init() {
 }
 
 void mp_trampoline(struct limine_smp_info *cpu) {
+    UNUSED(cpu);
+
     asm("cli");
     gdt_init();
     idt_init();
@@ -77,5 +79,5 @@ void mp_trampoline(struct limine_smp_info *cpu) {
 }
 
 uint8_t get_cpu() {
-    return lapic_get_id();
+    return (uint8_t)(lapic_get_id());
 }
