@@ -105,11 +105,15 @@ extern void fpu_save(void *ctx);
 extern void fpu_restore(void *ctx);
 extern __attribute__((noreturn)) void scheduler_idle();
 
+int pcb_destroy(int pid);
+int thread_destroy(int pid, int tid);
+int proc_exit();
+
 // inits the scheduler on every CPU
-// with a "catchfire" process
+// with an "init" process
 int init_scheduler(void (*p)());
 /*
-    the "catchfire" function is a custom function
+    the "init" function is a custom function
     that the developer can assign it to:
     a simple idle function, an initialization function (that will be called for
     every CPU), whatever.
@@ -119,10 +123,10 @@ int init_cpu_scheduler(int cpu,
                        void (*p)()); // inits the scheduler for a specific CPU
                                      // with a custom process and a thread queue
 
-int proc_create(int ppid, void (*entry)(), int flags);
+int proc_create(void (*entry)(), int flags);
 int thread_create(pcb_t *parent, void (*entry)(), int flags);
-int proc_exit(int pid);
-int thread_exit(int pid, int tid);
+int pcb_destroy(int pid);
+int thread_destroy(int pid, int tid);
 
 void yield(); // gets called by the lapic timer on each cpu
 

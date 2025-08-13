@@ -11,6 +11,8 @@
 
 #include <smp/smp.h>
 
+#include <stdio.h>
+
 static cpu_queue_t *thread_queues;
 static tcb_t **current_threads;
 static int cpu_count;
@@ -39,9 +41,10 @@ static tcb_t *pick_next_thread(int cpu) {
     return NULL;
 }
 
+// I WANT ALL OF THE BITS :speaking_head: :fire: :fire:
 static int64_t global_pid = -1;
 
-int proc_create(int ppid, void (*entry)(), int flags) {
+int proc_create(void (*entry)(), int flags) {
     pcb_t *proc = kmalloc(sizeof(pcb_t));
     memset(proc, 0, sizeof(pcb_t));
     proc->pid   = __sync_fetch_and_add(&global_pid, 1);
@@ -103,19 +106,88 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
     return thread->tid;
 }
 
+pcb_t *pcb_lookup(int pid) {
+    int cpu  = get_cpu();
+    tcb_t *t = thread_queues[cpu].head;
+    pcb_t *p = NULL;
+    for (; t != NULL; t = t->next) {
+        p = t->parent;
+        if (!p) { // ...somehow??
+            continue;
+        }
+
+        if (p->pid == pid) {
+            break;
+        }
+    }
+
+    return p;
+}
+
+tcb_t *tcb_lookup(int pid, int tid) {
+    int cpu  = get_cpu();
+    tcb_t *t = thread_queues[cpu].head;
+
+    for (; t != NULL; t = t->next) {
+        if (!t->parent) {
+            continue;
+        }
+
+        pcb_t *parent = t->parent;
+        if (parent->pid != pid) {
+            continue;
+        }
+
+        if (t->tid != tid) {
+            continue;
+        }
+    }
+
+    return t;
+}
+
 int init_cpu_scheduler(int cpu, void (*p)()) {
-    proc_create(-1, p, 0);
+    proc_create(p, 0);
     return 0;
 }
 
-int proc_exit(int pid) {
+int pcb_destroy(int pid) {
     // Mark process and threads as dead.
-    return 0;
+    pcb_t *p = pcb_lookup(pid);
+    if (!p) {
+        return ENULLPTR;
+    }
+
+    p->state = PROC_DEAD;
+    for (int i = 0; i < p->thread_count; i++) {
+        if (!p->threads[i]) {
+            continue;
+        }
+
+        tcb_t *t = p->threads[i];
+        t->state = THREAD_DEAD;
+    }
+
+    return EOK;
 }
 
-int thread_exit(int pid, int tid) {
-    // Mark thread as dead.
-    return 0;
+int thread_destroy(int pid, int tid) {
+    tcb_t *t = tcb_lookup(pid, tid);
+    if (!t) {
+        return ENULLPTR;
+    }
+
+    t->state = THREAD_DEAD;
+
+    return EOK;
+}
+
+// destroys current process
+int proc_exit() {
+    int cpu        = get_cpu();
+    tcb_t *current = current_threads[cpu];
+
+    return pcb_destroy(current->parent->pid);
 }
 
 void yield() {
@@ -140,10 +212,14 @@ void yield() {
         current->time_slice = SCHEDULER_THREAD_TS;
         break;
 
-    case THREAD_DEAD:
     case THREAD_WAITING:
+    case THREAD_DEAD:
         next = pick_next_thread(cpu);
         if (!next) {
+            mprintf_warn(
+                "No more processes left to run. If you want, you can "
+                "reboot your compooter, or you can keep your computer on to "
+                "unlock a very high electrical bill :kekw:\n");
             scheduler_idle(); // good luck getting out of here >:D
         }
         break;
