@@ -7,12 +7,14 @@ export PATH:=$(TOOLCHAIN_PREFIX)/bin:$(PATH)
 OS_CODENAME=kernel-v0
 
 LIBS_DIR=libs
-PATCHES_DIR=$(LIBS_DIR)/patches
+
 SRC_DIR=src
 ARCH_DIR=$(SRC_DIR)/arch/$(TARGET_BASE)
 KERNEL_SRC_DIR=$(SRC_DIR)/kernel
-BUILD_DIR=build
 ISO_DIR=iso
+
+BUILD_DIR=build
+
 OBJS_DIR=$(BUILD_DIR)/objs
 INITRD_DIR=target
 INITRD=initrd.cpio
@@ -61,7 +63,7 @@ override DEFAULT_KCPPFLAGS :=
 $(eval $(call DEFAULT_VAR,KCPPFLAGS,$(DEFAULT_KCPPFLAGS)))
 
 # User controllable nasm flags.
-override DEFAULT_KNASMFLAGS := -F dwarf -g
+override DEFAULT_KNASMFLAGS :=
 $(eval $(call DEFAULT_VAR,KNASMFLAGS,$(DEFAULT_KNASMFLAGS)))
 
 # User controllable linker flags. We set none by default.
@@ -109,9 +111,7 @@ override KLDFLAGS += \
 	-Map=$(BUILD_DIR)/kernel.map
 
 # Internal nasm flags that should not be changed by the user.
-override KNASMFLAGS += \
-	-Wall \
-	-f elf64
+override KNASMFLAGS +=
 
 # Create required directories
 $(shell mkdir -p $(BUILD_DIR) $(OBJS_DIR) $(ISO_DIR))
