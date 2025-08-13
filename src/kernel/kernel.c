@@ -351,10 +351,13 @@ void kstart(void) {
     hpet_init();
     kprintf_ok("HPET initialized\n");
 
-    char *cpu_name = kmalloc(49);
+    char *cpu_name   = kmalloc(49);
+    char *cpu_vendor = kmalloc(13);
     get_cpu_name(cpu_name);
-    kprintf("CPU: %s %s @ %llu MHz\n", get_cpu_vendor(), cpu_name,
+    get_cpu_vendor(cpu_vendor);
+    kprintf("CPU: %s %s @ %llu MHz\n", cpu_vendor, cpu_name,
             tsc_frequency / 1000 / 1000);
+    kfree(cpu_vendor);
     kfree(cpu_name);
 
     // hypervisor

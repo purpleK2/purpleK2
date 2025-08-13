@@ -134,7 +134,7 @@ typedef struct cpuid_ctx {
     uint32_t edx;
 } cpuid_ctx_t;
 
-const char *get_cpu_vendor();
+int get_cpu_vendor(char *out);
 int get_cpu_name(char *out);
 
 // check if we're running on a hypervisor
