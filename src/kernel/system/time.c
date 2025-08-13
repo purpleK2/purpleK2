@@ -20,3 +20,9 @@ void timer_tick(void *ctx) {
 
     set_ticks(get_ticks() + 1);
 }
+
+void scheduler_timer_tick(void *ctx) {
+    timer_tick(ctx);
+
+    yield();
+}

@@ -118,6 +118,10 @@ struct bootloader_data *get_bootloader_data() {
 
 vmm_context_t *kernel_vmm_ctx;
 
+void cf() {
+    debugf("Hello :3\n");
+}
+
 // kernel main function
 void kstart(void) {
     asm("cli");
@@ -499,7 +503,8 @@ void kstart(void) {
             limine_parsed_data.boot_time / 1000,
             limine_parsed_data.boot_time % 1000);
 
-    init_scheduler();
+    init_scheduler(cf);
+    irq_registerHandler(0, scheduler_timer_tick);
 
     struct limine_framebuffer *fb =
         (struct limine_framebuffer *)get_device("fb0")->data;

@@ -6,111 +6,124 @@
 #include <memory/vmm/vmm.h>
 #include <scheduler/signals.h>
 
-#include <system/limits.h>
 #include <types.h>
 
-#define TF_MODE_USER 0x1
-#define TF_BUSY      0x2
-#define TF_DETACHED  0x4
+// Time Slice, not that "ts"
+#define SCHEDULER_THREAD_TS 10
+
+#define SCHEDULER_STACK_PAGES 2
+// keeping this just in case
+#define SCHEDULER_STACKSZ (PFRAME_SIZE * SCHEDULER_STACK_PAGES)
+
+#define TF_MODE_USER (1 << 0)
+#define TF_BUSY      (1 << 1)
+#define TF_DETACHED  (1 << 2)
 
 #define TIME_SLICE_TICKS 10
-#define MAX_CPUS         64
 
-struct PCB;
-struct TCB;
-
-typedef struct TaskContext {
+typedef struct task_context {
     uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
-    uint64_t rsi, rdi, rbp, rbx, rdx, rcx, rax;
+    uint64_t rsi, rdi, rbp, rdx, rcx, rbx, rax;
     uint64_t rip, cs, rflags, rsp, ss;
-} TaskContext;
 
-typedef struct ThreadQueue {
-    struct TCB *idle_proc;
+    void *fpu; // 512 bytes memory region
+} task_regs_t;
 
-    struct TCB *head;
-    int count;
-} ThreadQueue_t;
+typedef enum pcb_state {
+    PROC_READY,
+    PROC_RUNNING,
+    PROC_WAIT_FOR_THREAD,
+    PROC_DEAD,
+} pcb_state_t;
 
-typedef enum PCB_State {
-    PROC_RUNNING         = 0x0,
-    PROC_STARTABLE       = 0x1,
-    PROC_WAIT_FOR_THREAD = 0x2,
-    PROC_DEAD            = 0x3,
-} PCB_State_t;
+typedef enum tcb_state {
+    THREAD_READY,   // good to go
+    THREAD_RUNNING, // should be only one per CPU
+    THREAD_WAITING, // waiting for I/O
+    THREAD_DEAD,
+} tcb_state_t;
 
-typedef enum TCB_State {
-    THREAD_RUNNING   = 0x0,
-    THREAD_STARTABLE = 0x1,
-    THREAD_WAITING   = 0x2,
-    THREAD_DEAD      = 0x3,
-} TCB_State_t;
+typedef struct process pcb_t;
+typedef struct thread tcb_t;
 
-struct KernelStack {
-    uint8_t *stack;
-};
-
-typedef struct TCB {
+typedef struct thread {
     int tid;
-    TaskContext *ctx;
-    struct PCB *parent;
+    struct process *parent;
 
-    void *entry_point;
-    TCB_State_t state;
+    size_t time_slice;
 
-    struct KernelStack *stack;
-    void *tls;
-
-    int signal_mask;
+    tcb_state_t state;
     int flags;
+
+    task_regs_t *regs;
 
     lock_t lock;
 
-    struct TCB *next;
-} TCB_t;
+    struct thread *next;
 
-typedef struct PCB {
+    // TODO: thread-local storage
+} tcb_t;
+
+typedef struct process {
     int pid;
 
-    int tid_counter;
-    int fd_counter;
+    struct process *parent;
+    int children_count; // diddy really likes this value >:)
+    struct process **children;
 
-    struct file_io **fds;
-    struct file_io *cwd;
+    pcb_state_t state;
 
-    int cpu; // the cpu the thread is running on
+    int thread_count;
+    tcb_t **threads;
+    tcb_t *main_thread;
 
-    TCB_t **threads; // threads[0] = main_thread;
+    int fd_count;
+    fileio_t **fds;
+    fileio_t *cwd; // just in case: Current Working Directory
 
-    vmm_context_t *pagemap;
+    int cpu; // the cpu we're running on
 
-    struct SigHandler *signal_handlers;
+    vmm_context_t *vmm_ctx;
 
-    lock_t lock;
-    int flags;
-
-    PCB_State_t state;
-
-    struct PCB *parent; // Null if no parent
-    struct PCB **children;
-    int child_count; // diddy really likes this value >:)
-
-    struct {
-        int uid;
+    struct owner {
         int gid;
-    } owner;
-} PCB_t;
+        int uid;
+    };
 
-int init_scheduler(); // inits the scheduler on every CPU with an idle process
+    void (*signal_handler)(int);
+} pcb_t;
 
-int init_cpu_scheduler(int cpu); // inits the scheduler for a specific CPU with
-                                 // an idle process and a thread queue
+typedef struct cpu_thread_queue {
+    size_t count;
+    tcb_t *head;
+} cpu_queue_t;
 
-int proc_create(int ppid, void *entry);
-int thread_create(PCB_t *proc, void *entry, int flags);
+/* from arch/[TARGET]/scheduler.asm */
+extern void context_load(task_regs_t *ctx);
+extern void context_save(task_regs_t *out);
+extern void fpu_save(void *ctx);
+extern void fpu_restore(void *ctx);
+extern __attribute__((noreturn)) void scheduler_idle();
+
+// inits the scheduler on every CPU
+// with a "catchfire" process
+int init_scheduler(void (*p)());
+/*
+    the "catchfire" function is a custom function
+    that the developer can assign it to:
+    a simple idle function, an initialization function (that will be called for
+    every CPU), whatever.
+*/
+
+int init_cpu_scheduler(int cpu,
+                       void (*p)()); // inits the scheduler for a specific CPU
+                                     // with a custom process and a thread queue
+
+int proc_create(int ppid, void (*entry)(), int flags);
+int thread_create(pcb_t *parent, void (*entry)(), int flags);
 int proc_exit(int pid);
 int thread_exit(int pid, int tid);
 
-void schedule(registers_t *regs); // gets called by the lapic timer on each cpu
+void yield(); // gets called by the lapic timer on each cpu
 
 #endif // SCHEDULER_H

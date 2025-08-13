@@ -1,135 +1,86 @@
+#include "scheduler.h"
 
-// scheduler.c
 #include <cpu.h>
-#include <memory/heap/kheap.h>
-#include <scheduler/scheduler.h>
-#include <smp/smp.h>
+#include <errors.h>
+#include <kernel.h>
 #include <string.h>
-#include <system/kernel.h>
 
-static ThreadQueue_t *thread_queues;
-static TCB_t **current_threads;
+#include <memory/heap/kheap.h>
+#include <memory/vmm/vflags.h>
+#include <memory/vmm/vmm.h>
+
+#include <smp/smp.h>
+
+static cpu_queue_t *thread_queues;
+static tcb_t **current_threads;
 static int cpu_count;
 
-extern void context_switch(TaskContext **old_ctx, TaskContext *new_ctx);
-extern void fpu_save(void *ctx);
-extern void fpu_restore(void *ctx);
-
-__attribute__((noreturn)) void idle_loop() {
-    while (1)
-        asm volatile("hlt");
-}
-
-int init_scheduler() {
+int init_scheduler(void (*p)()) {
     cpu_count = get_bootloader_data()->cpu_count;
 
-    thread_queues = kmalloc(sizeof(ThreadQueue_t) * cpu_count);
-    memset(thread_queues, 0, sizeof(ThreadQueue_t));
-
-    current_threads = kmalloc(sizeof(TCB_t *) * cpu_count);
-    memset(current_threads, 0, sizeof(TCB_t *));
+    thread_queues   = kmalloc(sizeof(cpu_queue_t) * cpu_count);
+    current_threads = kmalloc(sizeof(tcb_t *) * cpu_count);
+    memset(thread_queues, 0, sizeof(cpu_queue_t) * cpu_count);
+    memset(current_threads, 0, sizeof(tcb_t *) * cpu_count);
 
     for (int i = 0; i < cpu_count; ++i)
-        init_cpu_scheduler(i);
+        init_cpu_scheduler(i, p);
     return 0;
 }
 
-int init_cpu_scheduler(int cpu) {
-    thread_queues[cpu].head  = NULL;
-    thread_queues[cpu].count = 0;
+static tcb_t *pick_next_thread(int cpu) {
+    tcb_t *thread = thread_queues[cpu].head;
 
-    PCB_t *idle_proc = kmalloc(sizeof(PCB_t));
-    memset(idle_proc, 0, sizeof(PCB_t));
-    idle_proc->pid = -1;
-
-    struct KernelStack *kstack = kmalloc(sizeof(struct KernelStack));
-    kstack->stack              = kmalloc(sizeof(uint8_t) * SCHED_KSTACK_SIZE);
-
-    TCB_t *idle_thread = kmalloc(sizeof(TCB_t));
-    memset(idle_thread, 0, sizeof(TCB_t));
-    idle_thread->tid    = -1;
-    idle_thread->state  = THREAD_RUNNING;
-    idle_thread->stack  = kstack;
-    idle_thread->parent = idle_proc;
-    idle_thread->flags  = 0;
-
-    TaskContext *ctx =
-        ((void *)(&kstack->stack[SCHED_KSTACK_SIZE]) - sizeof(TaskContext));
-    ctx = (TaskContext *)ROUND_DOWN((uint64_t)ctx, sizeof(TaskContext));
-
-    memset(ctx, 0, sizeof(TaskContext));
-    ctx->rip         = (uint64_t)&idle_loop;
-    ctx->cs          = 0x08;
-    ctx->ss          = 0x10;
-    ctx->rflags      = 0x202;
-    idle_thread->ctx = ctx;
-
-    thread_queues[cpu].idle_proc = idle_thread;
-    current_threads[cpu]         = idle_thread;
-    return 0;
-}
-
-static TCB_t *pick_next_thread(int cpu) {
-    TCB_t *head = thread_queues[cpu].head;
-    while (head) {
-        if (head->state == THREAD_STARTABLE)
-            return head;
-        head = head->next;
+    for (; thread != NULL; thread = thread->next) {
+        if (thread->state == THREAD_READY)
+            return thread;
     }
-    return thread_queues[cpu].idle_proc;
+
+    return NULL;
 }
 
-void schedule(registers_t *regs) {
-    int cpu        = get_cpu();
-    TCB_t *current = current_threads[cpu];
-    if (current->state == THREAD_RUNNING)
-        current->state = THREAD_STARTABLE;
+static int64_t global_pid = -1;
 
-    fpu_save(current);
+int proc_create(int ppid, void (*entry)(), int flags) {
+    pcb_t *proc = kmalloc(sizeof(pcb_t));
+    memset(proc, 0, sizeof(pcb_t));
+    proc->pid   = __sync_fetch_and_add(&global_pid, 1);
+    proc->state = PROC_READY;
 
-    TCB_t *next          = pick_next_thread(cpu);
-    current_threads[cpu] = next;
-    next->state          = THREAD_RUNNING;
-
-    if (current != next)
-        context_switch(&current->ctx, next->ctx);
-
-    fpu_restore(next);
-}
-
-int proc_create(int ppid, void *entry) {
-    static int global_pid = 1;
-    PCB_t *proc           = kmalloc(sizeof(PCB_t));
-    memset(proc, 0, sizeof(PCB_t));
-    proc->pid     = __sync_fetch_and_add(&global_pid, 1);
-    proc->state   = PROC_STARTABLE;
-    proc->pagemap = vmm_ctx_init(get_kernel_pml4(), 0);
-    proc->cwd     = NULL;
-    thread_create(proc, entry, TF_MODE_USER);
+    uint64_t *pagemap = pmm_alloc_page();
+    int vflags        = (flags & TF_MODE_USER ? VMO_USER_RW : VMO_KERNEL_RW);
+    proc->vmm_ctx     = vmm_ctx_init(pagemap, vflags);
+    proc->cwd         = NULL;
+    thread_create(proc, entry, flags);
     return proc->pid;
 }
 
-int thread_create(PCB_t *proc, void *entry, int flags) {
-    TCB_t *thread = kmalloc(sizeof(TCB_t));
-    memset(thread, 0, sizeof(TCB_t));
-    thread->tid         = proc->tid_counter++;
-    thread->entry_point = entry;
-    thread->flags       = flags;
-    thread->state       = THREAD_STARTABLE;
-    thread->parent      = proc;
-    thread->stack       = kmalloc(sizeof(struct KernelStack));
+int thread_create(pcb_t *parent, void (*entry)(), int flags) {
+    tcb_t *thread = kmalloc(sizeof(tcb_t));
+    memset(thread, 0, sizeof(tcb_t));
+    thread->tid    = __sync_fetch_and_add(&parent->thread_count, 1);
+    thread->flags  = flags;
+    thread->state  = THREAD_READY;
+    thread->parent = parent;
 
-    TaskContext *ctx = (TaskContext *)((uint8_t *)thread->stack +
-                                       SCHED_KSTACK_SIZE - sizeof(TaskContext));
-    memset(ctx, 0, sizeof(TaskContext));
-    ctx->rip    = (uint64_t)entry;
-    ctx->cs     = (flags & TF_MODE_USER) ? 0x1B : 0x08;
-    ctx->ss     = (flags & TF_MODE_USER) ? 0x23 : 0x10;
-    ctx->rflags = 0x202;
-    ctx->rsp    = (uint64_t)ctx + sizeof(TaskContext);
-    thread->ctx = ctx;
+    thread->time_slice = SCHEDULER_THREAD_TS;
 
-    int cpu = 0, min = thread_queues[0].count;
+    void *stack =
+        (void *)PHYS_TO_VIRTUAL(pmm_alloc_pages(SCHEDULER_STACK_PAGES));
+
+    task_regs_t *ctx = kmalloc(sizeof(task_regs_t));
+    memset(ctx, 0, sizeof(task_regs_t));
+
+    ctx->rip     = (uint64_t)entry;
+    ctx->cs      = (flags & TF_MODE_USER) ? 0x1B : 0x08;
+    ctx->ss      = (flags & TF_MODE_USER) ? 0x23 : 0x10;
+    ctx->rflags  = 0x202;
+    ctx->rsp     = (uint64_t)(stack + SCHEDULER_STACKSZ);
+    ctx->fpu     = (void *)PHYS_TO_VIRTUAL(pmm_alloc_page());
+    thread->regs = ctx;
+
+    int cpu = 0;
+    int min = thread_queues[0].count;
     for (int i = 1; i < cpu_count; ++i) {
         if (thread_queues[i].count < min) {
             cpu = i;
@@ -140,8 +91,21 @@ int thread_create(PCB_t *proc, void *entry, int flags) {
     thread->next            = thread_queues[cpu].head;
     thread_queues[cpu].head = thread;
     thread_queues[cpu].count++;
-    proc->threads[thread->tid] = thread;
+
+    parent->threads =
+        krealloc(parent->threads, sizeof(tcb_t *) * parent->thread_count);
+    parent->threads[thread->tid] = thread;
+
+    if (!current_threads[cpu]) {
+        current_threads[cpu] = thread;
+    }
+
     return thread->tid;
+}
+
+int init_cpu_scheduler(int cpu, void (*p)()) {
+    proc_create(-1, p, 0);
+    return 0;
 }
 
 int proc_exit(int pid) {
@@ -152,4 +116,44 @@ int proc_exit(int pid) {
 int thread_exit(int pid, int tid) {
     // Mark thread as dead.
     return 0;
+}
+
+void yield() {
+    int cpu        = get_cpu();
+    tcb_t *current = current_threads[cpu];
+    tcb_t *next;
+
+    switch (current->state) {
+    case THREAD_READY:
+        next        = current;
+        next->state = THREAD_RUNNING;
+        break;
+
+    case THREAD_RUNNING:
+        if (--current->time_slice > 0) {
+            fpu_save(current->regs->fpu);
+            context_save(current->regs);
+            return;
+        }
+
+        current->state      = THREAD_READY;
+        current->time_slice = SCHEDULER_THREAD_TS;
+        break;
+
+    case THREAD_DEAD:
+    case THREAD_WAITING:
+        next = pick_next_thread(cpu);
+        if (!next) {
+            scheduler_idle(); // good luck getting out of here >:D
+        }
+        break;
+    }
+
+    fpu_restore(next->regs->fpu);
+
+    current_threads[cpu] = next;
+    next->state          = THREAD_RUNNING;
+
+    // it instantly returns to the RIP in here
+    context_load(next->regs);
 }
