@@ -6,6 +6,8 @@
 #include <types.h>
 
 void spinlock_acquire(lock_t *lock);
+void spinlock_force_acquire(lock_t *lock);
+
 void spinlock_release(lock_t *lock);
 
 #endif

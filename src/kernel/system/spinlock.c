@@ -4,6 +4,13 @@
 #include <types.h>
 
 void spinlock_acquire(lock_t *lock) {
+    while (atomic_flag_test_and_set(lock)) {
+        asm("pause");
+    }
+}
+
+// forces acquiring the spinlock in case of a deadlock
+void spinlock_force_acquire(lock_t *lock) {
     unsigned int timeout = 1000000;
 
     while (atomic_flag_test_and_set(lock)) {
