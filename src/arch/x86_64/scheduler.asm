@@ -7,28 +7,30 @@ public context_save
 
 ; void context_load(task_regs_t *ctx)
 context_load:
-    mov r15, [rdi]
-    mov r14, [rdi + 8h]
-    mov r13, [rdi + 10h]
-    mov r12, [rdi + 18h]
+    mov r15, [rdi + 08h]
+    mov r14, [rdi + 10h]
+    mov r13, [rdi + 18h]
+    mov r12, [rdi + 20h]
 
-    mov rbp, [rdi + 50h]
-    mov rbx, [rdi + 68h]
+    mov [rdi + 48h], rbp
+    mov [rdi + 70h], rbx
 
-    mov rsp, [rdi + 90h]
-    ret
+    mov rsp, rdi
+    add rsp, 90h
+
+    iretq
 
 ; void context_save(task_regs_t *out)
 context_save:
-    mov [rdi], r15
-    mov [rdi + 8h], r14
-    mov [rdi + 10h], r13
-    mov [rdi + 18h], r12
+    mov [rdi + 08h], r15
+    mov [rdi + 10h], r14
+    mov [rdi + 18h], r13
+    mov [rdi + 20h], r12
 
-    mov [rdi + 50h], rbp
+    mov [rdi + 48h], rbp
     mov [rdi + 68h], rbx
 
-    mov [rdi + 90h], rsp
+    mov [rdi + 0xa8], rsp
     
     ret
 

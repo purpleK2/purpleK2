@@ -1,12 +1,15 @@
 #ifndef SCHEDULER_H
 #define SCHEDULER_H
 
-#include <fs/file_io.h>
-#include <interrupts/isr.h>
+#include <types.h>
+
 #include <memory/vmm/vmm.h>
 #include <scheduler/signals.h>
 
-#include <types.h>
+#include <cpu.h>
+#include <interrupts/isr.h>
+
+#include <fs/file_io.h>
 
 // Time Slice, not that "ts"
 #define SCHEDULER_THREAD_TS 10
@@ -21,16 +24,7 @@
 
 #define TIME_SLICE_TICKS 10
 
-typedef struct task_context {
-    uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
-    uint64_t rsi, rdi, rbp, rdx, rcx, rbx, rax;
-    uint64_t rip, cs, rflags, rsp, ss;
-
-    void *fpu; // 512 bytes memory region
-} task_regs_t;
-
 typedef enum pcb_state {
-    PROC_NEW,
     PROC_READY,
     PROC_RUNNING,
     PROC_WAIT_FOR_THREAD,
@@ -38,7 +32,6 @@ typedef enum pcb_state {
 } pcb_state_t;
 
 typedef enum tcb_state {
-    THREAD_NEW,     // useful for handling the stack on yield()
     THREAD_READY,   // good to go
     THREAD_RUNNING, // should be only one per CPU
     THREAD_WAITING, // I/O, syscall, ...
@@ -57,7 +50,8 @@ typedef struct thread {
     tcb_state_t state;
     int flags;
 
-    task_regs_t *regs;
+    registers_t *regs;
+    void *fpu; // 512 bytes memory region
 
     lock_t lock;
 
@@ -101,8 +95,8 @@ typedef struct cpu_thread_queue {
 } cpu_queue_t;
 
 /* from arch/[TARGET]/scheduler.asm */
-extern void context_load(task_regs_t *ctx);
-extern void context_save(task_regs_t *out);
+extern void context_load(registers_t *ctx);
+extern void context_save(registers_t *out);
 extern void fpu_save(void *ctx);
 extern void fpu_restore(void *ctx);
 extern __attribute__((noreturn)) void scheduler_idle();
@@ -131,6 +125,6 @@ int pcb_destroy(int pid);
 pcb_t *get_current_pcb();
 int thread_destroy(int pid, int tid);
 
-void yield(); // gets called by the lapic timer on each cpu
+void yield(registers_t *regs); // gets called by the lapic timer on each cpu
 
 #endif // SCHEDULER_H
