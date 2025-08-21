@@ -113,7 +113,6 @@ struct bootloader_data limine_parsed_data;
 
 struct bootloader_data *get_bootloader_data() {
     return &limine_parsed_data;
-    get_cpu();
 }
 
 vmm_context_t *kernel_vmm_ctx;
