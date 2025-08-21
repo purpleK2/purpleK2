@@ -26,9 +26,7 @@ KCONFIG_AUTOCONF = $(KERNEL_SRC_DIR)/autoconf.h
 QEMU_FLAGS = 	-m 64M \
 			 	-debugcon stdio \
 				-M q35 \
-				-smp 2 \
-				-no-reboot \
-				-no-shutdown \
+				-smp 2
 
 # Nuke built-in rules and variables.
 override MAKEFLAGS += -rR --no-print-directory
@@ -55,19 +53,31 @@ override DEFAULT_KLD := $(TARGET)-ld
 $(eval $(call DEFAULT_VAR,KLD,$(DEFAULT_KLD)))
 
 # User controllable C flags.
-override DEFAULT_KCFLAGS := -g -O0 -pipe
+override DEFAULT_KCFLAGS := \
+	-g \
+	-O0 \
+	-pipe \
+	-I $(SRC_DIR)/lib \
+	-I $(KERNEL_SRC_DIR) \
+	-I $(KERNEL_SRC_DIR)/system \
+	-I $(KERNEL_SRC_DIR)/acpi \
+	-I $(ARCH_DIR) \
+	-D UACPI_KERNEL_INITIALIZATION \
+	-D UACPI_FORMATTED_LOGGING \
+	-D CHAR_BIT=8
+
 $(eval $(call DEFAULT_VAR,KCFLAGS,$(DEFAULT_KCFLAGS)))
 
 # User controllable C preprocessor flags. We set none by default.
 override DEFAULT_KCPPFLAGS :=
 $(eval $(call DEFAULT_VAR,KCPPFLAGS,$(DEFAULT_KCPPFLAGS)))
 
-# User controllable nasm flags.
+# User controllable assembler flags.
 override DEFAULT_KNASMFLAGS :=
 $(eval $(call DEFAULT_VAR,KNASMFLAGS,$(DEFAULT_KNASMFLAGS)))
 
 # User controllable linker flags. We set none by default.
-override DEFAULT_KLDFLAGS :=
+override DEFAULT_KLDFLAGS := -Map=$(BUILD_DIR)/kernel.map
 $(eval $(call DEFAULT_VAR,KLDFLAGS,$(DEFAULT_KLDFLAGS)))
 
 # Internal C flags that should not be changed by the user.
@@ -76,11 +86,6 @@ override KCFLAGS += \
 	-Wextra \
 	-std=gnu11 \
 	-ffreestanding \
-	-I $(SRC_DIR)/lib \
-	-I $(KERNEL_SRC_DIR) \
-	-I $(KERNEL_SRC_DIR)/system \
-	-I $(KERNEL_SRC_DIR)/acpi \
-	-I $(ARCH_DIR) \
 	-fno-stack-protector \
 	-fno-stack-check \
 	-fno-lto \
@@ -91,10 +96,7 @@ override KCFLAGS += \
 	-mno-80387 \
 	-mno-mmx \
 	-mno-red-zone \
-	-mcmodel=kernel \
-	-D UACPI_KERNEL_INITIALIZATION \
-	-D UACPI_FORMATTED_LOGGING \
-	-D CHAR_BIT=8 \
+	-mcmodel=kernel
 
 # Internal C preprocessor flags that should not be changed by the user.
 override KCPPFLAGS := \
@@ -108,10 +110,9 @@ override KLDFLAGS += \
 	-nostdlib \
 	-static \
 	-z max-page-size=0x1000 \
-	-T $(SRC_DIR)/linker.ld \
-	-Map=$(BUILD_DIR)/kernel.map
+	-T $(SRC_DIR)/linker.ld
 
-# Internal nasm flags that should not be changed by the user.
+# Internal assembler flags that should not be changed by the user.
 override KNASMFLAGS +=
 
 # Create required directories
