@@ -51,6 +51,7 @@ void arch_base_init() {
     if (check_tsc()) {
         tsc_init();
         tsc = true;
+        pit = false;
         kprintf_ok("Initialized TSC\n");
     }
 }
