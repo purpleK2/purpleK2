@@ -118,7 +118,7 @@ vmm_context_t *kernel_vmm_ctx;
 
 extern void __sched_test(void);
 
-HBA_MEM* mem;
+HBA_MEM *mem;
 
 void a() {
     for (;;) {
@@ -168,11 +168,6 @@ void kstart(void) {
         kernel_file_request.response->kernel_file->address;
     limine_parsed_data.kernel_file_size =
         kernel_file_request.response->kernel_file->size;
-
-#ifndef CONFIG_ENABLE_64_BIT
-    kprintf_panic("Kernel wasn't configured with 64-Bit support!\n");
-    _hcf(); // hcf also works on 32-Bit
-#endif
 
     arch_base_init();
 
@@ -517,14 +512,12 @@ void kstart(void) {
 
     limine_parsed_data.boot_time = get_ms(system_startup_time);
 
-    pci_device_t* sata = detect_controller();
-    
-    map_region_to_page((uint64_t*)PHYS_TO_VIRTUAL(_get_pml4()),
-                       sata->bar[5], PHYS_TO_VIRTUAL(sata->bar[5]), 
-                       0x20000,
-                       AHCI_MMIO_FLAGS);
-    
-    mem = (HBA_MEM*)PHYS_TO_VIRTUAL(sata->bar[5]);
+    pci_device_t *sata = detect_controller();
+
+    map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), sata->bar[5],
+                       PHYS_TO_VIRTUAL(sata->bar[5]), 0x20000, AHCI_MMIO_FLAGS);
+
+    mem = (HBA_MEM *)PHYS_TO_VIRTUAL(sata->bar[5]);
 
     bool mode = is_ahci_mode(mem);
 
@@ -540,7 +533,7 @@ void kstart(void) {
     test_ahci();
 
     test_ahci_operations(mem);
-    
+
     kprintf("System started: Time took: %llu seconds %llu ms.\n",
             limine_parsed_data.boot_time / 1000,
             limine_parsed_data.boot_time % 1000);
