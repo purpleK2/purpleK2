@@ -119,9 +119,24 @@ vmm_context_t *kernel_vmm_ctx;
 
 extern void __sched_test(void);
 
+void a() {
+    for (;;) {
+        kprintf("A");
+    }
+}
+
+void b() {
+    for (;;) {
+        kprintf("B");
+    }
+}
+
 void pk_init() {
     proc_create(__sched_test, 0);
     debugf_ok("Starting __sched_test\n");
+
+    proc_create(a, 0);
+    proc_create(b, 0);
 }
 
 // kernel main function
@@ -472,7 +487,7 @@ void kstart(void) {
 
 #ifdef CONFIG_DEVFS_ENABLE
     devfs_t *devfs = devfs_create();
-    if (devfs_vfs_init(devfs, "/dev") != EOK) {
+    if (devfs_vfs_init(devfs, CONFIG_DEVFS_MOUNT_PATH) != EOK) {
         kprintf_warn("Failed to initialize DEVFS!\n");
     } else {
         kprintf_ok("DEVFS initialized successfully!\n");
@@ -505,14 +520,15 @@ void kstart(void) {
             limine_parsed_data.boot_time / 1000,
             limine_parsed_data.boot_time % 1000);
 
-    init_scheduler(pk_init);
-    irq_registerHandler(0, scheduler_timer_tick);
+    // init_scheduler(pk_init);
+    // irq_registerHandler(0, scheduler_timer_tick);
 
     struct limine_framebuffer *fb =
         (struct limine_framebuffer *)get_device("fb0")->data;
-    load_bmp_to_framebuffer("/cpio/spamtong.bmp", fb);
+    // load_bmp_to_framebuffer("/cpio/pk2startup_1year.bmp", fb);
 
-    kprintf("Ha bet you didnt see that [[BIG SHOT]]!\n");
+#include <tga/tga.h>
+    load_tga_to_framebuffer("/cpio/pk2startup_1year.tga", fb);
 
     for (;;)
         ;
