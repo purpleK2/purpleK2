@@ -523,10 +523,6 @@ void kstart(void) {
     // init_scheduler(pk_init);
     // irq_registerHandler(0, scheduler_timer_tick);
 
-    struct limine_framebuffer *fb =
-        (struct limine_framebuffer *)get_device("fb0")->data;
-    // load_bmp_to_framebuffer("/cpio/pk2startup_1year.bmp", fb);
-
 #include <tga/tga.h>
     load_tga_to_framebuffer("/cpio/pk2startup_1year.tga");
 
