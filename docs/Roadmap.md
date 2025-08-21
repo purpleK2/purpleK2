@@ -77,7 +77,7 @@ A build (`.iso` file) will be released every time a Milestone is completed. The 
   - [X] PCI(e) devices parsing
   - [ ] API for drivers
 
-- [ ] AHCI driver
+- [X] AHCI driver
   (we can then read from the disk 🔥)
 
 
