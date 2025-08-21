@@ -528,7 +528,7 @@ void kstart(void) {
     // load_bmp_to_framebuffer("/cpio/pk2startup_1year.bmp", fb);
 
 #include <tga/tga.h>
-    load_tga_to_framebuffer("/cpio/pk2startup_1year.tga", fb);
+    load_tga_to_framebuffer("/cpio/pk2startup_1year.tga");
 
     for (;;)
         ;
