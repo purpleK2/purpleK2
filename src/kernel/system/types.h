@@ -3,11 +3,6 @@
 
 #include <stdatomic.h>
 
-// process management
-
-typedef int pid_t;
-typedef int ppid_t;
-
 // user management
 
 typedef unsigned int uid_t;
