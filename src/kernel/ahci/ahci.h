@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <util/macro.h>
+#include <pci/pci.h>
 
 #define FALSE                0
 #define TRUE                 1
@@ -20,7 +21,6 @@
 #define HBA_PORT_IPM_ACTIVE  1
 #define HBA_PORT_DET_PRESENT 3
 #define ATA_CMD_READ_DMA_EX  0x25
-#define AHCI_BASE            0x400000
 #define HBA_PxCMD_ST         0x0001
 #define HBA_PxCMD_FRE        0x0010
 #define HBA_PxCMD_FR         0x4000
@@ -186,7 +186,7 @@ typedef volatile struct tagHBA_MEM {
     uint32_t bohc;
     uint8_t rsv[0xA0 - 0x2C];
     uint8_t vendor[0x100 - 0xA0];
-    HBA_PORT ports[1];
+    HBA_PORT ports[32];
 } HBA_MEM;
 
 typedef volatile struct tagHBA_FIS {
@@ -226,11 +226,19 @@ typedef struct tagHBA_CMD_TBL {
 } HBA_CMD_TBL;
 
 void probe_port(HBA_MEM *abar);
-void port_rebase(HBA_PORT *port, int portno);
+static int check_type(HBA_PORT *port);
+void port_rebase(HBA_PORT *port);
 void start_cmd(HBA_PORT *port);
 void stop_cmd(HBA_PORT *port);
 bool ahci_read(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer);
 int find_cmdslot(HBA_PORT *port);
+bool ahci_write(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer);
+void detect_disk(HBA_MEM *abar);
+pci_device_t *detect_controller();
+int get_sata_port(HBA_MEM *abar);
+bool is_ahci_mode(HBA_MEM* abar);
+
+bool READ(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count, uint16_t *buf);
 
 void test_ahci();
 void test_ahci_operations(HBA_MEM *abar);
