@@ -34,7 +34,7 @@ fileio_t *fio_create() {
     return fio;
 }
 
-fileio_t *open(char *path, int flags) {
+fileio_t *open(const char *path, int flags) {
     UNUSED(flags);
 
     fileio_t *f = NULL;

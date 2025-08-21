@@ -37,7 +37,7 @@ typedef struct file_io {
 
 fileio_t *fio_create();
 
-fileio_t *open(char *path, int flags);
+fileio_t *open(const char *path, int flags);
 int read(fileio_t *file, size_t size, void *out);
 int write(fileio_t *file, void *buf, size_t size);
 int close(fileio_t *file);
