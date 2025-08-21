@@ -55,6 +55,8 @@ void pci_print_info(uint8_t bus, uint8_t device, uint8_t function);
 void pci_free_list();
 uint32_t pci_config_read(uint8_t bus, uint8_t device, uint8_t function,
                          uint8_t offset);
+const char *pci_get_subclass_name(uint8_t class_code, uint8_t subclass);
+const char *pci_get_class_name(uint8_t class_code);
 
 pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
                              cpio_file_t *pci_ids);
