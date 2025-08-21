@@ -21,6 +21,17 @@ config DEVFS_ENABLE
     help
       Enable the pseudo filesystem for devices 
 
+menu "DevFS options"
+depends on DEVFS_ENABLE
+
+config DEVFS_MOUNT_PATH
+    string "DevFS mount path"
+    default "/dev"
+    help
+      Where to mount the DevFS pseudo filesystem
+
+endmenu # DevFS options
+
 endmenu # Filesystems
 
 menu "Advanced debugging"
