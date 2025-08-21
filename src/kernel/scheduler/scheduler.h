@@ -30,6 +30,7 @@ typedef struct task_context {
 } task_regs_t;
 
 typedef enum pcb_state {
+    PROC_NEW,
     PROC_READY,
     PROC_RUNNING,
     PROC_WAIT_FOR_THREAD,
@@ -37,9 +38,10 @@ typedef enum pcb_state {
 } pcb_state_t;
 
 typedef enum tcb_state {
+    THREAD_NEW,     // useful for handling the stack on yield()
     THREAD_READY,   // good to go
     THREAD_RUNNING, // should be only one per CPU
-    THREAD_WAITING, // waiting for I/O
+    THREAD_WAITING, // I/O, syscall, ...
     THREAD_DEAD,
 } tcb_state_t;
 

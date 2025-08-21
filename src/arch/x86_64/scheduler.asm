@@ -7,29 +7,19 @@ public context_save
 
 ; void context_load(task_regs_t *ctx)
 context_load:
-    mov rsp, rdi
+    mov r15, [rdi]
+    mov r14, [rdi + 8h]
+    mov r13, [rdi + 10h]
+    mov r12, [rdi + 18h]
 
-    pop r15
-    pop r14
-    pop r13
-    pop r12
-    pop r11
-    pop r10
-    pop r9
-    pop r8
-    pop rsi
-    pop rdi
-    pop rbp
-    pop rdx
-    pop rcx
-    pop rbx
-    pop rax
+    mov rbp, [rdi + 50h]
+    mov rbx, [rdi + 68h]
 
-    iretq   ; pops RIP, CS, RFLAGS, RSP, SS
+    mov rsp, [rdi + 90h]
+    ret
 
 ; void context_save(task_regs_t *out)
 context_save:
-    ; saving callee-saved registers? i hope: ))
     mov [rdi], r15
     mov [rdi + 8h], r14
     mov [rdi + 10h], r13

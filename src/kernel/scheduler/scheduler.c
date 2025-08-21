@@ -34,8 +34,14 @@ static tcb_t *pick_next_thread(int cpu) {
     tcb_t *thread = thread_queues[cpu].head;
 
     for (; thread != NULL; thread = thread->next) {
-        if (thread->state == THREAD_READY)
-            return thread;
+        switch (thread->state) {
+        case THREAD_NEW:
+        case THREAD_READY:
+            break;
+
+        default:
+            continue;
+        }
     }
 
     return NULL;
@@ -48,7 +54,7 @@ int proc_create(void (*entry)(), int flags) {
     pcb_t *proc = kmalloc(sizeof(pcb_t));
     memset(proc, 0, sizeof(pcb_t));
     proc->pid   = __sync_fetch_and_add(&global_pid, 1);
-    proc->state = PROC_READY;
+    proc->state = PROC_NEW;
 
     proc->fds      = NULL;
     proc->fd_count = 0;
@@ -66,7 +72,7 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
     memset(thread, 0, sizeof(tcb_t));
     thread->tid    = __sync_fetch_and_add(&parent->thread_count, 1);
     thread->flags  = flags;
-    thread->state  = THREAD_READY;
+    thread->state  = THREAD_NEW;
     thread->parent = parent;
 
     thread->time_slice = SCHEDULER_THREAD_TS;
@@ -74,7 +80,7 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
     void *stack =
         (void *)PHYS_TO_VIRTUAL(pmm_alloc_pages(SCHEDULER_STACK_PAGES));
 
-    task_regs_t *ctx = kmalloc(sizeof(task_regs_t));
+    task_regs_t *ctx = (stack + (SCHEDULER_STACKSZ - sizeof(task_regs_t)));
     memset(ctx, 0, sizeof(task_regs_t));
 
     ctx->rip     = (uint64_t)entry;
@@ -196,7 +202,10 @@ int proc_exit() {
     int cpu        = get_cpu();
     tcb_t *current = current_threads[cpu];
 
-    return pcb_destroy(current->parent->pid);
+    int ret = pcb_destroy(current->parent->pid);
+
+    yield();
+    return ret;
 }
 
 void yield() {
@@ -205,17 +214,23 @@ void yield() {
     tcb_t *next;
 
     switch (current->state) {
+    case THREAD_NEW:
+        current->state = THREAD_READY;
+        return;
+
     case THREAD_READY:
-        next        = current;
-        next->state = THREAD_RUNNING;
+        current->state = THREAD_RUNNING;
+
+        next = current;
         break;
 
     case THREAD_RUNNING:
         if (--current->time_slice > 0) {
-            fpu_save(current->regs->fpu);
-            context_save(current->regs);
             return;
         }
+
+        fpu_save(current->regs->fpu);
+        context_save(current->regs);
 
         current->state      = THREAD_READY;
         current->time_slice = SCHEDULER_THREAD_TS;
@@ -234,11 +249,10 @@ void yield() {
         break;
     }
 
-    fpu_restore(next->regs->fpu);
-
     current_threads[cpu] = next;
     next->state          = THREAD_RUNNING;
 
     // it instantly returns to the RIP in here
+    fpu_restore(next->regs->fpu);
     context_load(next->regs);
 }
