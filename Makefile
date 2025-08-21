@@ -76,6 +76,7 @@ override KCFLAGS += \
 	-Wextra \
 	-std=gnu11 \
 	-ffreestanding \
+	-I $(SRC_DIR)/lib \
 	-I $(KERNEL_SRC_DIR) \
 	-I $(KERNEL_SRC_DIR)/system \
 	-I $(KERNEL_SRC_DIR)/acpi \
