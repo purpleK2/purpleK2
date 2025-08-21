@@ -71,7 +71,7 @@ A build (`.iso` file) will be released every time a Milestone is completed. The 
       - [X] Actual VMM stuff (allocating, freeing virtual memory regions)
     - [X] Kernel heap (`kmalloc`, `kfree`)
 
-- ~~[Adaptive Driver Interface](https://github.com/project-adi)~~ SCRAPPED
+- [ ] Driver interface
 
 - PCI/PCIe support
   - [X] PCI(e) devices parsing
@@ -80,17 +80,21 @@ A build (`.iso` file) will be released every time a Milestone is completed. The 
 - [ ] AHCI driver
   (we can then read from the disk 🔥)
 
+
 - File systems
   - ~~USTAR~~ CPIO
     - [X] Initial initrd creation
     - [X] File lookup
   - RAMFS
-    - [ ] Base structures
-    - [ ] File I/O (`open`, `read`, ...)
+    - [X] Base structures
+    - [X] File I/O (`open`, `read`, ...)
   - Virtual File System
     - [X] (Re)Design
-    - [ ] Initialization
-    - [ ] File I/O (`fopen`, `fread`)
+    - [X] Initialization
+    - [X] File I/O (`open`, `read`)
+  - DevFS
+    - [X] (Re)Design
+    - [X] (Re)Implementation
 
 - [ ] Scheduler
   - [ ] with threads and stuff
