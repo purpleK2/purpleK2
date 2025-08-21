@@ -201,12 +201,8 @@ int cpio_ramfs_init(cpio_fs_t *fs, ramfs_t *ramfs) {
     for (size_t i = 0; i < fs->file_count; i++) {
         cpio_file_t *file = &fs->files[i];
 
-        char *path = kmalloc(file->namesize);
-        memcpy(path, file->filename, file->namesize);
-        path[file->namesize - 1] = '\0';
-
         // use this to check for parents, and eventually create them
-        char *name_dup = strdup(path);
+        char *name_dup = strdup(file->filename);
         char *temp     = name_dup;
         char *dir;
 
