@@ -15,7 +15,7 @@ typedef struct {
     uint16_t reserved1;
     uint16_t reserved2;
     uint32_t pixel_offset;
-} bmp_file_header_t;
+} PACKED bmp_file_header_t;
 
 typedef struct {
     uint32_t header_size;
@@ -29,7 +29,7 @@ typedef struct {
     int32_t y_ppm;
     uint32_t colors_used;
     uint32_t important_colors;
-} bmp_info_header_t;
+} PACKED bmp_info_header_t;
 
 void load_bmp_to_framebuffer(const char *filename,
                              struct limine_framebuffer *fb) {
