@@ -10,7 +10,7 @@
 // BMP header structures
 #pragma pack(push, 1)
 typedef struct {
-    uint16_t signature; // 'BM'
+    char signature[2]; // 'BM'
     uint32_t file_size;
     uint16_t reserved1;
     uint16_t reserved2;
@@ -30,7 +30,6 @@ typedef struct {
     uint32_t colors_used;
     uint32_t important_colors;
 } bmp_info_header_t;
-#pragma pack(pop)
 
 void load_bmp_to_framebuffer(const char *filename,
                              struct limine_framebuffer *fb) {
@@ -46,14 +45,9 @@ void load_bmp_to_framebuffer(const char *filename,
     read(bmp_file, sizeof(file_header), &file_header);
     read(bmp_file, sizeof(info_header), &info_header);
 
-    if (file_header.signature != 0x4D42) {
-        kprintf_warn("Not a BMP file!\n");
-        close(bmp_file);
-        return;
-    }
-
-    if (info_header.bpp != 24 || info_header.compression != 0) {
-        kprintf_warn("Only 24-bit uncompressed BMPs supported!\n");
+    if (strncmp(file_header.signature, "BM", 2) != 0) {
+        kprintf_warn("Invalid signature, expected \"BM\", found \"%.2s\"\n",
+                     file_header.signature);
         close(bmp_file);
         return;
     }
