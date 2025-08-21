@@ -453,7 +453,7 @@ void kstart(void) {
     if (cpio_ramfs_init(&fs, cpio_ramfs) != 0) {
         kprintf_warn("CPIO to RAMFS conversion failed!\n");
     } else {
-        kprintf("/\n", "NAME", "SIZE");
+        kprintf("/\n");
         ramfs_print(cpio_ramfs->root_node, 0);
         kprintf_ok("CPIO to RAMFS conversion done\n");
     }
