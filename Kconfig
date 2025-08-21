@@ -1,17 +1,4 @@
-mainmenu "Project PurpleK2 Kernel"
-
-config ENABLE_64_BIT
-    bool "Enable x86_64 support"
-    default y
-    help
-      Enables x86_64 support in the kernel to support the AMD64 architecture
-
-config ENABLE_APIC
-    depends on ENABLE_64_BIT
-    bool "Enable the APIC"
-    default y
-    help
-      Enables x86_64's Advanced Programmable Interrupt Controller (APIC) support
+mainmenu "Project purpleK2 kernel"
 
 menu "Filesystems"
 
