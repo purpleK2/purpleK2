@@ -132,12 +132,38 @@ void b() {
     }
 }
 
+#include <tga/tga.h>
+
 void pk_init() {
-    proc_create(__sched_test, 0);
-    debugf_ok("Starting __sched_test\n");
+
+    load_tga_to_framebuffer("/cpio/pk2startup_1year.tga");
 
     proc_create(a, 0);
     proc_create(b, 0);
+    proc_create(__sched_test, 0);
+    debugf_ok("Starting __sched_test\n");
+
+    pci_device_t *sata = detect_controller();
+
+    map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), sata->bar[5],
+                       PHYS_TO_VIRTUAL(sata->bar[5]), 0x20000, AHCI_MMIO_FLAGS);
+
+    mem = (HBA_MEM *)PHYS_TO_VIRTUAL(sata->bar[5]);
+
+    bool mode = is_ahci_mode(mem);
+
+    if (mode)
+        kprintf("AHCI mode enabled.\n");
+    else
+        kprintf("IDE mode enabled.\n");
+
+    int sata_port = get_sata_port(mem);
+
+    port_rebase(&mem->ports[sata_port]);
+
+    test_ahci();
+
+    test_ahci_operations(mem);
 }
 
 // kernel main function
@@ -512,37 +538,12 @@ void kstart(void) {
 
     limine_parsed_data.boot_time = get_ms(system_startup_time);
 
-    pci_device_t *sata = detect_controller();
-
-    map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), sata->bar[5],
-                       PHYS_TO_VIRTUAL(sata->bar[5]), 0x20000, AHCI_MMIO_FLAGS);
-
-    mem = (HBA_MEM *)PHYS_TO_VIRTUAL(sata->bar[5]);
-
-    bool mode = is_ahci_mode(mem);
-
-    if (mode)
-        kprintf("AHCI mode enabled.\n");
-    else
-        kprintf("IDE mode enabled.\n");
-
-    int sata_port = get_sata_port(mem);
-
-    port_rebase(&mem->ports[sata_port]);
-
-    test_ahci();
-
-    test_ahci_operations(mem);
-
     kprintf("System started: Time took: %llu seconds %llu ms.\n",
             limine_parsed_data.boot_time / 1000,
             limine_parsed_data.boot_time % 1000);
 
-    // init_scheduler(pk_init);
-    // irq_registerHandler(0, scheduler_timer_tick);
-
-#include <tga/tga.h>
-    load_tga_to_framebuffer("/cpio/pk2startup_1year.tga");
+    init_scheduler(pk_init);
+    irq_registerHandler(0, scheduler_timer_tick);
 
     for (;;)
         ;

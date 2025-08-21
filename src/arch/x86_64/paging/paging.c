@@ -76,7 +76,8 @@ void pf_handler(void *ctx) {
 
     if (PG_IF(pf_error_code)) {
         proc_exit();
-        yield(); // tell scheduler to select another process
+        yield(ctx); // tell scheduler to select another process
+        return;
     }
 
     stdio_panic_init();
