@@ -162,11 +162,8 @@ void lapic_timer_init(void) {
 }
 
 void lapic_timer_handler(void *ctx) {
-
     if (get_ticks() >= MAX_LAPIC_TICKS)
         set_ticks(0);
 
     set_ticks(get_ticks() + 1);
-
-    lapic_send_eoi();
 }
