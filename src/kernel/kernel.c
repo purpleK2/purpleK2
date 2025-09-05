@@ -135,9 +135,6 @@ void b() {
 #include <tga/tga.h>
 
 void pk_init() {
-
-    load_tga_to_framebuffer("/cpio/pk2startup_1year.tga");
-
     proc_create(a, 0);
     proc_create(b, 0);
     proc_create(__sched_test, 0);
@@ -543,7 +540,8 @@ void kstart(void) {
             limine_parsed_data.boot_time % 1000);
 
     init_scheduler(pk_init);
-    irq_registerHandler(0, scheduler_timer_tick);
+    // irq_registerHandler(0, scheduler_timer_tick);
+   load_tga_to_framebuffer("/cpio/pk2startup_1year.tga");
 
     for (;;)
         ;
