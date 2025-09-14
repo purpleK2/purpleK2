@@ -1,6 +1,7 @@
 #include "kernel.h"
 #include "dev/display/fb/fbdev.h"
 #include "fs/devfs/devfs.h"
+#include "fs/part/mbr.h"
 
 #include <autoconf.h>
 
@@ -533,15 +534,43 @@ void kstart(void) {
         kprintf_ok("PCIe devices parsing done\n");
     }
 
+    pci_device_t *sata = detect_controller();
+
+    map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), sata->bar[5],
+                       PHYS_TO_VIRTUAL(sata->bar[5]), 0x20000, AHCI_MMIO_FLAGS);
+
+    mem = (HBA_MEM *)PHYS_TO_VIRTUAL(sata->bar[5]);
+
+    bool mode = is_ahci_mode(mem);
+
+    if (mode)
+        kprintf("AHCI mode enabled.\n");
+    else
+        kprintf("IDE mode enabled.\n");
+
+    int sata_port = get_sata_port(mem);
+
+    port_rebase(&mem->ports[sata_port]);
+
+    test_ahci();
+
+    if (parse_mbr(mem, &g_partitions) == 0) {
+        print_partition_summary(g_partitions);
+        free_partitions(g_partitions);
+    } else {
+        kprintf_warn("Failed to parse MBR\n");
+        free_partitions(g_partitions);
+    }
+
     limine_parsed_data.boot_time = get_ms(system_startup_time);
 
     kprintf("System started: Time took: %llu seconds %llu ms.\n",
             limine_parsed_data.boot_time / 1000,
             limine_parsed_data.boot_time % 1000);
 
-    init_scheduler(pk_init);
+    // init_scheduler(pk_init);
     // irq_registerHandler(0, scheduler_timer_tick);
-   load_tga_to_framebuffer("/cpio/pk2startup_1year.tga");
+    // load_tga_to_framebuffer("/cpio/pk2startup_1year.tga");
 
     for (;;)
         ;
