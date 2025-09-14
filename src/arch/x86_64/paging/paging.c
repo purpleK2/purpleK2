@@ -374,7 +374,8 @@ void paging_init(uint64_t *kernel_pml4) {
     for (uint64_t i = 0; i < memmap_response->entry_count; i++) {
         struct limine_memmap_entry *memmap_entry = memmap_response->entries[i];
 
-        // we won't identity map
+        if (memmap_entry->type == LIMINE_MEMMAP_RESERVED)
+            continue;
 
         map_region_to_page(kernel_pml4, memmap_entry->base,
                            PHYS_TO_VIRTUAL(memmap_entry->base),
