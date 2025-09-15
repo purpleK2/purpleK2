@@ -1,10 +1,10 @@
 #ifndef AHCI_H
 #define AHCI_H 1
 
+#include <pci/pci.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <util/macro.h>
-#include <pci/pci.h>
 
 #define FALSE                0
 #define TRUE                 1
@@ -225,6 +225,8 @@ typedef struct tagHBA_CMD_TBL {
     HBA_PRDT_ENTRY prdt_entry[1];
 } HBA_CMD_TBL;
 
+extern HBA_MEM *abar_mem;
+
 void probe_port(HBA_MEM *abar);
 static int check_type(HBA_PORT *port);
 void port_rebase(HBA_PORT *port);
@@ -236,9 +238,10 @@ bool ahci_write(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer);
 void detect_disk(HBA_MEM *abar);
 pci_device_t *detect_controller();
 int get_sata_port(HBA_MEM *abar);
-bool is_ahci_mode(HBA_MEM* abar);
+bool is_ahci_mode(HBA_MEM *abar);
 
-bool READ(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count, uint16_t *buf);
+bool READ(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count,
+          uint16_t *buf);
 
 void test_ahci();
 void test_ahci_operations(HBA_MEM *abar);
