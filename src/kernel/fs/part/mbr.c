@@ -135,17 +135,6 @@ int parse_ebr(HBA_MEM *abar, uint32_t ebr_lba, uint32_t extended_start_lba,
                       ebr.partitions[0].status, logical_start,
                       ebr.partitions[0].sectors, 0,
                       1); // Not extended, is logical
-
-        kprintf("Logical partition found:\n");
-        kprintf("  Type: 0x%02X (%s)\n", ebr.partitions[0].type,
-                get_partition_type_name(ebr.partitions[0].type));
-        kprintf("  Status: 0x%02X %s\n", ebr.partitions[0].status,
-                (ebr.partitions[0].status == 0x80) ? "(Bootable)"
-                                                   : "(Non-bootable)");
-        kprintf("  Start LBA: %u\n", logical_start);
-        kprintf("  Size: %u sectors (%.2f MB)\n", ebr.partitions[0].sectors,
-                (ebr.partitions[0].sectors * 512.0) / (1024.0 * 1024.0));
-        kprintf("\n");
     }
 
     if (ebr.partitions[1].type != 0 && ebr.partitions[1].sectors > 0) {
@@ -177,9 +166,6 @@ int parse_mbr(HBA_MEM *abar, partition_info_t **partitions) {
         return -1;
     }
 
-    kprintf("MBR parsed successfully!\n");
-    kprintf("Signature: 0x%04X\n\n", mbr.signature);
-
     for (int i = 0; i < 4; i++) {
         partition_entry_t *part = &mbr.partitions[i];
 
@@ -187,23 +173,11 @@ int parse_mbr(HBA_MEM *abar, partition_info_t **partitions) {
             continue;
         }
 
-        kprintf("Primary partition %d:\n", i + 1);
-        kprintf("  Type: 0x%02X (%s)\n", part->type,
-                get_partition_type_name(part->type));
-        kprintf("  Status: 0x%02X %s\n", part->status,
-                (part->status == 0x80) ? "(Bootable)" : "(Non-bootable)");
-        kprintf("  Start LBA: %u\n", part->lba_first);
-        kprintf("  Size: %u sectors (%.2f MB)\n", part->sectors,
-                (part->sectors * 512.0) / (1024.0 * 1024.0));
-
         if (is_extended_partition(part->type)) {
-            kprintf("  ** Extended partition detected **\n");
-            kprintf("\n");
 
             add_partition(partitions, part->type, part->status, part->lba_first,
                           part->sectors, 1, 0);
 
-            kprintf("Parsing logical partitions in extended partition:\n");
             if (parse_ebr(abar, part->lba_first, part->lba_first, partitions) !=
                 0) {
                 kprintf("Error parsing EBR chain\n");

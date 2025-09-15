@@ -338,7 +338,6 @@ void paging_init(uint64_t *kernel_pml4) {
     uint64_t a_kernel_text_start = (uint64_t)&__kernel_text_start;
     uint64_t a_kernel_text_end   = (uint64_t)&__kernel_text_end;
     uint64_t kernel_text_len     = a_kernel_text_end - a_kernel_text_start;
-    kprintf_info("Mapping section .text\n");
     map_region_to_page(kernel_pml4, a_kernel_text_start - VIRT_BASE + PHYS_BASE,
                        a_kernel_text_start, kernel_text_len,
                        PMLE_KERNEL_READ_WRITE);
@@ -346,7 +345,6 @@ void paging_init(uint64_t *kernel_pml4) {
     uint64_t a_kernel_rodata_start = (uint64_t)&__kernel_rodata_start;
     uint64_t a_kernel_rodata_end   = (uint64_t)&__kernel_rodata_end;
     uint64_t kernel_rodata_len = a_kernel_rodata_end - a_kernel_rodata_start;
-    kprintf_info("Mapping section .rodata\n");
     map_region_to_page(kernel_pml4,
                        a_kernel_rodata_start - VIRT_BASE + PHYS_BASE,
                        a_kernel_rodata_start, kernel_rodata_len,
@@ -356,7 +354,6 @@ void paging_init(uint64_t *kernel_pml4) {
     uint64_t a_kernel_data_end   = (uint64_t)&__kernel_data_end;
     uint64_t kernel_data_len     = a_kernel_data_end - a_kernel_data_start;
     uint64_t kernel_other_len    = a_kernel_end - a_kernel_data_end;
-    kprintf_info("Mapping section .data\n");
     map_region_to_page(kernel_pml4, a_kernel_data_start - VIRT_BASE + PHYS_BASE,
                        a_kernel_data_start, kernel_data_len + kernel_other_len,
                        PMLE_KERNEL_READ_WRITE | PMLE_NOT_EXECUTABLE);
@@ -364,13 +361,11 @@ void paging_init(uint64_t *kernel_pml4) {
     uint64_t a_limine_reqs_start = (uint64_t)&__limine_reqs_start;
     uint64_t a_limine_reqs_end   = (uint64_t)&__limine_reqs_end;
     uint64_t limine_reqs_len     = a_limine_reqs_end - a_limine_reqs_start;
-    kprintf_info("Mapping section .requests\n");
     map_region_to_page(kernel_pml4, a_limine_reqs_start - VIRT_BASE + PHYS_BASE,
                        a_limine_reqs_start, limine_reqs_len,
                        PMLE_KERNEL_READ_WRITE | PMLE_NOT_EXECUTABLE);
 
     // map the whole memory
-    kprintf_info("Mapping all the memory\n");
     for (uint64_t i = 0; i < memmap_response->entry_count; i++) {
         struct limine_memmap_entry *memmap_entry = memmap_response->entries[i];
 
@@ -381,8 +376,6 @@ void paging_init(uint64_t *kernel_pml4) {
                            PHYS_TO_VIRTUAL(memmap_entry->base),
                            memmap_entry->length, PMLE_KERNEL_READ_WRITE);
     }
-
-    kprintf_info("All mappings done.\n");
 
     debugf_debug("Our PML4 sits at %llp\n", kernel_pml4);
     global_pml4 = (uint64_t *)VIRT_TO_PHYSICAL(kernel_pml4);

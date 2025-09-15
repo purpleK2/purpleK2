@@ -288,9 +288,9 @@ void pci_print_list() {
         debugf("\t%s\n", dev->prog_if == 0 ? "No Programming Interface"
                                            : "Programming Interface");
 #else
-        mprintf("[%.02hhx:%.02hhx.%.01hhx] %s %s (%04x:%04x)\n", dev->bus,
-                dev->device, dev->function, dev->vendor_str, dev->device_str,
-                dev->vendor_id, dev->device_id);
+        debugf("[%.02hhx:%.02hhx.%.01hhx] %s %s (%04x:%04x)\n", dev->bus,
+               dev->device, dev->function, dev->vendor_str, dev->device_str,
+               dev->vendor_id, dev->device_id);
 #endif
         switch (dev->irq_pin) {
         case 1:

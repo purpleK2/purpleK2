@@ -2,6 +2,7 @@
 #include "dev/display/fb/fbdev.h"
 #include "fs/devfs/devfs.h"
 #include "fs/part/mbr.h"
+#include "structures/hashmap.h"
 
 #include <autoconf.h>
 
@@ -118,6 +119,8 @@ struct bootloader_data *get_bootloader_data() {
 vmm_context_t *kernel_vmm_ctx;
 
 extern void __sched_test(void);
+
+HBA_MEM *abar_mem = NULL;
 
 HBA_MEM *mem;
 
@@ -456,26 +459,10 @@ void kstart(void) {
         _hcf();
     }
 
-    kprintf_ok("Initrd.cpio parsed successfully!\n");
-
-    // test CPIO read
-    char buffer[256];
-    size_t read_size = cpio_fs_read(&fs, "test.txt", buffer, sizeof(buffer));
-    if (read_size > 0) {
-        kprintf("Read %zu bytes from test.txt:\n%.*s\n\n", read_size,
-                (int)read_size, buffer);
-    } else {
-        kprintf_warn("Failed to read test.txt from initrd.cpio\n");
-    }
-
     // create the RAMFS
     ramfs_t *cpio_ramfs = ramfs_create();
     if (cpio_ramfs_init(&fs, cpio_ramfs) != 0) {
         kprintf_warn("CPIO to RAMFS conversion failed!\n");
-    } else {
-        kprintf("/\n");
-        ramfs_print(cpio_ramfs->root_node, 0);
-        kprintf_ok("CPIO to RAMFS conversion done\n");
     }
 
     // create the VFS for CPIO
@@ -484,18 +471,6 @@ void kstart(void) {
     fileio_t *test_file = open("/cpio/directory/another.txt", 0);
     if (!test_file) {
         kprintf_warn("Couldn't open file!\n");
-    }
-
-    sprintf(buffer, "BTW this is not the original file content LOLLL\n");
-    write(test_file, buffer, strlen(buffer));
-
-    seek(test_file, 0, SEEK_SET); // go back to start of file
-
-    read(test_file, sizeof(buffer), buffer);
-    kprintf("VFS read test: %s", buffer);
-
-    if (close(test_file) == EOK) {
-        kprintf_ok("File operations completed successfully!\n");
     }
 
     register_std_devices();
@@ -513,7 +488,7 @@ void kstart(void) {
         kprintf_ok("DEVFS initialized successfully!\n");
     }
 
-    devfs_print(devfs->root_node, 0);
+    // devfs_print(devfs->root_node, 0);
 
 #endif
 
@@ -526,7 +501,6 @@ void kstart(void) {
     cpio_file_t *pci_ids = cpio_fs_get_file(&fs, "pci.ids");
 
     pci_scan(pci_ids);
-    pci_print_list();
     kprintf_ok("PCI devices parsing done\n");
     if (pcie_devices_init(pci_ids) != 0) {
         kprintf_warn("Failed to parse PCIe devices!\n");
@@ -541,25 +515,17 @@ void kstart(void) {
 
     mem = (HBA_MEM *)PHYS_TO_VIRTUAL(sata->bar[5]);
 
-    bool mode = is_ahci_mode(mem);
-
-    if (mode)
-        kprintf("AHCI mode enabled.\n");
-    else
-        kprintf("IDE mode enabled.\n");
-
     int sata_port = get_sata_port(mem);
 
     port_rebase(&mem->ports[sata_port]);
 
     test_ahci();
 
+    abar_mem = mem;
+
     if (parse_mbr(mem, &g_partitions) == 0) {
-        print_partition_summary(g_partitions);
-        free_partitions(g_partitions);
     } else {
         kprintf_warn("Failed to parse MBR\n");
-        free_partitions(g_partitions);
     }
 
     limine_parsed_data.boot_time = get_ms(system_startup_time);
