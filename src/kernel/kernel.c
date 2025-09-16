@@ -1,5 +1,6 @@
 #include "kernel.h"
 #include "dev/display/fb/fbdev.h"
+#include "elf/sym.h"
 #include "fs/devfs/devfs.h"
 #include "fs/part/mbr.h"
 #include "structures/hashmap.h"
@@ -263,6 +264,8 @@ void kstart(void) {
         debugf_panic("No memory map received!\n");
         _hcf();
     }
+
+    kernel_file = kernel_file_request.response->kernel_file;
 
     memmap_response = memmap_request.response;
 
@@ -533,6 +536,11 @@ void kstart(void) {
     kprintf("System started: Time took: %llu seconds %llu ms.\n",
             limine_parsed_data.boot_time / 1000,
             limine_parsed_data.boot_time % 1000);
+
+    uint64_t symaddr = resolve_symbol_addr(kernel_file->address,
+                                           kernel_file->size, "vfs_create");
+
+    kprintf("Example Symaddr: %.16llx", symaddr);
 
     // init_scheduler(pk_init);
     // irq_registerHandler(0, scheduler_timer_tick);

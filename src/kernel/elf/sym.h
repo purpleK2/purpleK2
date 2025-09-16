@@ -9,6 +9,25 @@
 #define SHT_STRTAB 3
 #define STT_FUNC   2
 
+#define EI_CLASS   4 // e_ident[] index for file class
+#define ELFCLASS64 2 // 64-bit ELF
+
+#define SHT_SYMTAB 2  // Symbol table section
+#define SHT_STRTAB 3  // String table section
+#define SHT_DYNSYM 11 // Dynamic symbol table section
+
+// Symbol bindings
+#define STB_LOCAL  0
+#define STB_GLOBAL 1
+#define STB_WEAK   2
+
+// Special section indices
+#define SHN_UNDEF 0
+
+// Macro to extract symbol binding/type from st_info
+#define ELF64_ST_BIND(i) ((i) >> 4)
+#define ELF64_ST_TYPE(i) ((i) & 0x0F)
+
 typedef struct {
     unsigned char e_ident[EI_NIDENT];
     uint16_t e_type;
@@ -49,5 +68,10 @@ typedef struct {
 } Elf64_Sym;
 
 const char *resolve_symbol_name(void *elf_data, size_t size, uint64_t addr);
+
+uint64_t
+resolve_symbol_addr(void *elf_data, size_t size,
+                    const char *symbol_name); // so this is like for kernel
+                                              // modules / drivers because :3c
 
 #endif // ELF_SYM_H
