@@ -161,6 +161,7 @@ $(OS_CODENAME).hdd: $(BUILD_DIR)/$(INITRD) $(BUILD_DIR)/$(KERNEL) limine_build
 	mcopy -i $@@@1M $(BUILD_DIR)/$(KERNEL) ::/
 	mcopy -i $@@@1M $(BUILD_DIR)/$(INITRD) ::/
 	mcopy -i $@@@1M $(SRC_DIR)/limine.conf ::/boot/limine
+	mcopy -i $@@@1M $(SRC_DIR)/bg.png ::/
 
 	mcopy -i $@@@1M $(LIBS_DIR)/limine/limine-bios.sys ::/boot/limine
 	mcopy -i $@@@1M $(LIBS_DIR)/limine/BOOTX64.EFI ::/EFI/BOOT
