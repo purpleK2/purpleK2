@@ -303,6 +303,25 @@ uint64_t *get_kernel_pml4() {
 
 extern struct limine_memmap_response *memmap_response;
 
+void pat_init(void) {
+    uint64_t custom_pat =
+        ((uint64_t)PAT_WRITEBACK) |          // Entry 0: WB
+        ((uint64_t)PAT_WRITE_THROUGH << 8) | // Entry 1: WT
+        ((uint64_t)PAT_UNCACHEABLE
+         << 16) | // Entry 2: UC (should be minus but fuck that)
+        ((uint64_t)PAT_UNCACHEABLE << 24) |   // Entry 3: UC
+        ((uint64_t)PAT_WRITEBACK << 32) |     // Entry 4: WB
+        ((uint64_t)PAT_WRITE_THROUGH << 40) | // Entry 5: WT
+        ((uint64_t)PAT_WRITE_COMBINING
+         << 48) | // Entry 6: WC <-- important for the framebuffer so it doesnt
+                  // have ass performance
+        ((uint64_t)PAT_UNCACHEABLE << 56); // Entry 7: UC
+
+    debugf_debug("Old PAT: 0x%.16llx\n", _cpu_get_msr(0x277));
+    _cpu_set_msr(0x277, custom_pat);
+    debugf_debug("New PAT: 0x%.16llx\n", _cpu_get_msr(0x277));
+}
+
 // this initializes kernel-level paging
 // `kernel_pml4` should already be `pmm_alloc()`'d
 void paging_init(uint64_t *kernel_pml4) {
@@ -371,6 +390,13 @@ void paging_init(uint64_t *kernel_pml4) {
 
         if (memmap_entry->type == LIMINE_MEMMAP_RESERVED)
             continue;
+
+        if (memmap_entry->type == LIMINE_MEMMAP_FRAMEBUFFER) {
+            map_region_to_page(kernel_pml4, memmap_entry->base,
+                               PHYS_TO_VIRTUAL(memmap_entry->base),
+                               memmap_entry->length, PMLE_FRAMEBUFFER_WC);
+            continue;
+        }
 
         map_region_to_page(kernel_pml4, memmap_entry->base,
                            PHYS_TO_VIRTUAL(memmap_entry->base),

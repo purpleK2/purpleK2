@@ -34,6 +34,7 @@
 #define PMLE_PWT            (1 << 3)
 #define PMLE_PCD            (1 << 4)
 #define PMLE_ACCESSED       (1 << 5)
+#define PMLE_PAT            (1 << 7)
 #define PMLE_NOT_EXECUTABLE (1ull << 63)
 
 // Page privileges attributes
@@ -43,7 +44,9 @@
 #define PMLE_KERNEL_READ_WRITE PMLE_PRESENT | PMLE_WRITE
 #define PMLE_USER_READ         PMLE_PRESENT | PMLE_USER
 #define PMLE_USER_READ_WRITE   PMLE_PRESENT | PMLE_WRITE | PMLE_USER
-#define AHCI_MMIO_FLAGS (PMLE_PRESENT | PMLE_WRITE | PMLE_PCD | PMLE_ACCESSED | PMLE_NOT_EXECUTABLE)
+#define PMLE_FRAMEBUFFER_WC    (PMLE_KERNEL_READ_WRITE | PMLE_PCD | PMLE_PAT)
+#define AHCI_MMIO_FLAGS                                                        \
+    (PMLE_PRESENT | PMLE_WRITE | PMLE_PCD | PMLE_ACCESSED | PMLE_NOT_EXECUTABLE)
 
 // by
 // https://github.com/malwarepad/cavOS/blob/646237dfd6c4173a4c059cccd74c63dd31cfd052/src/kernel/include/paging.h
@@ -113,6 +116,7 @@ void copy_range_to_pagemap(uint64_t *dst_pml4, uint64_t *src_pml4,
 uint64_t vmo_to_page_flags(uint64_t vmo_flags);
 uint64_t page_to_vmo_flags(uint64_t pg_flags);
 
+void pat_init(void);
 void paging_init(uint64_t *kernel_pml4);
 
 #endif
