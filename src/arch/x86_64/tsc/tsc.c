@@ -24,13 +24,13 @@ uint64_t get_cpu_freq_msr() {
 
     start_tsc = _get_tsc();
 
-    pit_sleep(1000);
+    pit_sleep(1);
 
     end_tsc = _get_tsc();
 
     uint64_t tsc_diff = end_tsc - start_tsc; // Convert to seconds
 
-    return tsc_diff;
+    return tsc_diff * 1000;
 }
 
 void tsc_init() {
