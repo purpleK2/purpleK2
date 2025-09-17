@@ -17,8 +17,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <math.h>
-
 #include <autoconf.h>
 
 pcie_device_t *pcie_devices_head = NULL;
@@ -350,7 +348,7 @@ pcie_status pcie_add_device(void *pcie_addr, cpio_file_t *pci_ids,
     void *p = (pcie_addr + sizeof(pcie_header_t));
 
     switch (pcie_header->header_type & 0b1) {
-    case PCIE_HEADER_T0:
+    case PCIE_HEADER_T0: {
         pcie_header0_t *header0 = kmalloc(sizeof(pcie_header0_t));
         memcpy(header0, p, sizeof(pcie_header0_t));
 
@@ -364,8 +362,9 @@ pcie_status pcie_add_device(void *pcie_addr, cpio_file_t *pci_ids,
 
         kfree(header0);
         break;
+    }
 
-    case PCIE_HEADER_T1:
+    case PCIE_HEADER_T1: {
         pcie_header1_t *header1 = kmalloc(sizeof(pcie_header1_t));
         memcpy(header1, p, sizeof(pcie_header1_t));
 
@@ -379,6 +378,7 @@ pcie_status pcie_add_device(void *pcie_addr, cpio_file_t *pci_ids,
 
         kfree(header1);
         break;
+    }
 
     default:
         debugf_warn("Unknown PCIe header type %.02d!",

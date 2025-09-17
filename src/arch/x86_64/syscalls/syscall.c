@@ -133,6 +133,9 @@ int sys_fcntl(int fd, int op, void *arg) {
 
 long handle_syscall(long num, long arg1, long arg2, long arg3, long arg4,
                     long arg5, long arg6) {
+    UNUSED(arg4);
+    UNUSED(arg5);
+    UNUSED(arg6);
     switch (num) {
     case SYS_exit:
         sys_exit(arg1);

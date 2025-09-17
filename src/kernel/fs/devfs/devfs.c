@@ -44,6 +44,7 @@ int devfs_find_node(devfs_t *devfs, char *path, devfs_node_t **out) {
 
     // j = level of current node
     for (int j = 0; *temp; j++) {
+        UNUSED(j);
         dir = strtok_r(NULL, "/", &temp);
 
         for (; cur_node != NULL; cur_node = cur_node->sibling) {
@@ -92,6 +93,7 @@ int devfs_node_add(devfs_t *devfs, char *path, devfs_node_t **out) {
 
     // j = level of current node
     for (int j = 0; *temp; j++) {
+        UNUSED(j);
         dir = strtok_r(NULL, "/", &temp);
 
         for (; cur_node != NULL; cur_node = cur_node->sibling) {

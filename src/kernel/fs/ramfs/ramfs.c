@@ -41,6 +41,7 @@ int ramfs_find_node(ramfs_t *ramfs, char *path, ramfs_node_t **out) {
 
     // j = level of current node
     for (int j = 0; *temp; j++) {
+        UNUSED(j);
         dir = strtok_r(NULL, "/", &temp);
 
         for (; cur_node != NULL; cur_node = cur_node->sibling) {
@@ -91,6 +92,7 @@ int ramfs_node_add(ramfs_t *ramfs, char *path, ramfs_node_t **out) {
 
     // j = level of current node
     for (int j = 0; *temp; j++) {
+        UNUSED(j);
         dir = strtok_r(NULL, "/", &temp);
 
         for (; cur_node != NULL; cur_node = cur_node->sibling) {
@@ -222,7 +224,7 @@ size_t ramfs_get_node_size(ramfs_node_t *node) {
         return ENULLPTR;
     }
 
-    size_t s;
+    size_t s = 0;
 
     switch (node->type) {
     case RAMFS_FILE:

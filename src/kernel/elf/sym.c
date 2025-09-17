@@ -4,6 +4,7 @@
 #include <string.h>
 
 const char *resolve_symbol_name(void *elf_data, size_t size, uint64_t addr) {
+    UNUSED(size);
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)elf_data;
     if (memcmp(ehdr->e_ident,
                "\x7f"
@@ -50,6 +51,7 @@ const char *resolve_symbol_name(void *elf_data, size_t size, uint64_t addr) {
 
 uint64_t resolve_symbol_addr(void *elf_data, size_t size,
                              const char *symbol_name) {
+    UNUSED(size);
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)elf_data;
     if (memcmp(ehdr->e_ident,
                "\x7f"
@@ -104,6 +106,51 @@ uint64_t resolve_symbol_addr(void *elf_data, size_t size,
 
         Elf64_Shdr *sec = &shdrs[sym->st_shndx];
         return sym->st_value + sec->sh_addr;
+    }
+
+    return 0;
+}
+
+uint64_t resolve_module_symbol(void *elf_data, Elf64_Shdr *shdrss,
+                               const char *symbol_name, uint8_t *load_base) {
+    UNUSED(shdrss);
+    Elf64_Ehdr *ehdr  = (Elf64_Ehdr *)elf_data;
+    Elf64_Shdr *shdrs = (Elf64_Shdr *)((uint8_t *)elf_data + ehdr->e_shoff);
+    Elf64_Shdr *shstrtab_hdr = &shdrs[ehdr->e_shstrndx];
+    const char *shstrtab     = (const char *)elf_data + shstrtab_hdr->sh_offset;
+
+    Elf64_Shdr *symtab_hdr = NULL;
+    Elf64_Shdr *strtab_hdr = NULL;
+
+    for (uint16_t i = 0; i < ehdr->e_shnum; i++) {
+        const char *name = shstrtab + shdrs[i].sh_name;
+        if (shdrs[i].sh_type == SHT_SYMTAB && !symtab_hdr)
+            symtab_hdr = &shdrs[i];
+        else if (shdrs[i].sh_type == SHT_STRTAB && strcmp(name, ".strtab") == 0)
+            strtab_hdr = &shdrs[i];
+    }
+
+    if (!symtab_hdr || !strtab_hdr)
+        return 0;
+
+    Elf64_Sym *symbols =
+        (Elf64_Sym *)((uint8_t *)elf_data + symtab_hdr->sh_offset);
+    size_t num_syms    = symtab_hdr->sh_size / sizeof(Elf64_Sym);
+    const char *strtab = (const char *)elf_data + strtab_hdr->sh_offset;
+
+    for (size_t i = 0; i < num_syms; i++) {
+        Elf64_Sym *sym = &symbols[i];
+        if (sym->st_name == 0)
+            continue;
+
+        const char *name = strtab + sym->st_name;
+        if (strcmp(name, symbol_name) != 0)
+            continue;
+
+        if (sym->st_shndx == SHN_UNDEF)
+            continue; // undefined symbol
+
+        return (uint64_t)load_base + sym->st_value;
     }
 
     return 0;

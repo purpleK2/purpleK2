@@ -161,6 +161,8 @@ void isr_handler(void *ctx) {
     if (is_lapic_enabled())
         cpu = lapic_get_id();
 
+    UNUSED(cpu);
+
     if (isr_handlers[regs->interrupt] != NULL) {
         isr_handlers[regs->interrupt](regs);
     } else if (regs->interrupt >= 32) {

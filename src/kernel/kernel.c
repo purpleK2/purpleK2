@@ -1,9 +1,7 @@
 #include "kernel.h"
 #include "dev/display/fb/fbdev.h"
-#include "elf/sym.h"
 #include "fs/devfs/devfs.h"
 #include "fs/part/mbr.h"
-#include "structures/hashmap.h"
 
 #include <autoconf.h>
 
@@ -51,14 +49,11 @@
 #include <util/assert.h>
 #include <util/macro.h>
 
-#include <test.h>
-
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 
 #define INITRD_FILE "initrd.cpio"
 #define INITRD_PATH "/" INITRD_FILE
@@ -266,6 +261,9 @@ void kstart(void) {
     }
 
     kernel_file = kernel_file_request.response->kernel_file;
+
+    limine_parsed_data.kernel_file_data = kernel_file->address;
+    limine_parsed_data.kernel_file_size = kernel_file->size;
 
     memmap_response = memmap_request.response;
 
@@ -530,17 +528,6 @@ void kstart(void) {
     } else {
         kprintf_warn("Failed to parse MBR\n");
     }
-
-    limine_parsed_data.boot_time = get_ms(system_startup_time);
-
-    kprintf("System started: Time took: %llu seconds %llu ms.\n",
-            limine_parsed_data.boot_time / 1000,
-            limine_parsed_data.boot_time % 1000);
-
-    uint64_t symaddr = resolve_symbol_addr(kernel_file->address,
-                                           kernel_file->size, "vfs_create");
-
-    kprintf("Example Symaddr: %.16llx", symaddr);
 
     // init_scheduler(pk_init);
     // irq_registerHandler(0, scheduler_timer_tick);

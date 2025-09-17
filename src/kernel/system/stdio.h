@@ -8,7 +8,8 @@
 #include <tsc/tsc.h>
 
 #include <stdint.h>
-#include <time.h>
+
+#include "time.h"
 
 extern bool pit;
 

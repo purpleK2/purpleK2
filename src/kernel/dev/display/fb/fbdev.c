@@ -1,6 +1,7 @@
 #include "fbdev.h"
 #include "kernel.h"
 #include "limine.h"
+#include "util/macro.h"
 
 #include <errors.h>
 #include <memory/heap/kheap.h>
@@ -57,6 +58,15 @@ int dev_fb_write(device_t *dev, const void *buffer, size_t size,
     return EOK;
 }
 int dev_fb_read(device_t *dev, void *buffer, size_t size, size_t offset) {
+    UNUSED(dev);
+    UNUSED(buffer);
+    UNUSED(size);
+    UNUSED(offset);
+    return -ENOIMPL;
 }
 int dev_fb_ioctl(device_t *dev, int request, void *argp) {
+    UNUSED(dev);
+    UNUSED(request);
+    UNUSED(argp);
+    return -ENOIMPL;
 }

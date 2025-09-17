@@ -1,4 +1,5 @@
 #include "hpet.h"
+#include "util/macro.h"
 
 #include <apic/ioapic/ioapic.h>
 #include <interrupts/irq.h>
@@ -173,4 +174,5 @@ uint64_t hpet_get_counter() {
 }
 
 void hpet_main_timer(void *ctx) {
+    UNUSED(ctx);
 }

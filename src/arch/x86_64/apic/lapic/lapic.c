@@ -162,6 +162,7 @@ void lapic_timer_init(void) {
 }
 
 void lapic_timer_handler(void *ctx) {
+    UNUSED(ctx);
     if (get_ticks() >= MAX_LAPIC_TICKS)
         set_ticks(0);
 
