@@ -337,7 +337,7 @@ uint64_t strtoull(const char *str, const char **endptr, int base) {
 int nnatoi(char *s, size_t n, size_t base) {
     int a = 0;
 
-    for (int i = 0; i < n; i++) {
+    for (unsigned long i = 0; i < n; i++) {
         int num = s[i] - '0';
 
         a *= base;
@@ -354,7 +354,7 @@ int natoi(char *s, size_t n) {
 int nxatoi(char *s, size_t n) {
     int a = 0;
 
-    for (int i = 0; i < n; i++) {
+    for (unsigned long i = 0; i < n; i++) {
         int num;
 
         switch (s[i]) {

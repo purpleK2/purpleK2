@@ -2,6 +2,7 @@
 
 #include <memory/pmm/pmm.h>
 #include <paging/paging.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -36,7 +37,7 @@ void probe_port(HBA_MEM *abar) {
     }
 }
 
-static int check_type(HBA_PORT *port) {
+int check_type(HBA_PORT *port) {
     uint32_t ssts = port->ssts;
     uint8_t ipm   = (ssts >> 8) & 0x0F;
     uint8_t det   = ssts & 0x0F;
@@ -75,6 +76,7 @@ int get_sata_port(HBA_MEM *abar) {
         pi >>= 1;
         i++;
     }
+    return -1;
 }
 
 void port_rebase(HBA_PORT *port) {
@@ -151,7 +153,7 @@ bool READ(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count,
     int i;
 
     for (i = 0; i < cmdheader->prdtl - 1; i++) {
-        cmdtbl->prdt_entry[i].dba = (uint32_t)buf;
+        cmdtbl->prdt_entry[i].dba = (uint32_t)(uintptr_t)buf;
         cmdtbl->prdt_entry[i].dbc =
             8 * 1024 - 1; // 8K bytes (this value should always be set to 1 less
                           // than the actual value)
@@ -160,7 +162,7 @@ bool READ(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count,
         count                   -= 16;       // 16 sectors
     }
     // Last entry
-    cmdtbl->prdt_entry[i].dba = (uint32_t)buf;
+    cmdtbl->prdt_entry[i].dba = (uint32_t)(uintptr_t)buf;
     cmdtbl->prdt_entry[i].dbc = (count << 9) - 1; // 512 bytes per sector
     cmdtbl->prdt_entry[i].i   = 1;
 
@@ -264,14 +266,14 @@ bool ahci_write(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
                (cmdheader->prdtl - 1) * sizeof(HBA_PRDT_ENTRY));
 
     for (int i = 0; i < cmdheader->prdtl - 1; i++) {
-        cmdtbl->prdt_entry[i].dba  = (uint32_t)buffer;
+        cmdtbl->prdt_entry[i].dba  = (uint32_t)(uintptr_t)buffer;
         cmdtbl->prdt_entry[i].dbc  = 8 * 1024 - 1;
         cmdtbl->prdt_entry[i].i    = 1;
         buffer                    += 4 * 1024;
         count                     -= 16;
     }
 
-    cmdtbl->prdt_entry[cmdheader->prdtl - 1].dba = (uint32_t)buffer;
+    cmdtbl->prdt_entry[cmdheader->prdtl - 1].dba = (uint32_t)(uintptr_t)buffer;
     cmdtbl->prdt_entry[cmdheader->prdtl - 1].dbc = (count << 9) - 1;
     cmdtbl->prdt_entry[cmdheader->prdtl - 1].i   = 1;
 
@@ -327,6 +329,7 @@ pci_device_t *detect_controller() {
         }
         current = current->next;
     }
+    return NULL;
 }
 
 bool is_ahci_mode(HBA_MEM *abar) {

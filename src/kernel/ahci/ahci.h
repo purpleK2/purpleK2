@@ -228,7 +228,7 @@ typedef struct tagHBA_CMD_TBL {
 extern HBA_MEM *abar_mem;
 
 void probe_port(HBA_MEM *abar);
-static int check_type(HBA_PORT *port);
+int check_type(HBA_PORT *port);
 void port_rebase(HBA_PORT *port);
 void start_cmd(HBA_PORT *port);
 void stop_cmd(HBA_PORT *port);

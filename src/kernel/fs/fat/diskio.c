@@ -22,6 +22,9 @@ DSTATUS disk_status(BYTE pdrv) {
     DSTATUS stat;
     int result;
 
+    UNUSED(result);
+    UNUSED(stat);
+
     switch (pdrv) {
     case DEV_AHCI:
         return RES_OK;
@@ -37,6 +40,9 @@ DSTATUS
 disk_initialize(BYTE pdrv) {
     DSTATUS stat;
     int result;
+
+    UNUSED(result);
+    UNUSED(stat);
 
     switch (pdrv) {
     case DEV_AHCI:
@@ -57,6 +63,9 @@ DRESULT disk_read(BYTE pdrv,  /* Physical drive nmuber to identify the drive */
     DRESULT res;
     int result;
 
+    UNUSED(result);
+    UNUSED(res);
+
     switch (pdrv) {
     case DEV_AHCI: {
 
@@ -76,10 +85,10 @@ DRESULT disk_read(BYTE pdrv,  /* Physical drive nmuber to identify the drive */
 
 #if FF_FS_READONLY == 0
 
-DRESULT disk_write(BYTE pdrv, /* Physical drive nmuber to identify the drive */
-                   const BYTE *buff, /* Data to be written */
-                   LBA_t sector,     /* Start sector in LBA */
-                   UINT count        /* Number of sectors to write */
+DRESULT disk_write(BYTE pdrv,  /* Physical drive nmuber to identify the drive */
+                   BYTE *buff, /* Data to be written */
+                   LBA_t sector, /* Start sector in LBA */
+                   UINT count    /* Number of sectors to write */
 ) {
 
     switch (pdrv) {
@@ -106,6 +115,10 @@ DRESULT disk_ioctl(BYTE pdrv, /* Physical drive nmuber (0..) */
 ) {
     DRESULT res;
     int result;
+    UNUSED(result);
+    UNUSED(res);
+    UNUSED(cmd);
+    UNUSED(buff);
 
     switch (pdrv) { return RES_OK; }
 

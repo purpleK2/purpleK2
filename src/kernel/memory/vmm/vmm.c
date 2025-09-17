@@ -1,7 +1,5 @@
 #include "vmm.h"
 
-#include "vma.h"
-
 #include <autoconf.h>
 #include <cpu.h>
 #include <kernel.h>
