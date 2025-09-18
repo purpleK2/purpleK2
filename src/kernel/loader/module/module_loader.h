@@ -6,8 +6,11 @@
 
 #include <elf/sym.h>
 
-mod_t *load_module(const char *file_path);
+#define ELF_SHDR(ehdr)         ((Elf64_Shdr *)((uintptr_t)ehdr + ehdr->e_shoff))
+#define ELF_SECTION(ehdr, idx) ((Elf64_Shdr *)&ELF_SHDR(ehdr)[idx])
+#define ELF_PHDR(ehdr, idx)                                                    \
+    ((Elf64_Phdr *)((uintptr_t)ehdr + ehdr->e_phoff + ehdr->e_phentsize * idx))
 
-const struct modinfo_t *load_driver_info(void *elf_data);
+mod_t *load_module(const char *file_path);
 
 #endif // MODULE_LOADER_H

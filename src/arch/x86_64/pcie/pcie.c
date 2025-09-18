@@ -469,7 +469,7 @@ pcie_status pcie_check_buses(struct acpi_mcfg_allocation *ecam,
 }
 
 pcie_status pcie_devices_init(cpio_file_t *pci_ids) {
-    struct uacpi_table *table = kmalloc(sizeof(struct uacpi_table));
+    struct uacpi_table *table = kmalloc(0x16);
     memset(table, 0, sizeof(struct uacpi_table));
 
     if (uacpi_table_find_by_signature(ACPI_MCFG_SIGNATURE, table) !=
