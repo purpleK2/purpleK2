@@ -10,6 +10,8 @@
 #include <io.h>
 #include <limine.h>
 
+#include <loader/module/module_loader.h>
+
 #include <acpi/acpi.h>
 #include <ahci/ahci.h>
 
@@ -482,12 +484,12 @@ void kstart(void) {
     dev_fb_init();
 
 #ifdef CONFIG_DEVFS_ENABLE
-    devfs_t *devfs = devfs_create();
+    /*devfs_t *devfs = devfs_create();
     if (devfs_vfs_init(devfs, CONFIG_DEVFS_MOUNT_PATH) != EOK) {
         kprintf_warn("Failed to initialize DEVFS!\n");
     } else {
         kprintf_ok("DEVFS initialized successfully!\n");
-    }
+    }*/
 
     // devfs_print(devfs->root_node, 0);
 
@@ -509,7 +511,7 @@ void kstart(void) {
         kprintf_ok("PCIe devices parsing done\n");
     }
 
-    pci_device_t *sata = detect_controller();
+    /*pci_device_t *sata = detect_controller();
 
     map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), sata->bar[5],
                        PHYS_TO_VIRTUAL(sata->bar[5]), 0x20000, AHCI_MMIO_FLAGS);
@@ -527,7 +529,15 @@ void kstart(void) {
     if (parse_mbr(mem, &g_partitions) == 0) {
     } else {
         kprintf_warn("Failed to parse MBR\n");
+    }*/
+
+    mod_t *mod = load_module("/cpio/drivers/example_mod.km");
+
+    if (!mod) {
+        kprintf_warn("fuck you stupid ELF %p", mod);
+        _hcf();
     }
+    mod->entry_point();
 
     // init_scheduler(pk_init);
     // irq_registerHandler(0, scheduler_timer_tick);

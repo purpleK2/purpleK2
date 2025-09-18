@@ -23,10 +23,11 @@ KCONFIG_CONFIG = .config
 KCONFIG_DEPS = Kconfig
 KCONFIG_AUTOCONF = $(KERNEL_SRC_DIR)/autoconf.h
 
-QEMU_FLAGS = 	-m 128M \
+QEMU_FLAGS = 	-m 2G \
 			 	-debugcon stdio \
 				-M q35 \
-				-smp 2
+				-smp 2 \
+				-enable-kvm
 
 # Nuke built-in rules and variables.
 override MAKEFLAGS += -rR --no-print-directory
