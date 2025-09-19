@@ -176,7 +176,7 @@ void uacpi_kernel_vlog(uacpi_log_level log_level, const uacpi_char *fmt,
         return;
     }
 
-    uacpi_kernel_log(log_level, buffer);
+    uacpi_kernel_log(log_level, "%s", buffer);
 }
 #endif
 
@@ -520,7 +520,7 @@ uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle spinlock,
 
         break;
 
-    case 0x0001 ... 0xFFFE:
+    case 0x0001 ... 0xFFFE: {
         uint64_t t = timeout;
         while (atomic_flag_test_and_set(spinlock)) {
             if (--t == 0) {
@@ -535,7 +535,7 @@ uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle spinlock,
             asm("pause");
         }
         break;
-
+    }
     case 0xFFFF:
         spinlock_acquire(spinlock);
         break;

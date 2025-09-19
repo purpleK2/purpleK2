@@ -3,8 +3,6 @@
 #include <scheduler/scheduler.h>
 #include <util/util.h>
 
-#include <stdio.h>
-
 static uint64_t ticks;
 
 uint64_t get_ticks() {

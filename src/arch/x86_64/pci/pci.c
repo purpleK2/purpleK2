@@ -328,6 +328,7 @@ void pci_print_list() {
 
         for (int i = 0; i < 6; i++) {
             const char *bar_type_str;
+            UNUSED(bar_type_str);
             switch (dev->bar_type[i]) {
             case PCI_BAR_TYPE_NONE:
                 bar_type_str = "Unused";

@@ -192,3 +192,62 @@ void pmm_free(void *ptr, size_t pages) {
 
     fl_last->next = fl_deallocated;
 }
+
+void *pmm_alloc_contiguous_pages(size_t pages) {
+    pmm_allocs++;
+
+#ifdef CONFIG_PMM_DEBUG
+    debugf_debug("--- Contiguous Allocation n.%d ---\n", pmm_allocs);
+    debugf_debug("Requesting %zu contiguous pages (%zu bytes)\n", pages,
+                 pages * PFRAME_SIZE);
+#endif
+
+    freelist_node *cur_node = fl_head;
+    freelist_node *prev     = NULL;
+
+    // Find a node with enough contiguous space
+    while (cur_node != NULL) {
+        if (cur_node->length >= pages * PFRAME_SIZE)
+            break;
+        prev     = cur_node;
+        cur_node = cur_node->next;
+    }
+
+    if (cur_node == NULL) {
+        kprintf_panic("OUT OF MEMORY (pmm_alloc_contiguous_pages)!");
+        _hcf();
+    }
+
+    void *ptr = (void *)cur_node;
+
+    size_t remaining = cur_node->length - (pages * PFRAME_SIZE);
+    if (remaining > 0) {
+        // Carve out the used chunk and leave a new node for the remainder
+        freelist_node *new_node =
+            (freelist_node *)((uintptr_t)cur_node + (pages * PFRAME_SIZE));
+        new_node->length = remaining;
+        new_node->next   = cur_node->next;
+
+        if (prev)
+            prev->next = new_node;
+        else
+            fl_head = new_node;
+    } else {
+        // Perfect fit, remove this node entirely
+        if (prev)
+            prev->next = cur_node->next;
+        else
+            fl_head = cur_node->next;
+    }
+
+    fl_update_nodes();
+
+#ifdef CONFIG_PMM_DEBUG
+    debugf_debug("Contiguous allocation at %p (%zu pages)\n", ptr, pages);
+#endif
+
+    // Zero entire range
+    memset((void *)ptr, 0, pages * PFRAME_SIZE);
+
+    return (void *)VIRT_TO_PHYSICAL(ptr);
+}

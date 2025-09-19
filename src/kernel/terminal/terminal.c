@@ -7,7 +7,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h>
 
 #define MAX_ROWS 256
 #define MAX_COLS 256

@@ -1,4 +1,5 @@
 #include "ipi.h"
+#include "util/macro.h"
 
 #include <apic/lapic/lapic.h>
 #include <interrupts/isr.h>
@@ -50,5 +51,6 @@ void ipi_self(uint8_t vector) {
 }
 
 void tlb_shootdown(uint64_t virtual) {
+    UNUSED(virtual);
     ipi_broadcast(IPI_VECTOR_TLB_FLUSH);
 }

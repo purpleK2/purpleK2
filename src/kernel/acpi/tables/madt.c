@@ -8,8 +8,6 @@
 #include <uacpi/uacpi.h>
 
 #include <stddef.h>
-#include <stdio.h>
-#include <string.h>
 
 void *madt_find_record(void *madt, int record_type) {
     void *addr = (madt + MADT_RECORD_OFFSET);
