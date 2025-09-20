@@ -5,11 +5,11 @@
 const modinfo_t example_module_modinfo = {.name = "example_module"};
 
 void module_exit() {
-    debugf("Going under!");
+    kprintf("Example Module exiting!\n");
 }
 
 void module_entry() {
-    debugf("Hello from the example kernel module");
+    kprintf("Hello from the example kernel module!\n");
 
     module_exit();
 }

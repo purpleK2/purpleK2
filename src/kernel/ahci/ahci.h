@@ -225,7 +225,18 @@ typedef struct tagHBA_CMD_TBL {
     HBA_PRDT_ENTRY prdt_entry[1];
 } HBA_CMD_TBL;
 
+typedef enum _edrvtype {
+    DRV_INVALID = -1,
+    DRV_SATA    = 0,
+    DRV_SATAPI  = 1,
+    DRV_SEMB    = 2,
+    DRV_PM      = 3,
+} drivetype_t;
+
 extern HBA_MEM *abar_mem;
+
+extern bool sata_found;
+extern drivetype_t drivetypes[32];
 
 void probe_port(HBA_MEM *abar);
 int check_type(HBA_PORT *port);

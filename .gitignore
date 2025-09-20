@@ -80,3 +80,7 @@ compile_commands.json
 src/kernel/autoconf.h
 .config
 .config*
+
+# Kernel Module System
+*.km
+target/modules

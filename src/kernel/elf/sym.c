@@ -1,4 +1,6 @@
 #include "sym.h"
+#include "memory/pmm/pmm.h"
+#include "paging/paging.h"
 #include "stdio.h"
 #include <string.h>
 
@@ -58,6 +60,13 @@ uint64_t resolve_symbol_addr(void *elf_data, size_t size,
         ehdr->e_ident[EI_CLASS] != ELFCLASS64)
         return 0;
 
+    bool is_exec;
+    if (ehdr->e_type == ET_REL) {
+        is_exec = false;
+    } else if (ehdr->e_type == ET_EXEC || ehdr->e_type == ET_DYN) {
+        is_exec = true; // Executable or shared library (linked)
+    }
+
     Elf64_Shdr *shdrs = (Elf64_Shdr *)((uint8_t *)elf_data + ehdr->e_shoff);
     const char *shstrtab =
         (const char *)elf_data + shdrs[ehdr->e_shstrndx].sh_offset;
@@ -102,7 +111,11 @@ uint64_t resolve_symbol_addr(void *elf_data, size_t size,
         if (sym->st_shndx == SHN_UNDEF)
             continue;
 
-        return sym->st_value + shdrs[sym->st_shndx].sh_addr;
+        if (is_exec) {
+            return sym->st_value;
+        } else {
+            return sym->st_value + shdrs[sym->st_shndx].sh_addr;
+        }
     }
 
     return 0;

@@ -16,7 +16,7 @@ CFLAGS = -O0 -g -Wall -Wextra -ffreestanding -fno-builtin \
 LDFLAGS = -r -nostdlib -z norelro
 
 TARGET = example_mod.km
-SRC = driver.c
+SRC = module.c
 OBJ = $(SRC:.c=.o)
 
 .PHONY: all clean

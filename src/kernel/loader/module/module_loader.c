@@ -39,7 +39,7 @@ static uintptr_t elf_getSymbolAddress(Elf64_Ehdr *ehdr, int table,
         char *name         = (char *)ehdr + strtab->sh_offset + symbol->st_name;
 
         uintptr_t addr =
-            resolve_symbol_addr(get_bootloader_data()->kernel_file_data,
+            resolve_symbol_addr((get_bootloader_data()->kernel_file_data),
                                 get_bootloader_data()->kernel_file_size, name);
         if (addr == (uintptr_t)NULL) {
             if (ELF64_ST_BIND(symbol->st_info) & STB_WEAK) {
@@ -251,14 +251,11 @@ mod_t *load_module(const char *file_path) {
 
     // Initialize module base address if first module
     if (next_module_base == 0) {
-        /*next_module_base = ALIGN_UP(
-            (0xffffffff80000000 + get_bootloader_data()->kernel_file_size),
-            PAGE_SIZE);*/
-
         uint64_t kernel_end = (uint64_t)(uintptr_t)&__kernel_end;
 
         next_module_base = ALIGN_UP((kernel_end), PAGE_SIZE);
-        debugf("Module base initialized to 0x%016llx\n", next_module_base);
+        debugf_debug("Base of the first module is 0x%016llx\n",
+                     next_module_base);
         if (next_module_base == 0) {
             close(file);
             return NULL;
@@ -292,7 +289,6 @@ mod_t *load_module(const char *file_path) {
     uint64_t this_mod_start   = next_module_base;
     uint64_t mod_addr_counter = this_mod_start;
 
-    // First pass: calculate total size needed
     uint64_t total_size = 0;
     for (unsigned int i = 0; i < ehdr->e_shnum; i++) {
         Elf64_Shdr *section = &shdr[i];
@@ -309,7 +305,8 @@ mod_t *load_module(const char *file_path) {
         return NULL;
     }
 
-    kprintf("Loading module, total size needed: 0x%llx bytes\n", total_size);
+    debugf_debug("Loading module %s, total size needed: 0x%llx bytes\n",
+                 file_path, total_size);
 
     // Second pass: allocate and map sections
     for (unsigned int i = 0; i < ehdr->e_shnum; i++) {
@@ -333,39 +330,32 @@ mod_t *load_module(const char *file_path) {
                 return NULL;
             }
 
-            // Map the pages into the virtual address space
             map_region_to_page(
                 (uint64_t *)(uintptr_t)PHYS_TO_VIRTUAL(get_kernel_pml4()),
                 (uint64_t)(uintptr_t)addr_phys, mod_addr_counter, page_count,
                 0b111);
 
-            _invalidate(mod_addr_counter);
-            debugf("Mapped 0x%.16llx-0x%.16llx -> 0x%.16llx, -rw\n",
-                   mod_addr_counter, mod_addr_counter + page_count * 0x1000,
-                   (uint64_t)(uintptr_t)addr_phys);
-
             // Set section address and copy data
             section->sh_addr = mod_addr_counter;
 
-            // Clear the memory first
             memset((void *)(uintptr_t)mod_addr_counter, 0,
                    page_count * PAGE_SIZE);
 
-            // Copy section data if it's not BSS
             if (section->sh_type != SHT_NOBITS) {
                 memcpy((void *)(uintptr_t)mod_addr_counter,
                        (void *)((uintptr_t)ehdr + section->sh_offset),
                        section->sh_size);
             }
 
-            kprintf(
-                "Mapped section %u: virt=0x%llx, phys=0x%llx, size=0x%llx\n", i,
-                mod_addr_counter, (uint64_t)(uintptr_t)addr_phys,
-                section->sh_size);
+            _invalidate(mod_addr_counter);
+            debugf_debug(
+                "Mapped 0x%.16llx-0x%.16llx -> 0x%.16llx-0x%.16llx 0x%.16llx\n",
+                (uint64_t)(uintptr_t)addr_phys,
+                (uint64_t)(uintptr_t)addr_phys + page_count * 0x1000,
+                mod_addr_counter, mod_addr_counter + page_count * 0x1000);
 
             mod_addr_counter += page_count * PAGE_SIZE;
         } else {
-            // Non-allocatable sections point to file data
             section->sh_addr = (uintptr_t)ehdr + section->sh_offset;
         }
     }
@@ -374,8 +364,8 @@ mod_t *load_module(const char *file_path) {
     for (unsigned int i = 0; i < ehdr->e_shnum; i++) {
         Elf64_Shdr *section = &shdr[i];
         if (section->sh_type == SHT_REL) {
-            kprintf("Processing REL section %u with %llu relocations\n", i,
-                    section->sh_size / section->sh_entsize);
+            debugf_debug("Processing REL section %u with %llu relocations\n", i,
+                         section->sh_size / section->sh_entsize);
             for (unsigned int idx = 0;
                  idx < section->sh_size / section->sh_entsize; idx++) {
                 Elf64_Rel *rel =
@@ -390,8 +380,8 @@ mod_t *load_module(const char *file_path) {
                 }
             }
         } else if (section->sh_type == SHT_RELA) {
-            kprintf("Processing RELA section %u with %llu relocations\n", i,
-                    section->sh_size / section->sh_entsize);
+            debugf_debug("Processing RELA section %u with %llu relocations\n",
+                         i, section->sh_size / section->sh_entsize);
             for (unsigned int idx = 0;
                  idx < section->sh_size / section->sh_entsize; idx++) {
                 Elf64_Rela *rela = &(
@@ -423,7 +413,6 @@ mod_t *load_module(const char *file_path) {
     uintptr_t exit_point = elf_findSymbol(ehdr, "module_exit");
     if (!exit_point) {
         debugf_warn("Warning: No exit point 'module_exit' found in module\n");
-        // This might be acceptable for some modules
     }
 
     // Create module structure
@@ -440,14 +429,13 @@ mod_t *load_module(const char *file_path) {
     mod->entry_point  = (void (*)(void))entry_point;
     mod->exit_point   = (void (*)(void))exit_point;
 
-    // Update next module base for future modules
     next_module_base = ALIGN_UP(mod_addr_counter, PAGE_SIZE);
 
-    kprintf(
-        "Module loaded successfully: base=0x%llx, entry=0x%llx, exit=0x%llx\n",
-        (uint64_t)(uintptr_t)mod->base_address,
-        (uint64_t)(uintptr_t)mod->entry_point,
-        (uint64_t)(uintptr_t)mod->exit_point);
+    debugf_debug("Module %s loaded successfully: base=0x%llx, entry=0x%llx, "
+                 "exit=0x%llx\n",
+                 file_path, (uint64_t)(uintptr_t)mod->base_address,
+                 (uint64_t)(uintptr_t)mod->entry_point,
+                 (uint64_t)(uintptr_t)mod->exit_point);
 
     // Clean up temporary allocations
     kfree(buffer);
