@@ -36,4 +36,7 @@ void pagemap_copy_to(uint64_t *non_kernel_pml4);
 
 void vmm_init(vmm_context_t *ctx);
 
+void *valloc(vmm_context_t *ctx, size_t pages, uint8_t flags, void *phys);
+void vfree(vmm_context_t *ctx, void *ptr, bool free);
+
 #endif

@@ -128,14 +128,14 @@ override OBJ := $(addprefix $(OBJS_DIR)/,$(CFILES:.c=.c.o) $(ASFILES:.S=.S.o) $(
 override HEADER_DEPS := $(addprefix $(OBJS_DIR)/,$(CFILES:.c=.c.d) $(ASFILES:.S=.S.d))
 
 # Default target.
-.PHONY: all limine_build toolchain libs drivers
+.PHONY: all limine_build toolchain libs modules
 
 all: $(OS_CODENAME).iso
 
 all-hdd: $(OS_CODENAME).hdd
 
 # Define the ISO image file as an explicit target with dependencies
-$(OS_CODENAME).iso: drivers $(ISO_DIR)/$(KERNEL) $(ISO_DIR)/$(INITRD) $(ISO_DIR)/boot/limine.conf $(ISO_DIR)/boot/limine/limine-bios-cd.bin $(ISO_DIR)/boot/limine/limine-uefi-cd.bin $(ISO_DIR)/EFI/BOOT/BOOTX64.EFI $(ISO_DIR)/bg.png limine_build $(ISO_DIR)/boot/limine/limine-bios.sys
+$(OS_CODENAME).iso: modules $(ISO_DIR)/$(KERNEL) $(ISO_DIR)/$(INITRD) $(ISO_DIR)/boot/limine.conf $(ISO_DIR)/boot/limine/limine-bios-cd.bin $(ISO_DIR)/boot/limine/limine-uefi-cd.bin $(ISO_DIR)/EFI/BOOT/BOOTX64.EFI $(ISO_DIR)/bg.png limine_build $(ISO_DIR)/boot/limine/limine-bios.sys
 	@# Create the bootable ISO.
 	xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin \
 		-no-emul-boot -boot-load-size 4 -boot-info-table \
@@ -147,7 +147,7 @@ $(OS_CODENAME).iso: drivers $(ISO_DIR)/$(KERNEL) $(ISO_DIR)/$(INITRD) $(ISO_DIR)
 	./$(LIBS_DIR)/limine/limine bios-install $@
 	@echo "--> ISO:	" $@
 
-$(OS_CODENAME).hdd: drivers $(BUILD_DIR)/$(INITRD) $(BUILD_DIR)/$(KERNEL) limine_build
+$(OS_CODENAME).hdd: modules $(BUILD_DIR)/$(INITRD) $(BUILD_DIR)/$(KERNEL) limine_build
 	rm -f $@
 	dd if=/dev/zero bs=1M count=0 seek=64 of=$@
 	
@@ -213,14 +213,14 @@ $(LIBS_DIR)/limine/limine:
 	@# Build "limine" utility
 	make -C $(LIBS_DIR)/limine
 
-drivers:
-	@mkdir -p target/drivers
-	@for dir in $(shell find drivers -mindepth 1 -maxdepth 1 -type d); do \
-		echo "--> Building driver: $$dir"; \
+modules:
+	@mkdir -p target/modules
+	@for dir in $(shell find modules -mindepth 1 -maxdepth 1 -type d); do \
+		echo "--> Building module: $$dir"; \
 		$(MAKE) -C $$dir; \
 		for km in $$dir/*.km; do \
 			if [ -f $$km ]; then \
-				cp -v $$km target/drivers/; \
+				cp -v $$km target/modules/; \
 			fi; \
 		done; \
 	done

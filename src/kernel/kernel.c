@@ -30,7 +30,6 @@
 #include <memory/heap/kheap.h>
 #include <memory/pmm/pmm.h>
 #include <memory/vmm/vflags.h>
-#include <memory/vmm/vma.h>
 #include <memory/vmm/vmm.h>
 #include <paging/paging.h>
 
@@ -399,8 +398,8 @@ void kstart(void) {
 #endif
 #endif
 
-    hpet_init();
-    kprintf_ok("HPET initialized\n");
+    // hpet_init();
+    // kprintf_ok("HPET initialized\n");
 
     char *cpu_name   = kmalloc(49);
     char *cpu_vendor = kmalloc(13);
@@ -511,7 +510,7 @@ void kstart(void) {
         kprintf_ok("PCIe devices parsing done\n");
     }
 
-    /*pci_device_t *sata = detect_controller();
+    pci_device_t *sata = detect_controller();
 
     map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), sata->bar[5],
                        PHYS_TO_VIRTUAL(sata->bar[5]), 0x20000, AHCI_MMIO_FLAGS);
@@ -522,21 +521,27 @@ void kstart(void) {
 
     port_rebase(&mem->ports[sata_port]);
 
+    probe_port(mem);
+
     test_ahci();
 
     abar_mem = mem;
 
-    if (parse_mbr(mem, &g_partitions) == 0) {
+    if (sata_found) {
+        if (parse_mbr(mem, &g_partitions) != 0) {
+            kprintf_warn("Failed to parse MBR\n");
+        }
     } else {
-        kprintf_warn("Failed to parse MBR\n");
-    }*/
+        debugf_warn("No harddrive found! No parsing MBR!\n");
+    }
 
-    mod_t *mod = load_module("/cpio/drivers/example_mod.km");
+    mod_t *mod = load_module("/cpio/modules/example_mod.km");
 
     if (!mod) {
-        kprintf_warn("fuck you stupid ELF %p", mod);
+        kprintf_warn("Failed to load example module!\n");
         _hcf();
     }
+
     mod->entry_point();
 
     // init_scheduler(pk_init);

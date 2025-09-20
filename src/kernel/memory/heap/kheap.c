@@ -1,7 +1,6 @@
 #include "kheap.h"
 
 #include <memory/vmm/vflags.h>
-#include <memory/vmm/vma.h>
 #include <memory/vmm/vmm.h>
 
 #include <string.h>

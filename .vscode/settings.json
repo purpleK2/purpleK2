@@ -117,5 +117,6 @@
     "cmake.configureOnOpen": false,
     "C_Cpp.default.compilerPath": "${workspaceFolder}/toolchain/x86_64-elf/bin/x86_64-elf-gcc",
     "C_Cpp.clang_format_path": "/usr/bin/clang-format",
-    "editor.formatOnSave": true
+    "editor.formatOnSave": true,
+    "makefile.configureOnOpen": false
 }

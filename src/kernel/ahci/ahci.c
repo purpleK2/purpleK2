@@ -8,6 +8,10 @@
 
 extern pci_device_t *pci_devices_head;
 
+bool sata_found = false;
+
+drivetype_t drivetypes[32];
+
 void probe_port(HBA_MEM *abar) {
     uint32_t pi = abar->pi;
     int i       = 0;
@@ -16,19 +20,25 @@ void probe_port(HBA_MEM *abar) {
             int dt = check_type(&abar->ports[i]);
             switch (dt) {
             case AHCI_DEV_SATA:
-                debugf("SATA drive found at port %d\n", i);
+                debugf_debug("SATA drive found at port %d\n", i);
+                sata_found    = true;
+                drivetypes[i] = DRV_SATA;
                 break;
             case AHCI_DEV_SATAPI:
-                debugf("SATAPI drive found at port %d\n", i);
+                debugf_debug("SATAPI drive found at port %d\n", i);
+                drivetypes[i] = DRV_SATAPI;
                 break;
             case AHCI_DEV_SEMB:
-                debugf("SEMB drive found at port %d\n", i);
+                debugf_debug("SEMB drive found at port %d\n", i);
+                drivetypes[i] = DRV_SEMB;
                 break;
             case AHCI_DEV_PM:
-                debugf("PM drive found at port %d\n", i);
+                debugf_debug("PM drive found at port %d\n", i);
+                drivetypes[i] = DRV_PM;
                 break;
             default:
-                debugf("No drive found at port %d\n", i);
+                debugf_debug("No drive found at port %d\n", i);
+                drivetypes[i] = DRV_INVALID;
                 break;
             }
         }
