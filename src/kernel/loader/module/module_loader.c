@@ -4,6 +4,7 @@
 #include "fs/file_io.h"
 #include "kernel.h"
 #include "memory/pmm/pmm.h"
+#include "module/modinfo.h"
 #include "paging/paging.h"
 #include "stdio.h"
 
@@ -348,11 +349,11 @@ mod_t *load_module(const char *file_path) {
             }
 
             _invalidate(mod_addr_counter);
-            debugf_debug(
-                "Mapped 0x%.16llx-0x%.16llx -> 0x%.16llx-0x%.16llx 0x%.16llx\n",
-                (uint64_t)(uintptr_t)addr_phys,
-                (uint64_t)(uintptr_t)addr_phys + page_count * 0x1000,
-                mod_addr_counter, mod_addr_counter + page_count * 0x1000);
+            debugf_debug("Mapped 0x%.16llx-0x%.16llx -> 0x%.16llx-0x%.16llx\n",
+                         (uint64_t)(uintptr_t)addr_phys,
+                         (uint64_t)(uintptr_t)addr_phys + page_count * 0x1000,
+                         mod_addr_counter,
+                         mod_addr_counter + page_count * 0x1000);
 
             mod_addr_counter += page_count * PAGE_SIZE;
         } else {
@@ -415,6 +416,15 @@ mod_t *load_module(const char *file_path) {
         debugf_warn("Warning: No exit point 'module_exit' found in module\n");
     }
 
+    uintptr_t mod_info = elf_findSymbol(ehdr, "modinfo");
+    if (!mod_info) {
+        debugf_warn("No module info found!");
+        cleanup_module_allocation(this_mod_start, mod_addr_counter);
+        kfree(buffer);
+        close(file);
+        return NULL;
+    }
+
     // Create module structure
     mod_t *mod = kmalloc(sizeof(mod_t));
     if (!mod) {
@@ -428,14 +438,30 @@ mod_t *load_module(const char *file_path) {
     mod->base_address = (void *)(uintptr_t)this_mod_start;
     mod->entry_point  = (void (*)(void))entry_point;
     mod->exit_point   = (void (*)(void))exit_point;
+    mod->modinfo      = (modinfo_t *)mod_info;
 
     next_module_base = ALIGN_UP(mod_addr_counter, PAGE_SIZE);
 
-    debugf_debug("Module %s loaded successfully: base=0x%llx, entry=0x%llx, "
-                 "exit=0x%llx\n",
-                 file_path, (uint64_t)(uintptr_t)mod->base_address,
-                 (uint64_t)(uintptr_t)mod->entry_point,
-                 (uint64_t)(uintptr_t)mod->exit_point);
+    debugf_debug(
+        "Module %s (name: %s) loaded successfully: base=0x%llx, entry=0x%llx, "
+        "exit=0x%llx\n",
+        file_path, mod->modinfo->name, (uint64_t)(uintptr_t)mod->base_address,
+        (uint64_t)(uintptr_t)mod->entry_point,
+        (uint64_t)(uintptr_t)mod->exit_point);
+
+    debugf("Name: %s\nVersion: %s\nAuthor: %s\nLicense: %s\nDescription: "
+           "\n\t%s\nURL: %s\nPriority: %i\n",
+           mod->modinfo->name, mod->modinfo->version, mod->modinfo->author,
+           mod->modinfo->license, mod->modinfo->description, mod->modinfo->url,
+           mod->modinfo->priority);
+
+    debugf("Dependencies: \n");
+
+    int i = 0;
+    while (mod->modinfo->deps[i] != NULL) {
+        debugf("\t - %s\n", mod->modinfo->deps[i]);
+        i++;
+    }
 
     // Clean up temporary allocations
     kfree(buffer);
