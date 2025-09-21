@@ -468,9 +468,9 @@ void kstart(void) {
     }
 
     // create the VFS for CPIO
-    ramfs_vfs_init(cpio_ramfs, "/cpio");
+    ramfs_vfs_init(cpio_ramfs, "/initrd");
 
-    fileio_t *test_file = open("/cpio/directory/another.txt", 0);
+    fileio_t *test_file = open("/initrd/directory/another.txt", 0);
     if (!test_file) {
         kprintf_warn("Couldn't open file!\n");
     }
@@ -535,7 +535,7 @@ void kstart(void) {
         debugf_warn("No harddrive found! No parsing MBR!\n");
     }
 
-    mod_t *mod = load_module("/cpio/modules/example_mod.km");
+    mod_t *mod = load_module("/initrd/modules/example_mod.km");
 
     if (!mod) {
         kprintf_warn("Failed to load example module!\n");
@@ -546,7 +546,7 @@ void kstart(void) {
 
     // init_scheduler(pk_init);
     // irq_registerHandler(0, scheduler_timer_tick);
-    // load_tga_to_framebuffer("/cpio/pk2startup_1year.tga");
+    // load_tga_to_framebuffer("/initrd/pk2startup_1year.tga");
 
     for (;;)
         ;
