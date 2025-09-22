@@ -18,6 +18,10 @@ typedef enum fcntl_cmd {
 #define O_CREATE (1 << 1) // todo: file permissions on creation
 // for later #define O_DIRECTORY (1 << 2) // must be a directory
 // TODO: #define O_PATH      // return a file descriptor
+#define PIPE_READ_END  (1 << 2)
+#define PIPE_WRITE_END (1 << 3)
+
+#define SPECIAL_FILE_TYPE_PIPE (1 << 4)
 
 /*
     Proper structs and functions for file I/O
