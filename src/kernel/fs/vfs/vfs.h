@@ -32,6 +32,7 @@ typedef enum vnode_type {
     VNODE_BLOCK,
     VNODE_CHAR,
     VNODE_LINK,
+    VNODE_PIPE,
     VNODE_SOCKET,
     VNODE_BAD,
 } vnode_type_t;

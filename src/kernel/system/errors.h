@@ -14,6 +14,8 @@
 #define ENULLPTR 10 // NULL pointer found
 #define ENOCFG   11 // invalid/no configuration
 #define ENOPID   12 // pid not found
+#define EPIPE    13
+#define EBADF    14
 
 #define EPCIENOENT 101 // special
 #endif                 // ERRORS_H

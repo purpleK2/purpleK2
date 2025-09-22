@@ -1,4 +1,5 @@
 #include "file_io.h"
+#include "ipc/pipe.h"
 
 #include <errors.h>
 
@@ -63,6 +64,13 @@ int read(fileio_t *file, size_t size, void *out) {
         return ENULLPTR;
     }
 
+    if (file->flags & PIPE_READ_END) {
+        pipe_read(file, out, &size);
+        return size;
+    } else if (file->flags & PIPE_WRITE_END) {
+        return -EBADF;
+    }
+
     vnode_t *vn = file->private;
 
     if (file->offset >= file->size) {
@@ -85,6 +93,13 @@ int read(fileio_t *file, size_t size, void *out) {
 int write(fileio_t *file, void *buf, size_t size) {
     vnode_t *vn = file->private;
 
+    if (file->flags & PIPE_WRITE_END) {
+        pipe_write(file, buf, &size);
+        return EOK;
+    } else if (file->flags & PIPE_READ_END) {
+        return -EBADF;
+    }
+
     size_t offset = file->offset;
     if (file->flags & O_APPEND) {
         offset += file->size;
@@ -101,6 +116,11 @@ int write(fileio_t *file, void *buf, size_t size) {
 
 int close(fileio_t *file) {
     vnode_t *vn = file->private;
+
+    if (file->flags & PIPE_READ_END || file->flags & PIPE_WRITE_END) {
+        pipe_close(file);
+        return 0;
+    }
 
     if (vfs_close(vn) != 0) {
         return -1;
