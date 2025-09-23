@@ -5,6 +5,10 @@ section '.text' executable align 16
 public _load_gdt
 _load_gdt:
     lgdt [rdi]
+    push ax
+    mov ax, 0x28
+    ltr ax
+    pop ax
     ret
 
 ; void _reload_segments(uint64_t cs, uint64_t ds)
