@@ -3,8 +3,8 @@
 
 #include <types.h>
 
+#include <ipc/signals.h>
 #include <memory/vmm/vmm.h>
-#include <scheduler/signals.h>
 
 #include <cpu.h>
 #include <interrupts/isr.h>

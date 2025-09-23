@@ -7,6 +7,7 @@
 #include <memory/heap/kheap.h>
 
 #include <stdint.h>
+#include <string.h>
 #include <util/macro.h>
 
 void sys_exit(int status) {
@@ -131,6 +132,28 @@ int sys_fcntl(int fd, int op, void *arg) {
     return fcntl(file, op, arg);
 }
 
+int sys_dup(int fd) {
+    pcb_t *current = get_current_pcb();
+    if (fd < 0 || fd >= current->fd_count) {
+        return -1;
+    }
+
+    fileio_t *file = current->fds[fd];
+
+    fileio_t *new_file = kmalloc(sizeof(fileio_t));
+    memcpy(new_file, file, sizeof(fileio_t));
+
+    current->fds =
+        krealloc(current->fds, sizeof(fileio_t *) * (++current->fd_count));
+
+    current->fds[current->fd_count - 1] = new_file;
+    if (current->fds[current->fd_count - 1] == NULL) {
+        return -1;
+    }
+
+    return current->fd_count - 1;
+}
+
 long handle_syscall(long num, long arg1, long arg2, long arg3, long arg4,
                     long arg5, long arg6) {
     UNUSED(arg4);
@@ -154,6 +177,8 @@ long handle_syscall(long num, long arg1, long arg2, long arg3, long arg4,
         return sys_seek(arg1, arg2, arg3);
     case SYS_fcntl:
         return sys_fcntl(arg1, arg2, (void *)(uintptr_t)arg3);
+    case SYS_dup:
+        return sys_dup(arg1);
     default:
         return -1;
     }
