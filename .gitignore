@@ -84,3 +84,4 @@ src/kernel/autoconf.h
 # Kernel Module System
 *.km
 target/modules
+findher.ogg

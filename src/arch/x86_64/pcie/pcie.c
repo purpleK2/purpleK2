@@ -5,6 +5,7 @@
 */
 
 #include "pcie.h"
+#include "interrupts/isr.h"
 
 #include <memory/heap/kheap.h>
 
@@ -356,7 +357,18 @@ pcie_status pcie_add_device(void *pcie_addr, cpio_file_t *pci_ids,
         pcie_device->irq_pin  = header0->irq_pin;
 
         bars = kmalloc(sizeof(uint32_t) * PCIE_HEADT0_BARS);
+        if (!bars) {
+            debugf_panic("kmalloc?");
+            _hcf();
+        }
         memcpy(bars, header0->bars, sizeof(uint32_t) * PCIE_HEADT0_BARS);
+
+        if (!bars) {
+            debugf_panic("what");
+            _hcf();
+        }
+
+        debugf("bars header t0 alloc\n");
 
         pcie_device->bars = bars;
 
@@ -372,7 +384,18 @@ pcie_status pcie_add_device(void *pcie_addr, cpio_file_t *pci_ids,
         pcie_device->irq_pin  = header1->irq_pin;
 
         bars = kmalloc(sizeof(uint32_t) * PCIE_HEADT1_BARS);
+        if (!bars) {
+            debugf_panic("kmalloc?");
+            _hcf();
+        }
         memcpy(bars, header1->bars, sizeof(uint32_t) * PCIE_HEADT1_BARS);
+
+        if (!bars) {
+            debugf_panic("what");
+            _hcf();
+        }
+
+        debugf("bars header t1 alloc\n");
 
         pcie_device->bars = bars;
 
