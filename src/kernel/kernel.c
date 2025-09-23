@@ -536,45 +536,17 @@ void kstart(void) {
         debugf_warn("No harddrive found! No parsing MBR!\n");
     }
 
-    mod_t *mod = load_module("/initrd/modules/example_mod.km");
-
-    if (!mod) {
-        kprintf_warn("Failed to load example module!\n");
+    mod_t *mod_rtl8139 = load_module("/initrd/modules/rtl8139.km");
+    if (!mod_rtl8139) {
+        kprintf_panic("Failed to load RTL9139 network driver");
         _hcf();
     }
 
-    mod->entry_point();
+    mod_rtl8139->entry_point();
 
     // init_scheduler(pk_init);
     // irq_registerHandler(0, scheduler_timer_tick);
     // load_tga_to_framebuffer("/initrd/pk2startup_1year.tga");
-
-    fileio_t *pipe_ends[2];
-    if (pipe(pipe_ends) != 0) {
-        debugf("    Failed to create pipe\n");
-        _hcf();
-    }
-
-    fileio_t *rd = pipe_ends[0];
-    fileio_t *wr = pipe_ends[1];
-    char *msg    = "hello kernel pipe!";
-    size_t len   = strlen(msg);
-    if (write(wr, msg, len) != 0 || len != strlen(msg)) {
-        debugf("    Write failed\n");
-        _hcf();
-    }
-
-    char buf[64] = {0};
-    size_t rlen  = sizeof(buf);
-    if (read(rd, rlen, buf) < 0) {
-        debugf("    Read failed\n");
-        _hcf();
-    }
-
-    debugf_debug("Pipe test read: %s\n", buf);
-
-    close(wr);
-    close(rd);
 
     for (;;)
         ;

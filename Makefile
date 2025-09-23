@@ -27,7 +27,8 @@ QEMU_FLAGS = 	-m 2G \
 			 	-debugcon stdio \
 				-M q35 \
 				-smp 2 \
-				-enable-kvm
+				-enable-kvm \
+				-net nic,model=rtl8139
 
 # Nuke built-in rules and variables.
 override MAKEFLAGS += -rR --no-print-directory
@@ -215,7 +216,7 @@ $(LIBS_DIR)/limine/limine:
 
 modules:
 	@mkdir -p target/modules
-	@for dir in $(shell find modules -mindepth 1 -maxdepth 1 -type d); do \
+	@for dir in $(shell find modules -mindepth 1 -maxdepth 4 -type d); do \
 		echo "--> Building module: $$dir"; \
 		$(MAKE) -C $$dir; \
 		for km in $$dir/*.km; do \

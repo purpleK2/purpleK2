@@ -1,165 +1,155 @@
 #include "kheap.h"
+#include "interrupts/isr.h"
+#include "stdio.h"
 
 #include <memory/vmm/vflags.h>
 #include <memory/vmm/vmm.h>
 
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
-#define ALIGN8(x)      (((x) + 7) & ~7)
-#define MIN_BLOCK_SIZE 16
-#define MAX_BLOCK_SIZE (PAGE_SIZE * MAX_PAGES)
+#define PAGE_SIZE     4096
+#define MAX_PAGES     64
+#define MAX_HEAP_SIZE (PAGE_SIZE * MAX_PAGES)
+
+#define MIN_ORDER 3
+#define MAX_ORDER 18
 
 typedef struct block_header {
     struct block_header *next;
-    size_t size;
+    size_t order;
     bool free;
 } block_header_t;
 
-static block_header_t *free_lists[SIZE_CLASS_COUNT] = {0};
-static heap_stats stats                             = {0};
+static block_header_t *free_lists[MAX_ORDER + 1]; // free lists by order
+static void *heap_base  = NULL;                   // base of managed region
+static heap_stats stats = {0};
 
-static inline size_t size_class_index(size_t size) {
-    size_t cls_size = MIN_BLOCK_SIZE;
-    for (size_t i = 0; i < SIZE_CLASS_COUNT; i++) {
-        if (size <= cls_size)
-            return i;
-        cls_size <<= 1;
+static inline size_t order_to_size(size_t order) {
+    return (size_t)1 << order;
+}
+
+static inline size_t size_to_order(size_t size) {
+    size_t order = MIN_ORDER;
+    while (order <= MAX_ORDER && order_to_size(order) < size) {
+        order++;
     }
-    return SIZE_CLASS_COUNT - 1;
+    return order;
 }
 
-static inline size_t size_class_size(size_t index) {
-    return MIN_BLOCK_SIZE << index;
+// Return block index within heap (for buddy calculation)
+static inline size_t block_index(block_header_t *block, size_t order) {
+    uintptr_t offset = (uintptr_t)block - (uintptr_t)heap_base;
+    return offset / order_to_size(order);
 }
 
-static void add_block_to_free_list(block_header_t *block) {
-    size_t idx      = size_class_index(block->size);
-    block->free     = true;
-    block->next     = free_lists[idx];
-    free_lists[idx] = block;
+static inline block_header_t *buddy_of(block_header_t *block, size_t order) {
+    size_t idx             = block_index(block, order);
+    uintptr_t buddy_offset = (idx ^ 1) * order_to_size(order); // flip last bit
+    return (block_header_t *)((uintptr_t)heap_base + buddy_offset);
 }
 
-static void remove_block_from_free_list(block_header_t **list_head,
-                                        block_header_t *block) {
-    block_header_t *prev = NULL;
-    block_header_t *cur  = *list_head;
+static void add_block(size_t order, block_header_t *block) {
+    block->order      = order;
+    block->free       = true;
+    block->next       = free_lists[order];
+    free_lists[order] = block;
+}
+
+static void remove_block(size_t order, block_header_t *block) {
+    block_header_t *prev = NULL, *cur = free_lists[order];
     while (cur) {
         if (cur == block) {
             if (prev)
                 prev->next = cur->next;
             else
-                *list_head = cur->next;
-            cur->next = NULL;
+                free_lists[order] = cur->next;
+            block->next = NULL;
             return;
         }
         prev = cur;
         cur  = cur->next;
     }
-}
-
-static block_header_t *split_block(block_header_t *block, size_t size) {
-    if (block->size >= size + sizeof(block_header_t) + MIN_BLOCK_SIZE) {
-        block_header_t *new_block =
-            (block_header_t *)((char *)(block + 1) + size);
-        new_block->size = block->size - size - sizeof(block_header_t);
-        new_block->free = true;
-        new_block->next = NULL;
-        block->size     = size;
-        add_block_to_free_list(new_block);
-        return block;
-    }
-    return block;
-}
-
-static block_header_t *request_new_page(size_t size_class_idx) {
-    size_t block_size      = size_class_size(size_class_idx);
-    size_t blocks_per_page = PAGE_SIZE / (block_size + sizeof(block_header_t));
-    if (blocks_per_page == 0)
-        blocks_per_page = 1; // at least 1 block per page
-
-    size_t pages = (ROUND_UP(block_size, PFRAME_SIZE) / PFRAME_SIZE);
-
-    void *page = valloc(get_current_ctx(), pages, VMO_KERNEL_RW | VMO_NX, NULL);
-    if (!page)
-        return NULL;
-
-    // Create blocks in page and add them to free list
-    char *ptr = (char *)page;
-    for (size_t i = 0; i < blocks_per_page; i++) {
-        block_header_t *block =
-            (block_header_t *)(ptr + i * (block_size + sizeof(block_header_t)));
-        block->size = block_size;
-        block->free = true;
-        block->next = NULL;
-        add_block_to_free_list(block);
-        stats.current_pages_used++;
-    }
-    return free_lists[size_class_idx]; // return first free block in this size
-                                       // class
+    kprintf_panic("remove_block: block not found in freelist");
+    _hcf();
 }
 
 void kmalloc_init() {
     memset(free_lists, 0, sizeof(free_lists));
     memset(&stats, 0, sizeof(stats));
+
+    heap_base =
+        valloc(get_current_ctx(), MAX_PAGES, VMO_KERNEL_RW | VMO_NX, NULL);
+    if (!heap_base) {
+        kprintf_panic("kmalloc_init: failed to allocate heap");
+        _hcf();
+    }
+
+    block_header_t *block = (block_header_t *)heap_base;
+    add_block(MAX_ORDER, block);
+    stats.current_pages_used = MAX_PAGES;
 }
 
-// Find suitable free block for size, or request page if none found
-static block_header_t *find_block(size_t size) {
-    size_t idx = size_class_index(size);
-    for (size_t i = idx; i < SIZE_CLASS_COUNT; i++) {
-        block_header_t *list = free_lists[i];
-        if (list) {
-            // take first block in list
-            remove_block_from_free_list(&free_lists[i], list);
-            if (list->size > size) {
-                // split block and add remainder back
-                split_block(list, size);
-            }
-            list->free = false;
-            return list;
-        }
-        // no free block in this class, try next larger size class
-    }
-    // no block found, request new page for requested size class
-    block_header_t *new_block = request_new_page(idx);
-    if (!new_block)
+static block_header_t *split_block(size_t order) {
+    size_t i = order + 1;
+    while (i <= MAX_ORDER && !free_lists[i])
+        i++;
+    if (i > MAX_ORDER)
         return NULL;
-    // allocate from new blocks
-    remove_block_from_free_list(&free_lists[idx], new_block);
-    new_block->free = false;
-    if (new_block->size > size) {
-        split_block(new_block, size);
+
+    block_header_t *block = free_lists[i];
+    remove_block(i, block);
+
+    while (i > order) {
+        i--;
+        size_t half_size      = order_to_size(i);
+        block_header_t *buddy = (block_header_t *)((char *)block + half_size);
+        add_block(i, buddy);
+        block->order = i;
     }
-    return new_block;
+    return block;
 }
 
 void *kmalloc(size_t size) {
     if (size == 0)
         return NULL;
-    size = ALIGN8(size);
-    if (size > MAX_BLOCK_SIZE) {
-        // Large alloc: allocate whole pages
-        size_t pages =
-            (size + sizeof(block_header_t) + PAGE_SIZE - 1) / PAGE_SIZE;
+
+    size_t needed = size + sizeof(block_header_t);
+    size_t order  = size_to_order(needed);
+
+    if (order > MAX_ORDER) {
+        size_t pages = (needed + PAGE_SIZE - 1) / PAGE_SIZE;
         void *ptr =
             valloc(get_current_ctx(), pages, VMO_KERNEL_RW | VMO_NX, NULL);
         if (!ptr)
             return NULL;
-        // Use block header at start of allocated pages
+
         block_header_t *block = (block_header_t *)ptr;
-        block->size           = pages * PAGE_SIZE - sizeof(block_header_t);
+        block->order          = pages * PAGE_SIZE;
         block->free           = false;
         block->next           = NULL;
+
         stats.total_allocs++;
-        stats.total_bytes_allocated += block->size;
+        stats.total_bytes_allocated += pages * PAGE_SIZE;
         stats.current_pages_used    += pages;
         return block + 1;
     }
-    block_header_t *block = find_block(size);
-    if (!block)
-        return NULL;
+
+    block_header_t *block = free_lists[order];
+    if (block) {
+        remove_block(order, block);
+    } else {
+        block = split_block(order);
+        if (!block)
+            return NULL;
+    }
+
+    block->free = false;
+
     stats.total_allocs++;
-    stats.total_bytes_allocated += block->size;
+    stats.total_bytes_allocated += order_to_size(order);
     return block + 1;
 }
 
@@ -167,22 +157,35 @@ void kfree(void *ptr) {
     if (!ptr)
         return;
     block_header_t *block = ((block_header_t *)ptr) - 1;
-    if (block->free)
-        return;
-    size_t size = block->size;
-    block->free = true;
-    stats.total_frees++;
-    stats.total_bytes_freed += size;
 
-    if (size > MAX_BLOCK_SIZE / 2) {
-        size_t pages =
-            (size + sizeof(block_header_t) + PAGE_SIZE - 1) / PAGE_SIZE;
-        stats.current_pages_used -= pages;
+    if (block->order > MAX_ORDER) {
+        size_t pages = block->order / PAGE_SIZE;
         vfree(get_current_ctx(), block, true);
+        stats.total_frees++;
+        stats.total_bytes_freed  += pages * PAGE_SIZE;
+        stats.current_pages_used -= pages;
         return;
     }
 
-    add_block_to_free_list(block);
+    size_t order = block->order;
+    block->free  = true;
+
+    while (order < MAX_ORDER) {
+        block_header_t *buddy = buddy_of(block, order);
+        if (!buddy->free || buddy->order != order)
+            break;
+
+        remove_block(order, buddy);
+        if (block > buddy)
+            block = buddy;
+        order++;
+        block->order = order;
+    }
+
+    add_block(order, block);
+
+    stats.total_frees++;
+    stats.total_bytes_freed += order_to_size(order);
 }
 
 void *kcalloc(size_t num, size_t size) {
@@ -200,19 +203,25 @@ void *krealloc(void *ptr, size_t new_size) {
         kfree(ptr);
         return NULL;
     }
+
     block_header_t *block = ((block_header_t *)ptr) - 1;
-    if (block->size >= new_size)
+    size_t old_size;
+    if (block->order > MAX_ORDER)
+        old_size = block->order - sizeof(block_header_t);
+    else
+        old_size = order_to_size(block->order) - sizeof(block_header_t);
+
+    if (old_size >= new_size)
         return ptr;
 
     void *new_ptr = kmalloc(new_size);
     if (!new_ptr)
         return NULL;
-    memcpy(new_ptr, ptr, block->size);
+    memcpy(new_ptr, ptr, old_size);
     kfree(ptr);
     return new_ptr;
 }
 
-// Optional: function to get stats pointer
 const heap_stats *kmalloc_get_stats(void) {
     return &stats;
 }
