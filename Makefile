@@ -28,7 +28,8 @@ QEMU_FLAGS = 	-m 2G \
 				-M q35 \
 				-smp 2 \
 				-enable-kvm \
-				-net nic,model=rtl8139
+				-net nic,model=rtl8139 \
+				-net tap,ifname=tap0,script=no,downscript=no
 
 # Nuke built-in rules and variables.
 override MAKEFLAGS += -rR --no-print-directory

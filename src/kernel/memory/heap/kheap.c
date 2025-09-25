@@ -96,8 +96,6 @@ static block_header_t *split_block(size_t order) {
     size_t i = order + 1;
     while (i <= MAX_ORDER && !free_lists[i])
         i++;
-    if (i > MAX_ORDER)
-        return NULL;
 
     block_header_t *block = free_lists[i];
     remove_block(i, block);
@@ -123,8 +121,9 @@ void *kmalloc(size_t size) {
         size_t pages = (needed + PAGE_SIZE - 1) / PAGE_SIZE;
         void *ptr =
             valloc(get_current_ctx(), pages, VMO_KERNEL_RW | VMO_NX, NULL);
-        if (!ptr)
+        if (!ptr) {
             return NULL;
+        }
 
         block_header_t *block = (block_header_t *)ptr;
         block->order          = pages * PAGE_SIZE;
