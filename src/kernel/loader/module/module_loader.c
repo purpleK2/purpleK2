@@ -4,6 +4,8 @@
 #include "fs/file_io.h"
 #include "kernel.h"
 #include "memory/pmm/pmm.h"
+#include "memory/vmm/vflags.h"
+#include "memory/vmm/vmm.h"
 #include "module/modinfo.h"
 #include "paging/paging.h"
 #include "stdio.h"
@@ -464,7 +466,7 @@ mod_t *load_module(const char *file_path) {
     }
 
     // Clean up temporary allocations
-    kfree(buffer);
+    vfree(get_current_ctx(), buffer, true);
     close(file);
 
     return mod;

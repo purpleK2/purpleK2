@@ -5,9 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define PAGE_SIZE        4096
-#define MAX_PAGES        64
-#define SIZE_CLASS_COUNT 12
+#define PAGE_SIZE 4096
 
 void kmalloc_init();
 
