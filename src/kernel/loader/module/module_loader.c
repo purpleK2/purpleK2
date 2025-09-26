@@ -2,6 +2,7 @@
 #include "elf/elf.h"
 #include "elf/sym.h"
 #include "fs/file_io.h"
+#include "fs/vfs/vfs.h"
 #include "kernel.h"
 #include "memory/pmm/pmm.h"
 #include "memory/vmm/vflags.h"
@@ -272,8 +273,11 @@ mod_t *load_module(const char *file_path) {
         return NULL;
     }
 
-    if (read(file, file->size, buffer) != (int)file->size) {
-        debugf_warn("Failed to read complete module file\n");
+    size_t read_from_file = read(file, file->size, buffer);
+    if (read_from_file != file->size) {
+        debugf_warn("Failed to read complete module file! Needed size: %d, "
+                    "read_size: %d",
+                    file->size, read_from_file);
         kfree(buffer);
         close(file);
         return NULL;
