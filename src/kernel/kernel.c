@@ -1,5 +1,6 @@
 #include "kernel.h"
 #include "dev/display/fb/fbdev.h"
+#include "fs/devfs/devfs.h"
 #include "fs/part/mbr.h"
 #include "interrupts/isr.h"
 #include "ipc/pipe.h"
@@ -476,6 +477,8 @@ void kstart(void) {
         kprintf_warn("Couldn't open file!\n");
     }
 
+    ramfs_print(cpio_ramfs->root_node, 0);
+
     register_std_devices();
     dev_initrd_init(initrd->address);
     dev_e9_init();
@@ -484,12 +487,12 @@ void kstart(void) {
     dev_fb_init();
 
 #ifdef CONFIG_DEVFS_ENABLE
-    /*devfs_t *devfs = devfs_create();
+    devfs_t *devfs = devfs_create();
     if (devfs_vfs_init(devfs, CONFIG_DEVFS_MOUNT_PATH) != EOK) {
         kprintf_warn("Failed to initialize DEVFS!\n");
     } else {
         kprintf_ok("DEVFS initialized successfully!\n");
-    }*/
+    }
 
     // devfs_print(devfs->root_node, 0);
 
