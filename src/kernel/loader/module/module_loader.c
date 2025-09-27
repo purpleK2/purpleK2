@@ -326,7 +326,7 @@ mod_t *load_module(const char *file_path) {
             // Calculate number of pages needed for this section
             size_t page_count =
                 ALIGN_UP(section->sh_size, PAGE_SIZE) / PAGE_SIZE;
-            void *addr_phys = pmm_alloc_contiguous_pages(page_count);
+            void *addr_phys = pmm_alloc_pages(page_count);
 
             if (!addr_phys) {
                 debugf_warn(
@@ -337,30 +337,46 @@ mod_t *load_module(const char *file_path) {
                 return NULL;
             }
 
-            map_region_to_page(
-                (uint64_t *)(uintptr_t)PHYS_TO_VIRTUAL(get_kernel_pml4()),
-                (uint64_t)(uintptr_t)addr_phys, mod_addr_counter, page_count,
-                0b111);
-
-            // Set section address and copy data
-            section->sh_addr = mod_addr_counter;
-
-            memset((void *)(uintptr_t)mod_addr_counter, 0,
-                   page_count * PAGE_SIZE);
-
-            if (section->sh_type != SHT_NOBITS) {
-                memcpy((void *)(uintptr_t)mod_addr_counter,
-                       (void *)((uintptr_t)ehdr + section->sh_offset),
-                       section->sh_size);
-            }
-
-            _invalidate(mod_addr_counter);
-            debugf_debug("Mapped 0x%.16llx-0x%.16llx -> 0x%.16llx-0x%.16llx\n",
+            debugf_debug("Mapping 0x%.16llx-0x%.16llx -> 0x%.16llx-0x%.16llx\n",
                          (uint64_t)(uintptr_t)addr_phys,
                          (uint64_t)(uintptr_t)addr_phys + page_count * 0x1000,
                          mod_addr_counter,
                          mod_addr_counter + page_count * 0x1000);
 
+            map_region_to_page(
+                (uint64_t *)(uintptr_t)PHYS_TO_VIRTUAL(get_kernel_pml4()),
+                (uint64_t)(uintptr_t)addr_phys, mod_addr_counter,
+                page_count * PAGE_SIZE, 0b111);
+
+            for (size_t page_idx = 0; page_idx < page_count; page_idx++) {
+                _invalidate(mod_addr_counter + (page_idx * PAGE_SIZE));
+            }
+
+            // Set section address and copy data
+            section->sh_addr = mod_addr_counter;
+
+            debugf("section->sh_size: 0x%llx\n", section->sh_size);
+
+            // SAFETY CHECK: Ensure we don't write beyond the mapped region
+            if (section->sh_size > page_count * PAGE_SIZE) {
+                debugf_warn(
+                    "Section size 0x%llx exceeds mapped region 0x%llx\n",
+                    section->sh_size, page_count * PAGE_SIZE);
+                cleanup_module_allocation(this_mod_start, mod_addr_counter);
+                kfree(buffer);
+                close(file);
+                return NULL;
+            }
+
+            memset((void *)(uintptr_t)section->sh_addr, 0, section->sh_size);
+
+            if (section->sh_type != SHT_NOBITS) {
+                memcpy((void *)(uintptr_t)section->sh_addr,
+                       (void *)((uintptr_t)ehdr + section->sh_offset),
+                       section->sh_size);
+            }
+
+            // Advance to next section, maintaining page alignment
             mod_addr_counter += page_count * PAGE_SIZE;
         } else {
             section->sh_addr = (uintptr_t)ehdr + section->sh_offset;
@@ -470,7 +486,7 @@ mod_t *load_module(const char *file_path) {
     }
 
     // Clean up temporary allocations
-    vfree(get_current_ctx(), buffer, true);
+    kfree(buffer); // Fixed: use kfree instead of vfree
     close(file);
 
     return mod;
