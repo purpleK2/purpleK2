@@ -537,7 +537,7 @@ uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle spinlock,
         break;
     }
     case 0xFFFF:
-        spinlock_acquire(spinlock);
+        // spinlock_acquire(spinlock);
         break;
 
     default:
@@ -548,7 +548,7 @@ uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle spinlock,
 }
 
 void uacpi_kernel_release_mutex(uacpi_handle spinlock) {
-    spinlock_release(spinlock);
+    // spinlock_release(spinlock);
 }
 
 uacpi_bool uacpi_kernel_wait_for_event(uacpi_handle semaphore,
