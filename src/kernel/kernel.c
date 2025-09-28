@@ -508,7 +508,7 @@ void kstart(void) {
 
     pci_scan(pci_ids);
     kprintf_ok("PCI devices parsing done\n");
-    if (pcie_devices_init(pci_ids) != 0) {
+    /*if (pcie_devices_init(pci_ids) != 0) {
         kprintf_warn("Failed to parse PCIe devices!\n");
     } else {
         kprintf_ok("PCIe devices parsing done\n");
@@ -537,7 +537,7 @@ void kstart(void) {
         }
     } else {
         debugf_warn("No harddrive found! No parsing MBR!\n");
-    }
+    }*/
 
     mod_t *mod_rtl8139 = load_module("/initrd/modules/rtl8139.km");
     if (!mod_rtl8139) {
@@ -545,7 +545,7 @@ void kstart(void) {
         _hcf();
     }
 
-    mod_rtl8139->entry_point();
+    start_module(mod_rtl8139);
 
     // init_scheduler(pk_init);
     // irq_registerHandler(0, scheduler_timer_tick);

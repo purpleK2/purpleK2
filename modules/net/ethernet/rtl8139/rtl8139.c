@@ -22,10 +22,6 @@ static struct rtl8139_state {
     bool initialized;
 } rtl;
 
-#define mb()  __asm__ __volatile__("mfence" ::: "memory")
-#define wmb() __asm__ __volatile__("sfence" ::: "memory")
-#define rmb() __asm__ __volatile__("lfence" ::: "memory")
-
 static inline uint32_t get_tx_status_reg(int desc) {
     return RTL8139_TSD0 + (desc * 4);
 }
@@ -47,12 +43,11 @@ static void *alloc_dma_buffer(size_t pages, uint32_t *phys) {
 
     if (pages == 1) {
         map_phys_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), phys_addr,
-                         phys_addr,
-                         PMLE_KERNEL_READ_WRITE | PMLE_NOT_EXECUTABLE);
+                         phys_addr, PMLE_KERNEL_READ_WRITE);
     } else {
         map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), phys_addr,
                            phys_addr, pages * PAGE_SIZE,
-                           PMLE_KERNEL_READ_WRITE | PMLE_NOT_EXECUTABLE);
+                           PMLE_KERNEL_READ_WRITE);
     }
 
     *phys = (uint32_t)phys_addr;
@@ -113,7 +108,6 @@ void rtl8139_init(uint32_t io_base, const uint8_t mac[6]) {
 
     _outl(io_base + RTL8139_RBSTART, rtl.rx_phys);
     debugf("RTL8139: RX buffer configured\n");
-    wmb();
 
     _outl(io_base + RTL8139_RCR, RTL8139_RCR_CONFIG);
     debugf("RTL8139: RCR configured\n");
@@ -169,12 +163,9 @@ int rtl8139_send_frame(const uint8_t *frame, uint16_t len) {
     if (send_len > len) {
         memset(rtl.tx_buffer + len, 0, send_len - len);
     }
-    wmb();
-
     _outl(rtl.io_base + tx_addr_reg, rtl.tx_phys);
     uint32_t tx_command = send_len | RTL8139_TSD_OWN;
     _outl(rtl.io_base + tx_status_reg, tx_command);
-    wmb();
 
     debugf("RTL8139: TX command written: 0x%x\n", tx_command);
 
