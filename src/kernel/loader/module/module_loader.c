@@ -2,22 +2,23 @@
 #include "elf/elf.h"
 #include "elf/sym.h"
 #include "fs/file_io.h"
-#include "fs/vfs/vfs.h"
 #include "kernel.h"
 #include "memory/pmm/pmm.h"
-#include "memory/vmm/vflags.h"
-#include "memory/vmm/vmm.h"
 #include "module/modinfo.h"
 #include "paging/paging.h"
 #include "stdio.h"
 
 #include <memory/heap/kheap.h>
 #include <module/mod.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 
 #define ALIGN_UP(addr, align)                                                  \
     ((((uint64_t)(addr)) + ((align) - 1)) & ~((align) - 1))
+
+bool module_running          = false;
+mod_t *currently_running_mod = NULL;
 
 static uintptr_t next_module_base = 0;
 
@@ -346,7 +347,7 @@ mod_t *load_module(const char *file_path) {
             map_region_to_page(
                 (uint64_t *)(uintptr_t)PHYS_TO_VIRTUAL(get_kernel_pml4()),
                 (uint64_t)(uintptr_t)addr_phys, mod_addr_counter,
-                page_count * PAGE_SIZE, 0b111);
+                page_count * PAGE_SIZE, PMLE_KERNEL_READ_WRITE);
 
             for (size_t page_idx = 0; page_idx < page_count; page_idx++) {
                 _invalidate(mod_addr_counter + (page_idx * PAGE_SIZE));
@@ -461,6 +462,8 @@ mod_t *load_module(const char *file_path) {
     mod->entry_point  = (void (*)(void))entry_point;
     mod->exit_point   = (void (*)(void))exit_point;
     mod->modinfo      = (modinfo_t *)mod_info;
+    mod->ehdr         = buffer;
+    mod->end_address = (void *)(uintptr_t)ALIGN_UP(mod_addr_counter, PAGE_SIZE);
 
     next_module_base = ALIGN_UP(mod_addr_counter, PAGE_SIZE);
 
@@ -485,9 +488,17 @@ mod_t *load_module(const char *file_path) {
         i++;
     }
 
-    // Clean up temporary allocations
-    kfree(buffer); // Fixed: use kfree instead of vfree
     close(file);
 
     return mod;
+}
+
+void start_module(mod_t *mod) {
+    module_running        = true;
+    currently_running_mod = mod;
+
+    mod->entry_point();
+
+    currently_running_mod = NULL;
+    module_running        = false;
 }
