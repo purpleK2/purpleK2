@@ -16,7 +16,7 @@ CFLAGS = -O0 -g -Wall -Wextra -ffreestanding -fno-builtin \
 LDFLAGS = -r -nostdlib -z norelro
 
 TARGET = rtl8139.km
-SRC = main.c rtl8139.c
+SRC = main.c
 OBJ = $(SRC:.c=.o)
 
 .PHONY: all clean
