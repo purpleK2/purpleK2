@@ -23,13 +23,13 @@ KCONFIG_CONFIG = .config
 KCONFIG_DEPS = Kconfig
 KCONFIG_AUTOCONF = $(KERNEL_SRC_DIR)/autoconf.h
 
-QEMU_FLAGS = 	-m 2G \
-			 	-debugcon stdio \
-				-M q35 \
-				-smp 2 \
-				-enable-kvm \
-				-net nic,model=rtl8139 \
-				-net tap,ifname=tap0,script=no,downscript=no
+QEMU_FLAGS = -m 2G \
+    		 -debugcon stdio \
+    		 -M q35 \
+    		 -smp 2 \
+    		 -enable-kvm \
+    		 -netdev tap,id=net0,ifname=tap0,script=no,downscript=no \
+   			 -device rtl8139,netdev=net0,mac=52:54:00:12:34:56
 
 # Nuke built-in rules and variables.
 override MAKEFLAGS += -rR --no-print-directory

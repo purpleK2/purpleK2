@@ -1,8 +1,6 @@
 #ifndef PCI_H
 #define PCI_H 1
 
-#endif
-
 #include <fs/cpio/newc.h>
 
 #define PCI_MAX_VENDOR_NAME 128
@@ -65,3 +63,5 @@ pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
 void pci_lookup_vendor_device(pci_device_t *dev, const char *pci_ids,
                               size_t length);
 void pci_print_list();
+
+#endif

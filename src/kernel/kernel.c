@@ -1,9 +1,7 @@
 #include "kernel.h"
 #include "dev/display/fb/fbdev.h"
 #include "fs/devfs/devfs.h"
-#include "fs/part/mbr.h"
 #include "interrupts/isr.h"
-#include "ipc/pipe.h"
 
 #include <autoconf.h>
 
@@ -121,7 +119,7 @@ extern void __sched_test(void);
 
 HBA_MEM *abar_mem = NULL;
 
-HBA_MEM *mem;
+// HBA_MEM *mem;
 
 void a() {
     for (;;) {
@@ -148,7 +146,7 @@ void pk_init() {
     map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), sata->bar[5],
                        PHYS_TO_VIRTUAL(sata->bar[5]), 0x20000, AHCI_MMIO_FLAGS);
 
-    mem = (HBA_MEM *)PHYS_TO_VIRTUAL(sata->bar[5]);
+    /*mem = (HBA_MEM *)PHYS_TO_VIRTUAL(sata->bar[5]);
 
     bool mode = is_ahci_mode(mem);
 
@@ -163,7 +161,7 @@ void pk_init() {
 
     test_ahci();
 
-    test_ahci_operations(mem);
+    test_ahci_operations(mem);*/
 }
 
 // kernel main function
