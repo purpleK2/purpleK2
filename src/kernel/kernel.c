@@ -1,8 +1,7 @@
 #include "kernel.h"
 #include "dev/display/fb/fbdev.h"
-#include "fs/part/mbr.h"
+#include "fs/devfs/devfs.h"
 #include "interrupts/isr.h"
-#include "ipc/pipe.h"
 
 #include <autoconf.h>
 
@@ -120,7 +119,7 @@ extern void __sched_test(void);
 
 HBA_MEM *abar_mem = NULL;
 
-HBA_MEM *mem;
+// HBA_MEM *mem;
 
 void a() {
     for (;;) {
@@ -147,7 +146,7 @@ void pk_init() {
     map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), sata->bar[5],
                        PHYS_TO_VIRTUAL(sata->bar[5]), 0x20000, AHCI_MMIO_FLAGS);
 
-    mem = (HBA_MEM *)PHYS_TO_VIRTUAL(sata->bar[5]);
+    /*mem = (HBA_MEM *)PHYS_TO_VIRTUAL(sata->bar[5]);
 
     bool mode = is_ahci_mode(mem);
 
@@ -162,7 +161,7 @@ void pk_init() {
 
     test_ahci();
 
-    test_ahci_operations(mem);
+    test_ahci_operations(mem);*/
 }
 
 // kernel main function
@@ -476,6 +475,8 @@ void kstart(void) {
         kprintf_warn("Couldn't open file!\n");
     }
 
+    ramfs_print(cpio_ramfs->root_node, 0);
+
     register_std_devices();
     dev_initrd_init(initrd->address);
     dev_e9_init();
@@ -484,12 +485,12 @@ void kstart(void) {
     dev_fb_init();
 
 #ifdef CONFIG_DEVFS_ENABLE
-    /*devfs_t *devfs = devfs_create();
+    devfs_t *devfs = devfs_create();
     if (devfs_vfs_init(devfs, CONFIG_DEVFS_MOUNT_PATH) != EOK) {
         kprintf_warn("Failed to initialize DEVFS!\n");
     } else {
         kprintf_ok("DEVFS initialized successfully!\n");
-    }*/
+    }
 
     // devfs_print(devfs->root_node, 0);
 
@@ -505,7 +506,7 @@ void kstart(void) {
 
     pci_scan(pci_ids);
     kprintf_ok("PCI devices parsing done\n");
-    if (pcie_devices_init(pci_ids) != 0) {
+    /*if (pcie_devices_init(pci_ids) != 0) {
         kprintf_warn("Failed to parse PCIe devices!\n");
     } else {
         kprintf_ok("PCIe devices parsing done\n");
@@ -534,47 +535,19 @@ void kstart(void) {
         }
     } else {
         debugf_warn("No harddrive found! No parsing MBR!\n");
-    }
+    }*/
 
-    mod_t *mod = load_module("/initrd/modules/example_mod.km");
-
-    if (!mod) {
-        kprintf_warn("Failed to load example module!\n");
+    mod_t *mod_rtl8139 = load_module("/initrd/modules/rtl8139.km");
+    if (!mod_rtl8139) {
+        kprintf_panic("Failed to load RTL9139 network driver");
         _hcf();
     }
 
-    mod->entry_point();
+    start_module(mod_rtl8139);
 
     // init_scheduler(pk_init);
     // irq_registerHandler(0, scheduler_timer_tick);
     // load_tga_to_framebuffer("/initrd/pk2startup_1year.tga");
-
-    fileio_t *pipe_ends[2];
-    if (pipe(pipe_ends) != 0) {
-        debugf("    Failed to create pipe\n");
-        _hcf();
-    }
-
-    fileio_t *rd = pipe_ends[0];
-    fileio_t *wr = pipe_ends[1];
-    char *msg    = "hello kernel pipe!";
-    size_t len   = strlen(msg);
-    if (write(wr, msg, len) != 0 || len != strlen(msg)) {
-        debugf("    Write failed\n");
-        _hcf();
-    }
-
-    char buf[64] = {0};
-    size_t rlen  = sizeof(buf);
-    if (read(rd, rlen, buf) < 0) {
-        debugf("    Read failed\n");
-        _hcf();
-    }
-
-    debugf_debug("Pipe test read: %s\n", buf);
-
-    close(wr);
-    close(rd);
 
     for (;;)
         ;

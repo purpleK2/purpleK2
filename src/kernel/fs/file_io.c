@@ -35,7 +35,7 @@ fileio_t *fio_create() {
     return fio;
 }
 
-fileio_t *open(const char *path, int flags) {
+fileio_t *open(char *path, int flags) {
     UNUSED(flags);
 
     fileio_t *f = NULL;
@@ -59,9 +59,9 @@ fileio_t *open(const char *path, int flags) {
     return f;
 }
 
-int read(fileio_t *file, size_t size, void *out) {
+size_t read(fileio_t *file, size_t size, void *out) {
     if (!file) {
-        return ENULLPTR;
+        return -ENULLPTR;
     }
 
     if (file->flags & PIPE_READ_END) {
@@ -81,7 +81,15 @@ int read(fileio_t *file, size_t size, void *out) {
         size = (file->size - file->offset);
     }
 
-    if (vfs_read(vn, size, file->offset, out) != 0) {
+    debugf("size: %d\n", size);
+    debugf("addr of file->private: 0x%p\n", file->private);
+    debugf("addr of vn: 0x%p\n", vn);
+    debugf("addr of file->private->node_data: 0x%p\n",
+           ((vnode_t *)file->private)->node_data);
+
+    int ret = vfs_read(((vnode_t *)file->private), size, file->offset, out);
+    if (ret != 0) {
+        debugf_warn("o, vfs_read failed with error: %d\n", ret);
         return -EIO;
     }
 

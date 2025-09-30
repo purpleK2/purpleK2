@@ -1,5 +1,6 @@
 #include "isr.h"
 #include "elf/sym.h"
+#include "loader/module/module_loader.h"
 #include "syscalls/syscall.h"
 
 #include <apic/lapic/lapic.h>
@@ -13,10 +14,16 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 extern struct limine_hhdm_request *hhdm_request;
 
 isrHandler isr_handlers[IDT_MAX_DESCRIPTORS];
+
+struct stackFrame {
+    struct stackFrame *rbp;
+    uint64_t rip;
+};
 
 static const char *const exceptions[] = {"Divide by zero error",
                                          "Debug",
@@ -111,6 +118,56 @@ void print_reg_dump(void *ctx) {
             regs->rsi);
 }
 
+static void print_symbol(int frame, uintptr_t addr) {
+    static struct SymbolInfo info = {0};
+    memset(&info, 0, sizeof(info)); // because its static
+    const char *mod_name = NULL;
+
+    // Check kernel
+    if (currently_running_mod &&
+        addr >= (uintptr_t)currently_running_mod->base_address &&
+        addr < (uintptr_t)currently_running_mod->end_address &&
+        resolve_symbol(currently_running_mod->ehdr,
+                       (uintptr_t)currently_running_mod->end_address -
+                           (uintptr_t)currently_running_mod->base_address,
+                       addr - (uintptr_t)currently_running_mod->base_address,
+                       &info)) {
+        mod_name = currently_running_mod->modinfo->name;
+    } else {
+        mod_name = "kernel";
+        resolve_symbol(get_bootloader_data()->kernel_file_data,
+                       get_bootloader_data()->kernel_file_size, addr, &info);
+    }
+
+    if (info.name) {
+        if (strcmp(mod_name, "kernel") == 0) {
+            size_t offset = addr - info.start;
+            if (info.size > 0)
+                mprintf("[%d][%p] %s:%s+0x%zx/0x%zx\n", frame, (void *)addr,
+                        mod_name, info.name, offset, info.size);
+            else
+                mprintf("[%d][%p] %s:%s+0x%zx\n", frame, (void *)addr, mod_name,
+                        info.name, offset);
+        } else {
+            size_t offset =
+                addr -
+                ((uintptr_t)currently_running_mod->base_address + info.start);
+            if (info.size > 0)
+                mprintf(
+                    "[%d][%p] %s:%s+0x%zx/0x%zx -- (0x%zx)\n", frame,
+                    (void *)addr, mod_name, info.name, offset, info.size,
+                    (addr - (uintptr_t)currently_running_mod->base_address));
+            else
+                mprintf(
+                    "[%d][%p] %s:%s+0x%zx  -- (0x%zx)\n", frame, (void *)addr,
+                    mod_name, info.name, offset,
+                    (addr - (uintptr_t)currently_running_mod->base_address));
+        }
+    } else {
+        mprintf("[%d][%p] <unknown>\n", frame, (void *)addr);
+    }
+}
+
 void panic_common(void *ctx) {
     registers_t *regs = ctx;
 
@@ -118,36 +175,16 @@ void panic_common(void *ctx) {
 
     // stacktrace
     mprintf("\n\n --- STACK TRACE ---\n");
-    uint64_t *rbp = (uint64_t *)regs->rbp;
-    int frame     = 0;
+    struct stackFrame *stack = (struct stackFrame *)regs->rbp;
+    int frame                = 0;
 
-    const char *rip_name =
-        resolve_symbol_name(get_bootloader_data()->kernel_file_data,
-                            get_bootloader_data()->kernel_file_size, regs->rip);
-    mprintf("[RIP][%p] %s\n", regs->rip, rip_name ? rip_name : "unknown");
+    print_symbol(frame++, regs->rip);
 
-    while (rbp) {
-        uint64_t return_addr =
-            rbp[1]; // Return address (points after call instruction)
-        uint64_t *prev_rbp = (uint64_t *)rbp[0];
-
-        uint64_t approx_func_addr = return_addr;
-
-        const char *func_name = resolve_symbol_name(
-            get_bootloader_data()->kernel_file_data,
-            get_bootloader_data()->kernel_file_size, approx_func_addr);
-        if (func_name) {
-            mprintf("[%d][%p] %s\n", frame, rbp, func_name);
-        } else {
-            mprintf("[%d][%p] func addr: %llx\n", frame, rbp, approx_func_addr);
-        }
-
-        rbp = prev_rbp;
-        frame++;
-
-        if (frame > 20 || !rbp || (uint64_t)rbp < 0x1000)
-            break;
+    while (stack) {
+        print_symbol(frame++, stack->rip);
+        stack = (struct stackFrame *)stack->rbp;
     }
+
     mprintf("\nPANIC LOG END --- HALTING ---\n");
     debugf(ANSI_COLOR_RESET);
     asm("cli");

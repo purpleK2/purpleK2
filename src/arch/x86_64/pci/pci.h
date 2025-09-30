@@ -1,8 +1,6 @@
 #ifndef PCI_H
 #define PCI_H 1
 
-#endif
-
 #include <fs/cpio/newc.h>
 
 #define PCI_MAX_VENDOR_NAME 128
@@ -55,6 +53,8 @@ void pci_print_info(uint8_t bus, uint8_t device, uint8_t function);
 void pci_free_list();
 uint32_t pci_config_read(uint8_t bus, uint8_t device, uint8_t function,
                          uint8_t offset);
+void pci_config_write(uint8_t bus, uint8_t device, uint8_t function,
+                      uint8_t offset, uint32_t value);
 const char *pci_get_subclass_name(uint8_t class_code, uint8_t subclass);
 const char *pci_get_class_name(uint8_t class_code);
 
@@ -63,3 +63,5 @@ pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
 void pci_lookup_vendor_device(pci_device_t *dev, const char *pci_ids,
                               size_t length);
 void pci_print_list();
+
+#endif

@@ -294,6 +294,8 @@ int ramfs_open(vnode_t **vnode_r, int flags, bool clone, fileio_t **fio_out) {
 
     v_ramfs_node->size = ramfs_get_node_size(ramfs_node);
     v_ramfs_node->data = kmalloc(v_ramfs_node->size);
+    debugf("addr of v_ramfs_node->data: 0x%p, size: %d\n", v_ramfs_node->data,
+           v_ramfs_node->size);
 
     if (v_ramfs_node->type == RAMFS_DIRECTORY) {
         // TODO
@@ -308,6 +310,9 @@ int ramfs_open(vnode_t **vnode_r, int flags, bool clone, fileio_t **fio_out) {
     v_ramfs_node->sibling = NULL;
 
     vnode->node_data = v_ramfs_node;
+    if (!vnode->node_data) {
+        debugf("help me\n");
+    }
 
     fileio_t *fio = *fio_out;
     if (!fio || !fio_out) {
@@ -316,26 +321,37 @@ int ramfs_open(vnode_t **vnode_r, int flags, bool clone, fileio_t **fio_out) {
 
     fio->buf_start = v_ramfs_node->data;
     fio->size      = v_ramfs_node->size;
+    fio->private   = v_ramfs_node;
+
+    if (!((vnode_t *)fio->private)->node_data) {
+        debugf("ahhh\n");
+    }
 
     return EOK;
 }
 
 int ramfs_read(vnode_t *vn, size_t *bytes, size_t *offset, void *out) {
     if (!vn) {
-        return ENULLPTR;
+        debugf("ts aint tuff\n");
+        return -ENULLPTR;
     }
+
+    debugf("ramfs_read: vnode_ptr = 0x%p", vn);
 
     memset(out, 0, (*bytes));
 
-    ramfs_node_t *ramfs_node = vn->node_data;
+    ramfs_node_t *ramfs_node = (ramfs_node_t *)vn->node_data;
     if (!ramfs_node) {
-        return ENULLPTR;
+        debugf("Address of vn->node_data: 0x%p\n", vn->node_data);
+        debugf("i hate this fucking language: 0x%p\n",
+               (ramfs_node_t *)vn->node_data);
+        return -ENULLPTR;
     }
 
     if ((*bytes) > ramfs_node->size) {
         (*bytes) = ramfs_node->size;
     } else if ((*offset) >= ramfs_node->size) {
-        return ENOCFG;
+        return -ENOCFG;
     }
 
     if ((*bytes) + (*offset) > ramfs_node->size) {

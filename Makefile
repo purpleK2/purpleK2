@@ -23,11 +23,13 @@ KCONFIG_CONFIG = .config
 KCONFIG_DEPS = Kconfig
 KCONFIG_AUTOCONF = $(KERNEL_SRC_DIR)/autoconf.h
 
-QEMU_FLAGS = 	-m 2G \
-			 	-debugcon stdio \
-				-M q35 \
-				-smp 2 \
-				-enable-kvm
+QEMU_FLAGS = -m 2G \
+    		 -debugcon stdio \
+    		 -M q35 \
+    		 -smp 2 \
+    		 -enable-kvm \
+    		 -netdev tap,id=net0,ifname=tap0,script=no,downscript=no \
+   			 -device rtl8139,netdev=net0,mac=52:54:00:12:34:56
 
 # Nuke built-in rules and variables.
 override MAKEFLAGS += -rR --no-print-directory
@@ -215,7 +217,7 @@ $(LIBS_DIR)/limine/limine:
 
 modules:
 	@mkdir -p target/modules
-	@for dir in $(shell find modules -mindepth 1 -maxdepth 1 -type d); do \
+	@for dir in $(shell find modules -mindepth 1 -maxdepth 4 -type d); do \
 		echo "--> Building module: $$dir"; \
 		$(MAKE) -C $$dir; \
 		for km in $$dir/*.km; do \

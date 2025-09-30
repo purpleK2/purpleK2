@@ -7,5 +7,6 @@
 #define is_printable(c) ((c) >= 32 && (c) <= 126)
 
 void hex_dump(const void *data, size_t size);
+void hex_dump_debug(const void *data, size_t size);
 
 #endif // DUMP_H
