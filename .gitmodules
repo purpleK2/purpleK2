@@ -1,7 +1,7 @@
 [submodule "libs/limine"]
 	path = libs/limine
 	url = https://codeberg.org/Limine/Limine.git
-	branch = v9.x-binary
+	branch = v10.x-binary
 
 [submodule "libs/uacpi"]
 	path = libs/uacpi
