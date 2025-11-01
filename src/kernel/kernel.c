@@ -1,12 +1,10 @@
 #include "kernel.h"
-#include "dev/display/fb/fbdev.h"
-#include "fs/devfs/devfs.h"
-#include "interrupts/isr.h"
 
 #include <autoconf.h>
 
 #include <arch.h>
 #include <cpu.h>
+#include <interrupts/isr.h>
 #include <io.h>
 #include <limine.h>
 
@@ -16,6 +14,7 @@
 #include <ahci/ahci.h>
 
 #include <dev/device.h>
+#include <dev/display/fb/fbdev.h>
 #include <dev/fs/initrd.h>
 #include <dev/port/e9/e9.h>
 #include <dev/port/parallel/parallel.h>
@@ -23,6 +22,7 @@
 #include <dev/std/helper.h>
 
 #include <fs/cpio/newc.h>
+#include <fs/devfs/devfs.h>
 #include <fs/file_io.h>
 #include <fs/ramfs/ramfs.h>
 #include <fs/vfs/vfs.h>
@@ -141,27 +141,15 @@ void pk_init() {
     proc_create(__sched_test, 0);
     debugf_ok("Starting __sched_test\n");
 
-    pci_device_t *sata = detect_controller();
+    load_tga_to_framebuffer("/initrd/pk2startup_1year.tga");
 
-    map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), sata->bar[5],
-                       PHYS_TO_VIRTUAL(sata->bar[5]), 0x20000, AHCI_MMIO_FLAGS);
+    mod_t *mod_rtl8139 = load_module("/initrd/modules/rtl8139.km");
+    if (!mod_rtl8139) {
+        kprintf_panic("Failed to load RTL9139 network driver");
+        _hcf();
+    }
 
-    /*mem = (HBA_MEM *)PHYS_TO_VIRTUAL(sata->bar[5]);
-
-    bool mode = is_ahci_mode(mem);
-
-    if (mode)
-        kprintf("AHCI mode enabled.\n");
-    else
-        kprintf("IDE mode enabled.\n");
-
-    int sata_port = get_sata_port(mem);
-
-    port_rebase(&mem->ports[sata_port]);
-
-    test_ahci();
-
-    test_ahci_operations(mem);*/
+    start_module(mod_rtl8139);
 }
 
 // kernel main function
@@ -537,17 +525,8 @@ void kstart(void) {
         debugf_warn("No harddrive found! No parsing MBR!\n");
     }*/
 
-    mod_t *mod_rtl8139 = load_module("/initrd/modules/rtl8139.km");
-    if (!mod_rtl8139) {
-        kprintf_panic("Failed to load RTL9139 network driver");
-        _hcf();
-    }
-
-    start_module(mod_rtl8139);
-
-    // init_scheduler(pk_init);
-    // irq_registerHandler(0, scheduler_timer_tick);
-    // load_tga_to_framebuffer("/initrd/pk2startup_1year.tga");
+    init_scheduler(pk_init);
+    irq_registerHandler(0, scheduler_timer_tick);
 
     for (;;)
         ;

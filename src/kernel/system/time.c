@@ -1,5 +1,6 @@
 #include "time.h"
 
+#include <interrupts/irq.h>
 #include <scheduler/scheduler.h>
 #include <util/util.h>
 
@@ -22,5 +23,6 @@ void timer_tick(void *ctx) {
 void scheduler_timer_tick(void *ctx) {
     timer_tick(ctx);
 
+    irq_sendEOI(((registers_t *)ctx)->interrupt);
     yield(ctx);
 }
