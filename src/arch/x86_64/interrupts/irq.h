@@ -8,6 +8,7 @@
 typedef void (*irq_handler)(void *ctx);
 
 void irq_registerHandler(int irq, irq_handler handler);
+void irq_sendEOI(uint8_t irq);
 
 extern void _enable_interrupts();
 extern void _disable_interrupts();
