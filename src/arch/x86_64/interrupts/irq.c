@@ -20,6 +20,14 @@ void irq_init() {
     _enable_interrupts();
 }
 
+void irq_sendEOI(uint8_t irq) {
+    if (is_lapic_enabled()) {
+        lapic_send_eoi();
+    } else {
+        pic_sendEOI(irq);
+    }
+}
+
 // this function should be used after checking if the APIC is supported or not
 void irq_registerHandler(int irq, irq_handler handler) {
     debugf_debug("Registering handler for IRQ %d\n", irq);
