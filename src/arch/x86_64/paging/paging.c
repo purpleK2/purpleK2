@@ -12,6 +12,8 @@
 
 #include <scheduler/scheduler.h>
 
+#include <interrupts/irq.h>
+
 #include <util/util.h>
 
 #include <stdint.h>
@@ -74,11 +76,11 @@ void pf_handler(void *ctx) {
     registers_t *regs      = ctx;
     uint64_t pf_error_code = (uint64_t)regs->error;
 
-    /*if (PG_IF(pf_error_code)) {
+    if (PG_IF(pf_error_code)) {
         proc_exit();
-        yield(ctx); // tell scheduler to select another process
+        yield(); // tell scheduler to select another process
         return;
-    }*/
+    }
 
     stdio_panic_init();
     bsod_init();

@@ -12,8 +12,8 @@ context_load:
     mov r13, [rdi + 18h]
     mov r12, [rdi + 20h]
 
-    mov [rdi + 48h], rbp
-    mov [rdi + 70h], rbx
+    mov rbp, [rdi + 48h]
+    mov rbx, [rdi + 70h]
 
     mov rsp, rdi
     add rsp, 90h

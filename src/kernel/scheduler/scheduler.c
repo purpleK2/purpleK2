@@ -59,6 +59,9 @@ int proc_create(void (*entry)(), int flags) {
     proc->vmm_ctx     = vmm_ctx_init(pagemap, vflags);
     proc->cwd         = NULL;
     thread_create(proc, entry, flags);
+
+    debugf("Created new process with entry %p PID=%d\n", entry, proc->pid);
+
     return proc->pid;
 }
 
@@ -75,8 +78,9 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
     void *stack =
         (void *)PHYS_TO_VIRTUAL(pmm_alloc_pages(SCHEDULER_STACK_PAGES));
 
-    registers_t *ctx = kmalloc(sizeof(registers_t));
-    memset(ctx, 0, sizeof(registers_t));
+    // so the struct sits on the top of the stack
+    registers_t *ctx =
+        (registers_t *)((stack + SCHEDULER_STACKSZ) - sizeof(registers_t));
 
     ctx->rip     = (uint64_t)entry;
     ctx->cs      = (flags & TF_MODE_USER) ? 0x1B : 0x08;
@@ -167,6 +171,41 @@ int pcb_destroy(int pid) {
     return EOK;
 }
 
+void thread_push_to_queue(tcb_t *to_push) {
+    int cpu  = get_cpu();
+    tcb_t *t = thread_queues[cpu].head;
+
+    // If it's the only process in the queue, we won't push anything
+    if (!t->next) {
+        return;
+    }
+
+    // if it's at the start of the queue, then we'll just get rid of it
+    if (t == to_push) {
+        thread_queues[cpu].head = t->next;
+    } else {
+        // find where is the thread in the queue and get the one before it
+        for (; t->next != to_push; t = t->next) {
+            if (!t->next) {
+                break;
+            }
+        }
+        // remove to_push from there
+        t->next = to_push->next;
+    }
+
+    // and put it at the end of the queue
+    tcb_t *last = t; // we don't start from the head atp
+    for (; t->next != NULL; t = t->next) {
+        // if it's like, a circular list (i don't think it's a term but
+        // :shrugs:)
+        if (t->next == to_push) {
+            return;
+        }
+    }
+    t->next = to_push;
+}
+
 int thread_destroy(int pid, int tid) {
     tcb_t *t = tcb_lookup(pid, tid);
     if (!t) {
@@ -174,6 +213,8 @@ int thread_destroy(int pid, int tid) {
     }
 
     t->state = THREAD_DEAD;
+
+    // TODO: remove TCB from queue
 
     return EOK;
 }
@@ -190,12 +231,10 @@ int proc_exit() {
     tcb_t *current = current_threads[cpu];
 
     int ret = pcb_destroy(current->parent->pid);
-
-    yield(NULL);
     return ret;
 }
 
-void yield(registers_t *regs) {
+void yield() {
     int cpu        = get_cpu();
     tcb_t *current = current_threads[cpu];
     tcb_t *next;
@@ -211,14 +250,15 @@ void yield(registers_t *regs) {
         }
 
         fpu_save(current->fpu);
-        if (regs) {
-            memcpy(current->regs, regs, sizeof(registers_t));
-        } else {
-            context_save(current->regs);
-        }
+        context_save(current->regs);
 
         current->state      = THREAD_READY;
         current->time_slice = SCHEDULER_THREAD_TS;
+
+        // push the thread to the end of the queue
+        // (it's probably going to be a temporary thing, maybe in the future we
+        // should make a smarter queue)
+        thread_push_to_queue(current);
 
         next = pick_next_thread(cpu);
         break;
@@ -232,20 +272,15 @@ void yield(registers_t *regs) {
     if (!next) {
         mprintf_warn(
             "No more processes left to run. If you want, you can "
-            "reboot your compooter, or you can keep your computer on to "
+            "reboot your compooter, or, you can keep your computer on to "
             "unlock a very high electrical bill :kekw:\n");
-        scheduler_idle(); // good luck getting out of here >:D
+        scheduler_idle(); // good luck getting out of here >^D
     }
 
     current_threads[cpu] = next;
     next->state          = THREAD_RUNNING;
 
-    // it instantly returns to the RIP in here
     fpu_restore(next->fpu);
-
-    if (regs) {
-        memcpy(regs, next->regs, sizeof(registers_t));
-    } else {
-        context_load(next->regs);
-    }
+    // it instantly returns to the RIP in here
+    context_load(next->regs);
 }

@@ -11,7 +11,7 @@
 
 #include <fs/file_io.h>
 
-// Time Slice, not that "ts"
+// **T**ime **S**lice, not that "ts"
 #define SCHEDULER_THREAD_TS 10
 
 #define SCHEDULER_STACK_PAGES 2
@@ -125,6 +125,6 @@ int pcb_destroy(int pid);
 pcb_t *get_current_pcb();
 int thread_destroy(int pid, int tid);
 
-void yield(registers_t *regs); // gets called by the lapic timer on each cpu
+void yield();
 
 #endif // SCHEDULER_H
