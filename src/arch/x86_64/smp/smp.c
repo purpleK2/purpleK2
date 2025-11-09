@@ -37,7 +37,7 @@ int smp_init() {
 
     kprintf_info("SMP init: %d CPUs detected\n", bootloader_data->cpu_count);
     for (uint64_t i = 0; i < bootloader_data->cpu_count; i++) {
-        struct limine_smp_info *cpu = bootloader_data->cpus[i];
+        struct limine_mp_info *cpu = bootloader_data->cpus[i];
 
         if (cpu->processor_id == 0) {
             // dont init the bsp (limine shouldnt give it but just in case)
@@ -52,7 +52,7 @@ int smp_init() {
     return 0;
 }
 
-void mp_trampoline(struct limine_smp_info *cpu) {
+void mp_trampoline(struct limine_mp_info *cpu) {
     UNUSED(cpu);
 
     asm("cli");

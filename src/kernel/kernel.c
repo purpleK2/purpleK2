@@ -59,49 +59,54 @@
 #define INITRD_FILE "initrd.cpio"
 #define INITRD_PATH "/" INITRD_FILE
 
-USED SECTION(".requests") static volatile LIMINE_BASE_REVISION(3);
+USED SECTION(".requests") static volatile uint64_t limine_base_revision[] =
+    LIMINE_BASE_REVISION(3);
 
 USED SECTION(".requests") static volatile struct limine_framebuffer_request
-    framebuffer_request = {.id = LIMINE_FRAMEBUFFER_REQUEST, .revision = 0};
+    framebuffer_request = {.id = LIMINE_FRAMEBUFFER_REQUEST_ID, .revision = 0};
 
 USED SECTION(".requests") static volatile struct limine_memmap_request
-    memmap_request = {.id = LIMINE_MEMMAP_REQUEST, .revision = 0};
+    memmap_request = {.id = LIMINE_MEMMAP_REQUEST_ID, .revision = 0};
 
 USED SECTION(".requests") static volatile struct limine_paging_mode_request
-    paging_mode_request = {.id = LIMINE_PAGING_MODE_REQUEST, .revision = 0};
+    paging_mode_request = {.id = LIMINE_PAGING_MODE_REQUEST_ID, .revision = 0};
 
 USED SECTION(".requests") static volatile struct limine_hhdm_request
-    hhdm_request = {.id = LIMINE_HHDM_REQUEST, .revision = 0};
+    hhdm_request = {.id = LIMINE_HHDM_REQUEST_ID, .revision = 0};
 
-USED SECTION(".requests") static volatile struct limine_kernel_address_request
-    kernel_address_request = {.id       = LIMINE_KERNEL_ADDRESS_REQUEST,
+USED SECTION(
+    ".requests") static volatile struct limine_executable_address_request
+    kernel_address_request = {.id       = LIMINE_EXECUTABLE_ADDRESS_REQUEST_ID,
                               .revision = 0};
 
 USED SECTION(".requests") static volatile struct limine_rsdp_request
-    rsdp_request = {.id = LIMINE_RSDP_REQUEST, .revision = 0};
+    rsdp_request = {.id = LIMINE_RSDP_REQUEST_ID, .revision = 0};
 
 USED SECTION(".requests") static volatile struct limine_module_request
-    module_request = {.id = LIMINE_MODULE_REQUEST, .revision = 0};
+    module_request = {.id = LIMINE_MODULE_REQUEST_ID, .revision = 0};
 
 USED SECTION(".requests") static volatile struct limine_firmware_type_request
-    firmware_type_request = {.id = LIMINE_FIRMWARE_TYPE_REQUEST, .revision = 0};
+    firmware_type_request = {.id       = LIMINE_FIRMWARE_TYPE_REQUEST_ID,
+                             .revision = 0};
 
-USED SECTION(".requests") static volatile struct limine_smp_request
-    smp_request = {.id = LIMINE_SMP_REQUEST, .revision = 0};
+USED SECTION(".requests") static volatile struct limine_mp_request
+    smp_request = {.id = LIMINE_MP_REQUEST_ID, .revision = 0};
 
-USED SECTION(".requests") static volatile struct limine_kernel_file_request
-    kernel_file_request = {.id = LIMINE_KERNEL_FILE_REQUEST, .revision = 0};
+USED SECTION(".requests") static volatile struct limine_executable_file_request
+    kernel_file_request = {.id       = LIMINE_EXECUTABLE_FILE_REQUEST_ID,
+                           .revision = 0};
 
-USED SECTION(
-    ".requests_start_marker") static volatile LIMINE_REQUESTS_START_MARKER;
+USED SECTION(".requests_start_marker") static volatile uint64_t
+    limine_requests_start_marker[] = LIMINE_REQUESTS_START_MARKER;
 
-USED SECTION(".requests_end_marker") static volatile LIMINE_REQUESTS_END_MARKER;
+USED SECTION(".requests_end_marker") static volatile uint64_t
+    limine_requests_end_marker[] = LIMINE_REQUESTS_END_MARKER;
 
 struct limine_framebuffer *framebuffer;
 struct limine_memmap_response *memmap_response;
 struct limine_memmap_entry *memmap_entry;
 struct limine_hhdm_response *hhdm_response;
-struct limine_kernel_address_response *kernel_address_response;
+struct limine_executable_address_response *kernel_address_response;
 struct limine_paging_mode_response *paging_mode_response;
 struct limine_rsdp_response *rsdp_response;
 struct limine_module_response *module_response;
@@ -156,7 +161,7 @@ void pk_init() {
 void kstart(void) {
     asm("cli");
     // Ensure the bootloader actually understands our base revision (see spec).
-    if (LIMINE_BASE_REVISION_SUPPORTED == false) {
+    if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false) {
         _hcf();
     }
 
@@ -177,9 +182,9 @@ void kstart(void) {
     clearscreen();
 
     limine_parsed_data.kernel_file_data =
-        kernel_file_request.response->kernel_file->address;
+        kernel_file_request.response->executable_file->address;
     limine_parsed_data.kernel_file_size =
-        kernel_file_request.response->kernel_file->size;
+        kernel_file_request.response->executable_file->size;
 
     arch_base_init();
 
@@ -197,11 +202,11 @@ void kstart(void) {
             FIRMWARE_TYPE = "X86BIOS";
             break;
 
-        case LIMINE_FIRMWARE_TYPE_UEFI32:
+        case LIMINE_FIRMWARE_TYPE_EFI32:
             FIRMWARE_TYPE = "UEFI32";
             break;
 
-        case LIMINE_FIRMWARE_TYPE_UEFI64:
+        case LIMINE_FIRMWARE_TYPE_EFI64:
             FIRMWARE_TYPE = "UEFI64";
             break;
 
@@ -249,7 +254,7 @@ void kstart(void) {
         _hcf();
     }
 
-    kernel_file = kernel_file_request.response->kernel_file;
+    kernel_file = kernel_file_request.response->executable_file;
 
     limine_parsed_data.kernel_file_data = kernel_file->address;
     limine_parsed_data.kernel_file_size = kernel_file->size;
@@ -365,10 +370,8 @@ void kstart(void) {
     }
 
 #if defined(__x86_64__)
-#ifdef CONFIG_ENABLE_APIC
 #include <apic/ioapic/ioapic.h>
 #include <apic/lapic/lapic.h>
-#include <interrupts/irq.h>
 
     if (check_apic()) {
         asm("cli");
@@ -382,8 +385,6 @@ void kstart(void) {
     } else {
         debugf_debug("APIC is not supported. Going on with legacy PIC\n");
     }
-
-#endif
 #endif
 
     // hpet_init();

@@ -50,7 +50,7 @@ typedef struct bootloader_data {
 
     // SMP stuff
     uint64_t cpu_count;
-    LIMINE_PTR(struct limine_smp_info **) cpus;
+    LIMINE_PTR(struct limine_mp_info **) cpus;
     bool smp_enabled; // * do not remove or tlb handler will shit itself
 
     uint64_t boot_time; // milliseconds since boot
