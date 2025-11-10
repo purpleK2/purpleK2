@@ -77,8 +77,9 @@ void pf_handler(void *ctx) {
     uint64_t pf_error_code = (uint64_t)regs->error;
 
     if (PG_IF(pf_error_code)) {
+        debugf_warn("Process %d killed!\n", get_current_pcb()->pid);
         proc_exit();
-        yield(); // tell scheduler to select another process
+        yield(); // tell scheduler to select another process  427b1
         return;
     }
 
