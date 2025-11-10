@@ -70,7 +70,7 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
     memset(thread, 0, sizeof(tcb_t));
     thread->tid    = __sync_fetch_and_add(&parent->thread_count, 1);
     thread->flags  = flags;
-    thread->state  = PROC_READY;
+    thread->state  = THREAD_READY;
     thread->parent = parent;
 
     thread->time_slice = SCHEDULER_THREAD_TS;
@@ -152,7 +152,6 @@ int init_cpu_scheduler(int cpu, void (*p)()) {
 }
 
 int pcb_destroy(int pid) {
-    // Mark process and threads as dead.
     pcb_t *p = pcb_lookup(pid);
     if (!p) {
         return ENULLPTR;
@@ -167,6 +166,8 @@ int pcb_destroy(int pid) {
         tcb_t *t = p->threads[i];
         t->state = THREAD_DEAD;
     }
+
+    // also remove it from the queue in the next yield just like the thread
 
     return EOK;
 }
@@ -191,6 +192,21 @@ void thread_push_to_queue(tcb_t *to_push) {
     *q = to_push;
 }
 
+void thread_remove_from_queue(tcb_t *to_remove) {
+    int cpu = get_cpu();
+    tcb_t **p = &thread_queues[cpu].head;
+
+    while (*p && *p != to_remove) {
+        p = &(*p)->next;
+    }
+
+    if (*p == NULL) {
+        return;
+    }
+
+    *p = to_remove->next;
+    to_remove->next = NULL;
+}
 
 int thread_destroy(int pid, int tid) {
     tcb_t *t = tcb_lookup(pid, tid);
@@ -200,7 +216,8 @@ int thread_destroy(int pid, int tid) {
 
     t->state = THREAD_DEAD;
 
-    // TODO: remove TCB from queue
+    // thread_remove_from_queue(t);
+    // actually cleanup in the next yield
 
     return EOK;
 }
@@ -240,10 +257,7 @@ void yield() {
 
         current->state      = THREAD_READY;
         current->time_slice = SCHEDULER_THREAD_TS;
-
-        // push the thread to the end of the queue
-        // (it's probably going to be a temporary thing, maybe in the future we
-        // should make a smarter queue)
+        
         thread_push_to_queue(current);
 
         next = pick_next_thread(cpu);
@@ -251,6 +265,7 @@ void yield() {
 
     case THREAD_WAITING:
     case THREAD_DEAD:
+        thread_remove_from_queue(current);
         next = pick_next_thread(cpu);
         break;
     }
