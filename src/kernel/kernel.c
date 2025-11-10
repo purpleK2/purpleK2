@@ -146,15 +146,9 @@ void pk_init() {
     proc_create(__sched_test, 0);
     debugf_ok("Starting __sched_test\n");
 
-    load_tga_to_framebuffer("/initrd/pk2startup_1year.tga");
+    // load_tga_to_framebuffer("/initrd/pk2startup_1year.tga");
 
-    mod_t *mod_rtl8139 = load_module("/initrd/modules/rtl8139.km");
-    if (!mod_rtl8139) {
-        kprintf_panic("Failed to load RTL9139 network driver");
-        _hcf();
-    }
-
-    start_module(mod_rtl8139);
+    for (;;);
 }
 
 // kernel main function

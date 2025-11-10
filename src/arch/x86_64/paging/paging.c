@@ -83,6 +83,8 @@ void pf_handler(void *ctx) {
         return;
     }
 
+    // 626e0
+
     stdio_panic_init();
     bsod_init();
 

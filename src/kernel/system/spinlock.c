@@ -9,9 +9,8 @@ void spinlock_acquire(lock_t *lock) {
     }
 }
 
-// forces acquiring the spinlock in case of a deadlock
 void spinlock_force_acquire(lock_t *lock) {
-    unsigned int timeout = 1000000;
+    unsigned int timeout = 100;
 
     while (atomic_flag_test_and_set(lock)) {
         if (--timeout == 0) {
