@@ -74,12 +74,24 @@ void isr_syscall(void *ctx) {
     regs->rax = ret;
 }
 
+
+static void isr_debug(void *ctx)
+{
+    registers_t *regs = ctx;
+    debugf_warn("Debug exception at RIP=0x%llx\n", regs->rip);
+
+    regs->rflags &= ~(1ULL << 8);
+
+    regs->rip += 1;
+}
+
 void isr_init() {
     for (int i = 0; i < 256; i++) {
         idt_gate_enable(i);
     }
 
     isr_registerHandler(0x80, isr_syscall);
+    isr_registerHandler(0x1, isr_debug);
 }
 
 void print_reg_dump(void *ctx) {
@@ -190,6 +202,8 @@ void panic_common(void *ctx) {
     asm("cli");
     _hcf();
 }
+
+
 
 void isr_handler(void *ctx) {
     registers_t *regs = ctx;

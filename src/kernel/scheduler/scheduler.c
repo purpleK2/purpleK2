@@ -172,39 +172,25 @@ int pcb_destroy(int pid) {
 }
 
 void thread_push_to_queue(tcb_t *to_push) {
-    int cpu  = get_cpu();
-    tcb_t *t = thread_queues[cpu].head;
+    int cpu = get_cpu();
+    tcb_t **p = &thread_queues[cpu].head;
 
-    // If it's the only process in the queue, we won't push anything
-    if (!t->next) {
+    while (*p && *p != to_push) {
+        p = &(*p)->next;
+    }
+    if (*p == NULL) {
         return;
     }
+    *p = to_push->next;
+    to_push->next = NULL;
 
-    // if it's at the start of the queue, then we'll just get rid of it
-    if (t == to_push) {
-        thread_queues[cpu].head = t->next;
-    } else {
-        // find where is the thread in the queue and get the one before it
-        for (; t->next != to_push; t = t->next) {
-            if (!t->next) {
-                break;
-            }
-        }
-        // remove to_push from there
-        t->next = to_push->next;
+    tcb_t **q = &thread_queues[cpu].head;
+    while (*q) {
+        q = &(*q)->next;
     }
-
-    // and put it at the end of the queue
-    tcb_t *last = t; // we don't start from the head atp
-    for (; t->next != NULL; t = t->next) {
-        // if it's like, a circular list (i don't think it's a term but
-        // :shrugs:)
-        if (t->next == to_push) {
-            return;
-        }
-    }
-    t->next = to_push;
+    *q = to_push;
 }
+
 
 int thread_destroy(int pid, int tid) {
     tcb_t *t = tcb_lookup(pid, tid);
