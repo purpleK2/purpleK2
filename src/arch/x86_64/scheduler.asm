@@ -3,7 +3,6 @@ format ELF64
 section '.text' executable
 
 public context_load
-public context_save
 
 ; void context_load(task_regs_t *ctx)
 context_load:
@@ -19,21 +18,6 @@ context_load:
     add rsp, 0x90
 
     iretq
-
-; void context_save(task_regs_t *out)
-context_save:
-    mov [rdi + 0x08], r15
-    mov [rdi + 0x10], r14
-    mov [rdi + 0x18], r13
-    mov [rdi + 0x20], r12
-
-    mov [rdi + 0x48], rbp
-    mov [rdi + 0x70], rbx
-
-    mov [rdi + 0xa8], rsp
-
-    ret
-
 
 public fpu_save
 public fpu_restore

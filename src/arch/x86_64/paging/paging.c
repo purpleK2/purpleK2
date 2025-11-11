@@ -79,7 +79,7 @@ void pf_handler(void *ctx) {
     if (PG_IF(pf_error_code)) {
         debugf_warn("Process %d killed!\n", get_current_pcb()->pid);
         proc_exit();
-        yield(); // tell scheduler to select another process  427b1
+        yield(regs); // tell scheduler to select another process  427b1
         return;
     }
 
