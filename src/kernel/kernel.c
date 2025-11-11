@@ -118,7 +118,7 @@ struct bootloader_data *get_bootloader_data() {
     return &limine_parsed_data;
 }
 
-vmm_context_t *kernel_vmm_ctx;
+vmc_t *kernel_vmm_ctx;
 
 extern void __sched_test(void);
 
