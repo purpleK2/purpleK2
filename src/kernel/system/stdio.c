@@ -77,7 +77,7 @@ void bsod_init() {
 }
 
 void kprintf_impl(const char *buffer, int len) {
-    spinlock_force_acquire(&STDIO_FB_LOCK);
+    spinlock_acquire(&STDIO_FB_LOCK);
 
     for (int i = 0; i < len; ++i) {
         putc(buffer[i]);
@@ -87,7 +87,7 @@ void kprintf_impl(const char *buffer, int len) {
 }
 
 void debugf_impl(const char *buffer, int len) {
-    spinlock_force_acquire(&STDIO_E9_LOCK);
+    spinlock_acquire(&STDIO_E9_LOCK);
 
     for (int i = 0; i < len; ++i) {
         dputc(buffer[i]);
