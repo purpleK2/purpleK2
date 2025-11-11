@@ -2,6 +2,7 @@
     "files.associations": {
         "*.embeddedhtml": "html",
         "*.s": "gas",
+        "*.asm": "fasm",
         "chrono": "c",
         "span": "c",
         "stdarg.h": "c",
@@ -111,7 +112,8 @@
         "errors.h": "c",
         "vmware_svga.h": "c",
         "pci.h": "c",
-        "ipi.h": "c"
+        "ipi.h": "c",
+        "lapic.h": "c"
     },
     "dotnet.defaultSolution": "disable",
     "cmake.configureOnOpen": false,
