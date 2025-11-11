@@ -85,3 +85,4 @@ src/kernel/autoconf.h
 *.km
 target/modules
 findher.ogg
+.directory
