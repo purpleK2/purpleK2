@@ -96,7 +96,6 @@ typedef struct cpu_thread_queue {
 
 /* from arch/[TARGET]/scheduler.asm */
 extern void context_load(registers_t *ctx);
-extern void context_save(registers_t *out);
 extern void fpu_save(void *ctx);
 extern void fpu_restore(void *ctx);
 extern __attribute__((noreturn)) void scheduler_idle();
@@ -107,7 +106,7 @@ int proc_exit();
 
 // inits the scheduler on every CPU
 // with an "init" process
-int init_scheduler(void (*p)());
+int init_scheduler();
 /*
     the "init" function is a custom function
     that the developer can assign it to:
@@ -115,8 +114,7 @@ int init_scheduler(void (*p)());
     every CPU), whatever.
 */
 
-int init_cpu_scheduler(int cpu,
-                       void (*p)()); // inits the scheduler for a specific CPU
+int init_cpu_scheduler(void (*p)()); // inits the scheduler for a specific CPU
                                      // with a custom process and a thread queue
 
 int proc_create(void (*entry)(), int flags);
@@ -125,6 +123,6 @@ int pcb_destroy(int pid);
 pcb_t *get_current_pcb();
 int thread_destroy(int pid, int tid);
 
-void yield();
+void yield(registers_t *regs);
 
 #endif // SCHEDULER_H

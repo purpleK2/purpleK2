@@ -141,6 +141,7 @@ void b() {
 #include <tga/tga.h>
 
 void pk_init() {
+    debugf_debug("We're in pt.2\n");
     proc_create(a, 0);
     proc_create(b, 0);
     proc_create(__sched_test, 0);
@@ -148,7 +149,8 @@ void pk_init() {
 
     // load_tga_to_framebuffer("/initrd/pk2startup_1year.tga");
 
-    for (;;);
+    for (;;)
+        ;
 }
 
 // kernel main function
@@ -520,7 +522,8 @@ void kstart(void) {
         debugf_warn("No harddrive found! No parsing MBR!\n");
     }*/
 
-    init_scheduler(pk_init);
+    init_scheduler();
+    init_cpu_scheduler(pk_init);
     irq_registerHandler(0, scheduler_timer_tick);
 
     for (;;)

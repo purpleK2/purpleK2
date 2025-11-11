@@ -17,16 +17,14 @@ static cpu_queue_t *thread_queues;
 static tcb_t **current_threads;
 static int cpu_count;
 
-int init_scheduler(void (*p)()) {
+// SHOULD BE CALLED **ONLY ONCE** IN KSTART. NOWHERE ELSE.
+int init_scheduler() {
     cpu_count = get_bootloader_data()->cpu_count;
 
     thread_queues   = kmalloc(sizeof(cpu_queue_t) * cpu_count);
     current_threads = kmalloc(sizeof(tcb_t *) * cpu_count);
     memset(thread_queues, 0, sizeof(cpu_queue_t) * cpu_count);
     memset(current_threads, 0, sizeof(tcb_t *) * cpu_count);
-
-    for (int i = 0; i < cpu_count; ++i)
-        init_cpu_scheduler(i, p);
     return 0;
 }
 
@@ -79,12 +77,13 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
         (void *)PHYS_TO_VIRTUAL(pmm_alloc_pages(SCHEDULER_STACK_PAGES));
 
     // so the struct sits on the top of the stack
-    registers_t *ctx =
-        (registers_t *)((stack + SCHEDULER_STACKSZ) - sizeof(registers_t));
+    registers_t *ctx = kmalloc(sizeof(registers_t));
+    memset(ctx, 0, sizeof(registers_t));
 
     ctx->rip     = (uint64_t)entry;
     ctx->cs      = (flags & TF_MODE_USER) ? 0x1B : 0x08;
     ctx->ss      = (flags & TF_MODE_USER) ? 0x23 : 0x10;
+    ctx->ds      = (flags & TF_MODE_USER) ? 0x23 : 0x10;
     ctx->rflags  = 0x202;
     ctx->rsp     = (uint64_t)(stack + SCHEDULER_STACKSZ);
     thread->regs = ctx;
@@ -146,7 +145,8 @@ tcb_t *tcb_lookup(int pid, int tid) {
     return t;
 }
 
-int init_cpu_scheduler(int cpu, void (*p)()) {
+// creates the "init process" per-CPU
+int init_cpu_scheduler(void (*p)()) {
     proc_create(p, 0);
     return 0;
 }
@@ -173,7 +173,7 @@ int pcb_destroy(int pid) {
 }
 
 void thread_push_to_queue(tcb_t *to_push) {
-    int cpu = get_cpu();
+    int cpu   = get_cpu();
     tcb_t **p = &thread_queues[cpu].head;
 
     while (*p && *p != to_push) {
@@ -182,7 +182,7 @@ void thread_push_to_queue(tcb_t *to_push) {
     if (*p == NULL) {
         return;
     }
-    *p = to_push->next;
+    *p            = to_push->next;
     to_push->next = NULL;
 
     tcb_t **q = &thread_queues[cpu].head;
@@ -193,7 +193,7 @@ void thread_push_to_queue(tcb_t *to_push) {
 }
 
 void thread_remove_from_queue(tcb_t *to_remove) {
-    int cpu = get_cpu();
+    int cpu   = get_cpu();
     tcb_t **p = &thread_queues[cpu].head;
 
     while (*p && *p != to_remove) {
@@ -204,7 +204,7 @@ void thread_remove_from_queue(tcb_t *to_remove) {
         return;
     }
 
-    *p = to_remove->next;
+    *p              = to_remove->next;
     to_remove->next = NULL;
 }
 
@@ -237,7 +237,7 @@ int proc_exit() {
     return ret;
 }
 
-void yield() {
+void yield(registers_t *regs) {
     int cpu        = get_cpu();
     tcb_t *current = current_threads[cpu];
     tcb_t *next;
@@ -253,11 +253,13 @@ void yield() {
         }
 
         fpu_save(current->fpu);
-        context_save(current->regs);
+        // RIP context_save (08/2025-11/2025)
+        // TODO: find some way to save registers if regs == NULL
+        memcpy(current->regs, regs, sizeof(registers_t));
 
         current->state      = THREAD_READY;
         current->time_slice = SCHEDULER_THREAD_TS;
-        
+
         thread_push_to_queue(current);
 
         next = pick_next_thread(cpu);
@@ -283,5 +285,10 @@ void yield() {
 
     fpu_restore(next->fpu);
     // it instantly returns to the RIP in here
-    context_load(next->regs);
+    if (!regs) {
+        // we won't return from here
+        context_load(next->regs);
+    }
+    // or else... just do it the gentle way
+    memcpy(regs, next->regs, sizeof(registers_t));
 }
