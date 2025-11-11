@@ -112,7 +112,7 @@ void rtl8139_write_packet(void *buffer, uint16_t len) {
     uint32_t tsd_val = actual_len;
     BIT_CLEAR(tsd_val, 13); // clear the own bit
 
-    uint32_t phys = (uintptr_t)pmm_alloc_contiguous_pages(1);
+    uint32_t phys = (uintptr_t)pmm_alloc_pages(1);
     map_phys_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), phys,
                      PHYS_TO_VIRTUAL(phys), PMLE_KERNEL_READ_WRITE);
     void *virt = (uint64_t *)(uintptr_t)PHYS_TO_VIRTUAL(phys);
