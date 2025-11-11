@@ -18,7 +18,7 @@
 
 struct tlb_shootdown_event **events;
 
-extern vmm_context_t *kernel_vmm_ctx;
+extern vmc_t *kernel_vmm_ctx;
 
 int smp_init() {
 

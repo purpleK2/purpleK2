@@ -79,7 +79,7 @@ typedef struct process {
 
     int cpu; // the cpu we're running on
 
-    vmm_context_t *vmm_ctx;
+    vmc_t *vmm_ctx;
 
     struct owner {
         int gid;
