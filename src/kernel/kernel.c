@@ -148,9 +148,6 @@ void pk_init() {
     debugf_ok("Starting __sched_test\n");
 
     // load_tga_to_framebuffer("/initrd/pk2startup_1year.tga");
-
-    for (;;)
-        ;
 }
 
 // kernel main function

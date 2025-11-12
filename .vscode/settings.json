@@ -113,7 +113,8 @@
         "vmware_svga.h": "c",
         "pci.h": "c",
         "ipi.h": "c",
-        "lapic.h": "c"
+        "lapic.h": "c",
+        "tga.h": "c"
     },
     "dotnet.defaultSolution": "disable",
     "cmake.configureOnOpen": false,
