@@ -88,6 +88,14 @@ int vfs_resolve_mount(char *path, vfs_t **out) {
 
         char *prefix = v->root_vnode->path;
 
+        // - eg. you're searching for "/" and the current VFS is "/initrd"
+        // - maybe you're checking for "/mnt/path/something", which would be
+        //   longer than "/initrd", but the check after this one would still
+        //   fail
+        if (strlen(path) < strlen(prefix)) {
+            continue;
+        }
+
         // this way we are sure it compares all of the mnt prefix string
         if (strncmp(path, prefix, strlen(prefix)) == 0) {
             *out = v;
