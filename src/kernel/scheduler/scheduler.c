@@ -41,20 +41,25 @@ static tcb_t *pick_next_thread(int cpu) {
 }
 
 // I WANT ALL OF THE BITS :speaking_head: :fire: :fire:
-static int64_t global_pid = -1;
+static uint64_t global_pid = 0;
 
-int proc_create(void (*entry)(), int flags) {
+// @param name name of the process (it's optional)
+int proc_create(void (*entry)(), int flags, char *name) {
     pcb_t *proc = kmalloc(sizeof(pcb_t));
     memset(proc, 0, sizeof(pcb_t));
     proc->pid   = __sync_fetch_and_add(&global_pid, 1);
     proc->state = PROC_READY;
+
+    if (name) {
+        proc->name = strdup(name);
+    }
 
     proc->fds      = NULL;
     proc->fd_count = 0;
 
     uint64_t *pagemap = pmm_alloc_page();
     int vflags        = (flags & TF_MODE_USER ? VMO_USER_RW : VMO_KERNEL_RW);
-    proc->vmm_ctx     = vmm_ctx_init(pagemap, vflags);
+    proc->vmm_ctx     = vmc_init(pagemap, vflags);
     proc->cwd         = NULL;
     thread_create(proc, entry, flags);
 
@@ -147,7 +152,7 @@ tcb_t *tcb_lookup(int pid, int tid) {
 
 // creates the "init process" per-CPU
 int init_cpu_scheduler(void (*p)()) {
-    proc_create(p, 0);
+    proc_create(p, 0, "initproc");
     return 0;
 }
 

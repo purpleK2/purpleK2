@@ -142,9 +142,9 @@ void b() {
 
 void pk_init() {
     debugf_debug("We're in pt.2\n");
-    proc_create(a, 0);
-    proc_create(b, 0);
-    proc_create(__sched_test, 0);
+    proc_create(a, 0, "Aprinter");
+    proc_create(b, 0, "Bprinter");
+    proc_create(__sched_test, 0, "Scheduler test");
     debugf_ok("Starting __sched_test\n");
 
     // load_tga_to_framebuffer("/initrd/pk2startup_1year.tga");
