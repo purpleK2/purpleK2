@@ -324,7 +324,7 @@ void kstart(void) {
     uint64_t *kernel_pml4 = (uint64_t *)pmm_alloc_page();
     paging_init((uint64_t *)PHYS_TO_VIRTUAL(kernel_pml4));
 
-    kernel_vmm_ctx = vmm_ctx_init(kernel_pml4, VMO_KERNEL_RW);
+    kernel_vmm_ctx = vmc_init(kernel_pml4, VMO_KERNEL_RW);
     vmm_init(kernel_vmm_ctx);
     vmm_switch_ctx(kernel_vmm_ctx);
     kprintf_ok("Initialized VMM\n");
