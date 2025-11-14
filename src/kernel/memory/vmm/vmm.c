@@ -169,9 +169,27 @@ void vmmlist_free(vmm_node_t **root_node, size_t item_size, void *tofree) {
     pmm_free(v_prev, v_prev->len / PFRAME_SIZE);
 }
 
+// useful wrapper functions //
+
+vmc_t *vmc_alloc() {
+    return (vmc_t *)vmmlist_alloc(&vmclist_root_node, sizeof(vmc_t));
+}
+
+vmo_t *vmo_alloc() {
+    return (vmo_t *)vmmlist_alloc(&vmolist_root_node, sizeof(vmo_t));
+}
+
+void vmc_free(vmc_t *v) {
+    vmmlist_free(&vmclist_root_node, sizeof(vmc_t), v);
+}
+
+void vmo_free(vmo_t *v) {
+    vmmlist_free(&vmolist_root_node, sizeof(vmo_t), v);
+}
+
 // @param length IT'S IN PAGEEEEES
 vmo_t *vmo_init(uint64_t base, size_t length, uint64_t flags) {
-    vmo_t *vmo = vmmlist_alloc(&vmolist_root_node, sizeof(vmo_t));
+    vmo_t *vmo = vmo_alloc();
 
     vmo->base  = base;
     vmo->len   = length;
@@ -183,8 +201,8 @@ vmo_t *vmo_init(uint64_t base, size_t length, uint64_t flags) {
 }
 
 // @note We will not care if `pml4` is 0x0 :^)
-    vmc_t *ctx = vmmlist_alloc(&vmclist_root_node, sizeof(vmc_t));
 vmc_t *vmc_init(uint64_t *pml4, uint64_t flags) {
+    vmc_t *ctx = vmc_alloc();
 
     /*
     For some reason UEFI gives out region 0x0-0x1000 as usable :/
@@ -220,8 +238,8 @@ void vmc_destroy(vmc_t *ctx) {
         }
 
         // Free the VMO structure itself
-        vmmlist_free(&vmolist_root_node, sizeof(vmo_t), i);
-        i = next;
+        vmo_free(v);
+        v = next;
     }
 
     // Unmap all pages in the page tables
@@ -259,8 +277,7 @@ void vmc_destroy(vmc_t *ctx) {
 
     // Free the PML4 table and the context
     pmm_free(ctx->pml4_table, 1);
-    size_t vmcsize_aligned = ROUND_UP(sizeof(vmo_t), PFRAME_SIZE);
-    pmm_free(ctx, vmcsize_aligned / PFRAME_SIZE);
+    vmc_free(ctx);
 
     ctx->pml4_table = NULL;
 }
@@ -436,5 +453,5 @@ void vfree(vmc_t *ctx, void *ptr, bool free) {
     }
 
     // debugf_debug("Region %llx destroyed\n", to_dealloc->base);
-    vmmlist_free(&vmolist_root_node, sizeof(vmo_t), to_dealloc);
+    vmo_free(to_dealloc);
 }
