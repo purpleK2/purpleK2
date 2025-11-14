@@ -62,6 +62,7 @@ typedef struct thread {
 
 typedef struct process {
     int pid;
+    char *name;
 
     struct process *parent;
     int children_count; // diddy really likes this value >:)
@@ -117,7 +118,7 @@ int init_scheduler();
 int init_cpu_scheduler(void (*p)()); // inits the scheduler for a specific CPU
                                      // with a custom process and a thread queue
 
-int proc_create(void (*entry)(), int flags);
+int proc_create(void (*entry)(), int flags, char *name);
 int thread_create(pcb_t *parent, void (*entry)(), int flags);
 int pcb_destroy(int pid);
 pcb_t *get_current_pcb();
