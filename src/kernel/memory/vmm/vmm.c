@@ -183,8 +183,8 @@ vmo_t *vmo_init(uint64_t base, size_t length, uint64_t flags) {
 }
 
 // @note We will not care if `pml4` is 0x0 :^)
-vmc_t *vmm_ctx_init(uint64_t *pml4, uint64_t flags) {
     vmc_t *ctx = vmmlist_alloc(&vmclist_root_node, sizeof(vmc_t));
+vmc_t *vmc_init(uint64_t *pml4, uint64_t flags) {
 
     /*
     For some reason UEFI gives out region 0x0-0x1000 as usable :/
@@ -199,7 +199,7 @@ vmc_t *vmm_ctx_init(uint64_t *pml4, uint64_t flags) {
     return ctx;
 }
 
-void vmm_ctx_destroy(vmc_t *ctx) {
+void vmc_destroy(vmc_t *ctx) {
 
     if (VIRT_TO_PHYSICAL(ctx->pml4_table) == (uint64_t)cpu_get_cr(3)) {
         kprintf_warn("Attempted to destroy a pagemap that's currently in use. "
@@ -208,14 +208,14 @@ void vmm_ctx_destroy(vmc_t *ctx) {
     }
 
     // Free all VMOs and their associated physical memory
-    for (vmo_t *i = ctx->root_vmo; i != NULL;) {
-        vmo_t *next = i->next;
+    for (vmo_t *v = ctx->root_vmo; v != NULL;) {
+        vmo_t *next = v->next;
 
         // Only free physical memory if the VMO is mapped
-        if (i->flags & VMO_PRESENT) {
-            uint64_t phys = pg_virtual_to_phys(ctx->pml4_table, i->base);
+        if (v->flags & VMO_PRESENT) {
+            uint64_t phys = pg_virtual_to_phys(ctx->pml4_table, v->base);
             if (phys) {
-                pmm_free((void *)PHYS_TO_VIRTUAL(phys), i->len);
+                pmm_free((void *)PHYS_TO_VIRTUAL(phys), v->len);
             }
         }
 
@@ -315,7 +315,7 @@ void pagemap_copy_to(uint64_t *non_kernel_pml4) {
     }
 }
 
-// Assumes the CTX has been initialized with vmm_ctx_init()
+// Assumes the CTX has been initialized with vmc_init()
 void vmm_init(vmc_t *ctx) {
     for (vmo_t *i = ctx->root_vmo; i != NULL; i = i->next) {
         // every VMO will have the same flags as the root one

@@ -26,7 +26,7 @@ typedef struct vmc_t {
 
 // a linked list to track the address(es) to allocate for a VMO/VMM_CTX
 typedef struct vmm_linkedlist {
-    size_t len;
+    size_t len; // length in bytes
     struct vmm_linkedlist *next;
 } vmm_node_t;
 
@@ -37,8 +37,8 @@ vmo_t *vmo_init(uint64_t base, size_t length, uint64_t flags);
 void vmo_dump(vmo_t *vmo);
 vmo_t *split_vmo_at(vmo_t *src_vmo, size_t len);
 
-vmc_t *vmm_ctx_init(uint64_t *pml4, uint64_t flags);
-void vmm_ctx_destroy(vmc_t *ctx);
+vmc_t *vmc_init(uint64_t *pml4, uint64_t flags);
+void vmc_destroy(vmc_t *ctx);
 
 void pagemap_copy_to(uint64_t *non_kernel_pml4);
 
