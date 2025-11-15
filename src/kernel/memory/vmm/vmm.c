@@ -201,17 +201,14 @@ vmo_t *vmo_init(uint64_t base, size_t length, uint64_t flags) {
 }
 
 // @note We will not care if `pml4` is 0x0 :^)
-vmc_t *vmc_init(uint64_t *pml4, uint64_t flags) {
+vmc_t *vmc_init(uint64_t *pml4_virt, uint64_t flags) {
     vmc_t *ctx = vmc_alloc();
 
-    /*
-    For some reason UEFI gives out region 0x0-0x1000 as usable :/
-    if (pml4 == NULL) {
-        pml4 = (uint64_t *)PHYS_TO_VIRTUAL(pmm_alloc_page());
+    if (pml4_virt == NULL) {
+        pml4_virt = (uint64_t *)PHYS_TO_VIRTUAL(pmm_alloc_page());
     }
-    */
 
-    ctx->pml4_table = pml4;
+    ctx->pml4_table = (uint64_t *)VIRT_TO_PHYSICAL(pml4_virt);
     ctx->root_vmo   = vmo_init(0x1000, 1, flags);
 
     return ctx;

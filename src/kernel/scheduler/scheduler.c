@@ -57,9 +57,8 @@ int proc_create(void (*entry)(), int flags, char *name) {
     proc->fds      = NULL;
     proc->fd_count = 0;
 
-    uint64_t *pagemap = pmm_alloc_page();
     int vflags        = (flags & TF_MODE_USER ? VMO_USER_RW : VMO_KERNEL_RW);
-    proc->vmm_ctx     = vmc_init(pagemap, vflags);
+    proc->vmm_ctx     = vmc_init(NULL, vflags);
     proc->cwd         = NULL;
     thread_create(proc, entry, flags);
 
