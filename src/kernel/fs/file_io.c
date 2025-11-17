@@ -30,7 +30,8 @@ int f2vflags(int fio_flags) {
 
 fileio_t *fio_create() {
     fileio_t *fio = kmalloc(sizeof(fileio_t));
-    memset(fio, 0, sizeof(fileio_t));
+    if (!fio) debugf_debug("ERROR!: Failed to allocate fileio_t struct\n\r");
+    else memset(fio, 0, sizeof(fileio_t));
 
     return fio;
 }
