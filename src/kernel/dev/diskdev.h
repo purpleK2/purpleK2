@@ -37,6 +37,7 @@ typedef struct disk_device {
     int (*write)(struct disk_device *disk, const uint8_t *buffer, uint64_t lba,
                  uint32_t sector_count);
 
+    void *data;
     
 } disk_device_t;
  

@@ -139,6 +139,7 @@ void b() {
 }
 
 #include <tga/tga.h>
+devfs_t *devfs = NULL;
 
 void pk_init() {
     debugf_debug("We're in pt.2\n");
@@ -459,15 +460,8 @@ void kstart(void) {
 
     ramfs_print(cpio_ramfs->root_node, 0);
 
-    register_std_devices();
-    dev_initrd_init(initrd->address);
-    dev_e9_init();
-    dev_serial_init();
-    dev_parallel_init();
-    dev_fb_init();
-
 #ifdef CONFIG_DEVFS_ENABLE
-    devfs_t *devfs = devfs_create();
+    devfs = devfs_create();
     if (devfs_vfs_init(devfs, CONFIG_DEVFS_MOUNT_PATH) != EOK) {
         kprintf_warn("Failed to initialize DEVFS!\n");
     } else {
@@ -477,6 +471,13 @@ void kstart(void) {
     // devfs_print(devfs->root_node, 0);
 
 #endif
+
+    register_std_devices();
+    dev_initrd_init(initrd->address);
+    dev_e9_init();
+    dev_serial_init();
+    dev_parallel_init();
+    dev_fb_init();
 
     limine_parsed_data.cpu_count = smp_request.response->cpu_count;
     limine_parsed_data.cpus      = smp_request.response->cpus;
@@ -496,6 +497,8 @@ void kstart(void) {
 
     mod_t *ahci = load_module("/initrd/modules/ahci.km");
     start_module(ahci);
+
+    devfs_print(devfs->root_node, 0);
 
     init_scheduler();
     init_cpu_scheduler(pk_init);

@@ -49,4 +49,6 @@ int devfs_ioctl(vnode_t *vnode, int request, void *arg);
 int devfs_read(vnode_t *vn, size_t *bytes, size_t *offset, void *out);
 int devfs_write(vnode_t *vn, void *buf, size_t *bytes, size_t *offset);
 
+int devfs_refresh(devfs_t *devfs);
+
 #endif // DEVFS_H

@@ -277,6 +277,94 @@ int devfs_vfs_init(devfs_t *ramfs, char *mount_path) {
     return EOK;
 }
 
+// add new devices, remove old ones
+int devfs_refresh(devfs_t *devfs) {
+    if (!devfs || !devfs->root_node) {
+        return ENULLPTR;
+    }
+
+    devfs_node_t *root = devfs->root_node;
+
+    devfs_node_t *prev = NULL;
+    devfs_node_t *cur  = root->child;
+
+    while (cur) {
+        devfs_node_t *next = cur->sibling;
+
+        bool still_exists = false;
+
+        for (int i = 0; i < device_count; i++) {
+            if (!device_table[i]) {
+                continue;
+            }
+
+            if (strcmp(device_table[i]->dev_node_path, cur->name) == 0) {
+                still_exists = true;
+                break;
+            }
+        }
+
+        if (!still_exists) {
+            if (prev) {
+                prev->sibling = next;
+            } else {
+                root->child = next;
+            }
+
+            if (cur->name) {
+                kfree(cur->name);
+            }
+            kfree(cur);
+
+            cur = next;
+            continue;
+        }
+
+        prev = cur;
+        cur = next;
+    }
+
+    for (int i = 0; i < device_count; i++) {
+        device_t *dev = device_table[i];
+        if (!dev) {
+            continue;
+        }
+
+        bool found = false;
+
+        devfs_node_t *node = root->child;
+        while (node) {
+            if (strcmp(node->name, dev->dev_node_path) == 0) {
+                found = true;
+                break;
+            }
+            node = node->sibling;
+        }
+
+        if (!found) {
+            devfs_node_t *new_node = devfs_create_node(
+                dev->type == DEVICE_TYPE_BLOCK ? DEVFS_TYPE_BLOCK : DEVFS_TYPE_CHAR
+            );
+            if (!new_node) {
+                return ENOMEM;
+            }
+
+            new_node->name   = strdup(dev->dev_node_path);
+            new_node->device = dev;
+
+            if (!new_node->name) {
+                kfree(new_node);
+                return ENOMEM;
+            }
+
+            devfs_append_child(root, new_node);
+        }
+    }
+
+    return EOK;
+}
+
+
 int devfs_open(vnode_t **vnode_r, int flags, bool clone, fileio_t **fio_out) {
     UNUSED(flags);
     UNUSED(clone);
