@@ -92,6 +92,9 @@ int register_disk_device(disk_device_t *disk) {
     dev->write        = diskdev_write;           // to be set by the driver
     dev->ioctl        = diskdev_ctl;           // to be set by the driver
     dev->data         = (void *)disk; // point to the disk device struct
+    dev->dev_node_path = final_name;
+
+    register_device(dev);
 
     return EOK;
 }
