@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "pci/pci.h"
 
 #include <autoconf.h>
 
@@ -11,7 +12,6 @@
 #include <loader/module/module_loader.h>
 
 #include <acpi/acpi.h>
-#include <ahci/ahci.h>
 
 #include <dev/device.h>
 #include <dev/display/fb/fbdev.h>
@@ -122,9 +122,9 @@ vmc_t *kernel_vmm_ctx;
 
 extern void __sched_test(void);
 
-HBA_MEM *abar_mem = NULL;
+//HBA_MEM *abar_mem = NULL;
 
-HBA_MEM *mem;
+//HBA_MEM *mem;
 
 void a() {
     for (;;) {
@@ -494,22 +494,8 @@ void kstart(void) {
         kprintf_ok("PCIe devices parsing done\n");
     }*/
 
-    pci_device_t *sata = detect_controller();
-
-    map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), sata->bar[5],
-                       PHYS_TO_VIRTUAL(sata->bar[5]), 0x20000, AHCI_MMIO_FLAGS);
-
-    mem = (HBA_MEM *)PHYS_TO_VIRTUAL(sata->bar[5]);
-
-    int sata_port = get_sata_port(mem);
-
-    port_rebase(&mem->ports[sata_port]);
-
-    probe_port(mem);
-
-    test_ahci();
-
-    abar_mem = mem;
+    mod_t *ahci = load_module("/initrd/modules/ahci.km");
+    start_module(ahci);
 
     init_scheduler();
     init_cpu_scheduler(pk_init);

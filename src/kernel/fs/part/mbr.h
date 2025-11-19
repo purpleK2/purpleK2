@@ -1,7 +1,7 @@
 #ifndef MBR_H
 #define MBR_H
 
-#include <ahci/ahci.h>
+// #include <ahci/ahci.h>
 
 #include <stdint.h>
 
@@ -42,9 +42,9 @@ partition_info_t *add_partition(partition_info_t **head, uint8_t type,
                                 uint8_t is_logical);
 
 // real stuff :O
-int parse_ebr(HBA_MEM *abar, uint32_t ebr_lba, uint32_t extended_start_lba,
+int parse_ebr(char *dev_path, uint32_t ebr_lba, uint32_t extended_start_lba,
               partition_info_t **partitions);
-int parse_mbr(HBA_MEM *abar, partition_info_t **partitions);
+int parse_mbr(char *dev_path, partition_info_t **partitions);
 
 // utils
 void print_partition_summary(partition_info_t *partitions);
