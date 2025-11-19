@@ -124,7 +124,7 @@ extern void __sched_test(void);
 
 HBA_MEM *abar_mem = NULL;
 
-// HBA_MEM *mem;
+HBA_MEM *mem;
 
 void a() {
     for (;;) {
@@ -492,7 +492,7 @@ void kstart(void) {
         kprintf_warn("Failed to parse PCIe devices!\n");
     } else {
         kprintf_ok("PCIe devices parsing done\n");
-    }
+    }*/
 
     pci_device_t *sata = detect_controller();
 
@@ -510,14 +510,6 @@ void kstart(void) {
     test_ahci();
 
     abar_mem = mem;
-
-    if (sata_found) {
-        if (parse_mbr(mem, &g_partitions) != 0) {
-            kprintf_warn("Failed to parse MBR\n");
-        }
-    } else {
-        debugf_warn("No harddrive found! No parsing MBR!\n");
-    }*/
 
     init_scheduler();
     init_cpu_scheduler(pk_init);

@@ -294,8 +294,8 @@ pcie_status pcie_add_device(void *pcie_addr, cpio_file_t *pci_ids,
 
     char *vendor = kmalloc(PCIE_MAX_VENDOR_NAME * sizeof(char));
     char *device = kmalloc(PCIE_MAX_DEVICE_NAME * sizeof(char));
-    memset(vendor, 0, PCIE_MAX_VENDOR_NAME);
-    memset(device, 0, PCIE_MAX_VENDOR_NAME);
+    memset(vendor, 0, strlen(vendor));
+    memset(device, 0, strlen(device));
 
     switch (pcie_lookup_vendor_device(pcie_header, pci_ids, vendor, device)) {
     case PCIE_STATUS_OK:
