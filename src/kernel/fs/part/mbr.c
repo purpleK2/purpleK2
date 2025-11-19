@@ -110,9 +110,9 @@ partition_info_t *add_partition(partition_info_t **head, uint8_t type,
     return new_part;
 }
 
-int parse_ebr(HBA_MEM *abar, uint32_t ebr_lba, uint32_t extended_start_lba,
+int parse_ebr(char *dev_path, uint32_t ebr_lba, uint32_t extended_start_lba,
               partition_info_t **partitions) {
-    mbr_t ebr;
+    /*mbr_t ebr;
 
     detect_disk(abar);
 
@@ -146,11 +146,11 @@ int parse_ebr(HBA_MEM *abar, uint32_t ebr_lba, uint32_t extended_start_lba,
         }
     }
 
-    return 0;
+    return 0;*/
 }
 
-int parse_mbr(HBA_MEM *abar, partition_info_t **partitions) {
-    mbr_t mbr;
+int parse_mbr(char *dev_path, partition_info_t **partitions) {
+    /*mbr_t mbr;
 
     detect_disk(abar);
 
@@ -189,7 +189,7 @@ int parse_mbr(HBA_MEM *abar, partition_info_t **partitions) {
         }
     }
 
-    return 0;
+    return 0;*/
 }
 
 void print_partition_summary(partition_info_t *partitions) {
