@@ -23,6 +23,9 @@ KCONFIG_CONFIG = .config
 KCONFIG_DEPS = Kconfig
 KCONFIG_AUTOCONF = $(KERNEL_SRC_DIR)/autoconf.h
 
+MODULE_DIRS := $(shell find modules -mindepth 1 -maxdepth 4 -type d)
+MODULES := $(foreach d,$(MODULE_DIRS),$(wildcard $(d)/*.km))
+
 QEMU_FLAGS = -m 2G \
     		 -debugcon stdio \
     		 -M q35 \
@@ -217,8 +220,8 @@ $(LIBS_DIR)/limine/limine:
 
 modules:
 	@mkdir -p target/modules
-	@for dir in $(shell find modules -mindepth 1 -maxdepth 4 -type d); do \
-		echo "--> Building module: $$dir"; \
+	@for dir in $(MODULE_DIRS); do \
+		echo "--> Building module in $$dir"; \
 		$(MAKE) -C $$dir; \
 		for km in $$dir/*.km; do \
 			if [ -f $$km ]; then \
@@ -234,7 +237,7 @@ libs:
 	@$(MAKE) limine_build
 
 # Create initrd image
-$(BUILD_DIR)/$(INITRD):
+$(BUILD_DIR)/$(INITRD): modules
 		cd $(INITRD_DIR) && \
 		find . -type f | cpio -H newc -o > ../$(BUILD_DIR)/$(INITRD) && \
 		cd ..

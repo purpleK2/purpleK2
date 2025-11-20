@@ -45,26 +45,34 @@ void module_entry() {
 
     abar = (HBA_MEM *)PHYS_TO_VIRTUAL(sata->bar[5]);
 
-    int sata_port = get_sata_port(abar);
-
-    port_rebase(&abar->ports[sata_port]);
-
     probe_port(abar);
 
+    for (int i = 0; i < 32; i++) {
+        if (drivetypes[i] == DRV_SATA) {
+            HBA_PORT *port = &abar->ports[i];
+
+            port_rebase(port);
+
+            disk_device_t *disk = kmalloc(sizeof(disk_device_t));
+            assert(disk != NULL);
+            memset(disk, 0, sizeof(disk_device_t));
+
+            disk->namespace   = DISK_NAMESPACE_MODERN;
+            disk->id.letter   = letter_counter++;
+            disk->block_size  = 512;
+            disk->block_count = 1000000000; // TODO: identify
+
+            disk->read  = ahci_diskdev_read;
+            disk->write = ahci_diskdev_write;
+
+            disk->data = (void *)port;
+
+            register_disk_device(disk);
+
+            debugf_debug("AHCI: Registered SATA disk at port %d as /dev/sd%c\n",
+                    i, disk->id.letter);
+        }
+    }
+
     test_ahci();
-
-    disk_device_t *ahci_disk = kmalloc(sizeof(disk_device_t));
-    assert(ahci_disk != NULL);
-    memset(ahci_disk, 0, sizeof(disk_device_t));
-    ahci_disk->namespace = DISK_NAMESPACE_MODERN;
-    ahci_disk->id.letter = letter_counter++;
-    ahci_disk->block_size = 512;
-    ahci_disk->block_count = 1000000000; // TODO: get real
-
-    ahci_disk->read = ahci_diskdev_read;
-    ahci_disk->write = ahci_diskdev_write;
-
-    ahci_disk->data = (void *)&abar->ports[sata_port];
-
-    register_disk_device(ahci_disk);
 }
