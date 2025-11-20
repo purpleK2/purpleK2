@@ -10,7 +10,7 @@ extern pci_device_t *pci_devices_head;
 
 bool sata_found = false;
 
-drivetype_t drivetypes[32];
+drivetype_t drivetypes[32] = { [0 ... 31] = DRV_INVALID };
 
 void probe_port(HBA_MEM *abar) {
     uint32_t pi = abar->pi;
