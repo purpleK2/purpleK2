@@ -62,7 +62,7 @@ int proc_create(void (*entry)(), int flags, char *name) {
     proc->cwd         = NULL;
     thread_create(proc, entry, flags);
 
-    debugf("Created new process with entry %p PID=%d\n", entry, proc->pid);
+    debugf_debug("Created new process with entry %p PID=%d\n", entry, proc->pid);
 
     return proc->pid;
 }
