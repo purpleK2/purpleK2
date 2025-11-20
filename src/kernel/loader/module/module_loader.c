@@ -356,8 +356,6 @@ mod_t *load_module(const char *file_path) {
             // Set section address and copy data
             section->sh_addr = mod_addr_counter;
 
-            debugf("section->sh_size: 0x%llx\n", section->sh_size);
-
             // SAFETY CHECK: Ensure we don't write beyond the mapped region
             if (section->sh_size > page_count * PAGE_SIZE) {
                 debugf_warn(
@@ -474,17 +472,19 @@ mod_t *load_module(const char *file_path) {
         (uint64_t)(uintptr_t)mod->entry_point,
         (uint64_t)(uintptr_t)mod->exit_point);
 
-    debugf("Name: %s\nVersion: %s\nAuthor: %s\nLicense: %s\nDescription: "
-           "\n\t%s\nURL: %s\nPriority: %i\n",
-           mod->modinfo->name, mod->modinfo->version, mod->modinfo->author,
-           mod->modinfo->license, mod->modinfo->description, mod->modinfo->url,
-           mod->modinfo->priority);
+    debugf_debug("Name: %s\n", mod->modinfo->name);
+    debugf_debug("Version: %s\n", mod->modinfo->version);
+    debugf_debug("Author: %s\n", mod->modinfo->author);
+    debugf_debug("License: %s\n", mod->modinfo->license);
+    debugf_debug("Description: %s\n", mod->modinfo->description);
+    debugf_debug("URL: %s\n", mod->modinfo->url);
+    debugf_debug("Priority: %i\n", mod->modinfo->priority);
 
-    debugf("Dependencies: \n");
+    debugf_debug("Dependencies: \n");
 
     int i = 0;
     while (mod->modinfo->deps[i] != NULL) {
-        debugf("\t - %s\n", mod->modinfo->deps[i]);
+        debugf_debug("\t - %s\n", mod->modinfo->deps[i]);
         i++;
     }
 

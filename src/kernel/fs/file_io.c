@@ -71,7 +71,6 @@ size_t read(fileio_t *file, size_t size, void *out) {
         return -EBADF;
     }
 
-    vnode_t *vn = file->private;
 
     if (file->offset >= file->size) {
         return 0;
@@ -80,12 +79,6 @@ size_t read(fileio_t *file, size_t size, void *out) {
     if (size > file->size) {
         size = (file->size - file->offset);
     }
-
-    debugf("size: %d\n", size);
-    debugf("addr of file->private: 0x%p\n", file->private);
-    debugf("addr of vn: 0x%p\n", vn);
-    debugf("addr of file->private->node_data: 0x%p\n",
-           ((vnode_t *)file->private)->node_data);
 
     int ret = vfs_read(((vnode_t *)file->private), size, file->offset, out);
     if (ret != 0) {

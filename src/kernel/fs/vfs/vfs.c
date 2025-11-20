@@ -140,15 +140,7 @@ int vfs_read(vnode_t *vnode, size_t size, size_t offset, void *out) {
         return -ENULLPTR;
     }
 
-    if (vnode->node_data != NULL) {
-        debugf("vfs read: vnode->node_data addr: 0x%.16llx\n",
-               (uint64_t)(uintptr_t)vnode->node_data);
-    }
-
-    debugf("vfs_read: vnode_ptr = 0x%p", vnode);
-
     int ret = vnode->ops->read(vnode, &size, &offset, out);
-    debugf("after  read: node_data = %p\n", vnode->node_data);
 
     return ret;
 }

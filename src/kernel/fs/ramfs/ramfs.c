@@ -294,8 +294,6 @@ int ramfs_open(vnode_t **vnode_r, int flags, bool clone, fileio_t **fio_out) {
 
     v_ramfs_node->size = ramfs_get_node_size(ramfs_node);
     v_ramfs_node->data = kmalloc(v_ramfs_node->size);
-    debugf("addr of v_ramfs_node->data: 0x%p, size: %d\n", v_ramfs_node->data,
-           v_ramfs_node->size);
 
     if (v_ramfs_node->type == RAMFS_DIRECTORY) {
         // TODO
@@ -336,15 +334,10 @@ int ramfs_read(vnode_t *vn, size_t *bytes, size_t *offset, void *out) {
         return -ENULLPTR;
     }
 
-    debugf("ramfs_read: vnode_ptr = 0x%p", vn);
-
     memset(out, 0, (*bytes));
 
     ramfs_node_t *ramfs_node = (ramfs_node_t *)vn->node_data;
     if (!ramfs_node) {
-        debugf("Address of vn->node_data: 0x%p\n", vn->node_data);
-        debugf("i hate this fucking language: 0x%p\n",
-               (ramfs_node_t *)vn->node_data);
         return -ENULLPTR;
     }
 

@@ -143,7 +143,7 @@ void module_exit() {
 }
 
 void module_entry() {
-    debugf("RTL8139: Module loading...\n");
+    debugf_debug("RTL8139: Module loading...\n");
 
     pci_device_t *pci_dev = get_pcihead();
     while (pci_dev) {
