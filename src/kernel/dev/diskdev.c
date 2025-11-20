@@ -2,6 +2,7 @@
 #include "dev/device.h"
 #include "errors.h"
 #include "memory/heap/kheap.h"
+#include "string.h"
 #include <stdio.h>
 
 static int diskdev_read(struct device *dev, void *buffer, size_t size, size_t offset) {
@@ -85,16 +86,21 @@ int register_disk_device(disk_device_t *disk) {
     }
 
     snprintf(dev->name, DEVICE_NAME_MAX, "%s", final_name);
-    dev->major        = 2; // block storage device
-    dev->minor        = 0; // not used currently
+    dev->major        = 2;
+    dev->minor        = 0;
     dev->type         = DEVICE_TYPE_BLOCK;
-    dev->read         = diskdev_read;  // to be set by the driver
-    dev->write        = diskdev_write;           // to be set by the driver
-    dev->ioctl        = diskdev_ctl;           // to be set by the driver
-    dev->data         = (void *)disk; // point to the disk device struct
-    dev->dev_node_path = final_name;
+    dev->read         = diskdev_read;
+    dev->write        = diskdev_write;
+    dev->ioctl        = diskdev_ctl;
+    dev->data         = (void *)disk;
+    dev->dev_node_path = strdup(final_name);
+    if (!dev->dev_node_path) {
+        kfree(dev);
+        return -ENOMEM;
+    }
 
     register_device(dev);
+    disk->dev = dev;
 
     return EOK;
 }

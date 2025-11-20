@@ -140,6 +140,7 @@ int vfs_read(vnode_t *vnode, size_t size, size_t offset, void *out) {
         return -ENULLPTR;
     }
 
+
     int ret = vnode->ops->read(vnode, &size, &offset, out);
 
     return ret;

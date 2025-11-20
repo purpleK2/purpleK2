@@ -54,7 +54,7 @@ fileio_t *open(char *path, int flags) {
     f->offset = 0;
 
     // the flags we opened the file with
-    f->flags = flags;
+    f->flags = flags |= f->flags;
 
     return f;
 }
@@ -72,13 +72,16 @@ size_t read(fileio_t *file, size_t size, void *out) {
     }
 
 
-    if (file->offset >= file->size) {
-        return 0;
+    if (!(file->flags & SPECIAL_FILE_TYPE_DEVICE)) {
+        if (file->offset >= file->size) {
+            return 0;
+        }
+
+        if (size > file->size) {
+            size = (file->size - file->offset);
+        }
     }
 
-    if (size > file->size) {
-        size = (file->size - file->offset);
-    }
 
     int ret = vfs_read(((vnode_t *)file->private), size, file->offset, out);
     if (ret != 0) {
