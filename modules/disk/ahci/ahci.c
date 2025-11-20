@@ -141,62 +141,56 @@ void stop_cmd(HBA_PORT *port) {
 
 bool READ(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count,
           uint16_t *buf) {
-    port->is = (uint32_t)-1; // Clear pending interrupt bits
-    int spin = 0;            // Spin lock timeout counter
+    port->is = (uint32_t)-1;
+    int spin = 0;
     int slot = find_cmdslot(port);
     if (slot == -1)
         return false;
 
-    HBA_CMD_HEADER *cmdheader  = (HBA_CMD_HEADER *)PHYS_TO_VIRTUAL(port->clb);
-    cmdheader                 += slot;
-    cmdheader->cfl = sizeof(FIS_REG_H2D) / sizeof(uint32_t); // Command FIS size
-    cmdheader->w   = 0;                                      // Read from device
-    cmdheader->prdtl = (uint16_t)((count - 1) >> 4) + 1; // PRDT entries count
+    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER *)PHYS_TO_VIRTUAL(port->clb);
+    cmdheader += slot;
+    cmdheader->cfl = sizeof(FIS_REG_H2D) / sizeof(uint32_t);
+    cmdheader->w = 0;
+    cmdheader->prdtl = (uint16_t)((count - 1) >> 4) + 1;
 
     HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)PHYS_TO_VIRTUAL(cmdheader->ctba);
     memset(cmdtbl, 0,
            sizeof(HBA_CMD_TBL) +
                (cmdheader->prdtl - 1) * sizeof(HBA_PRDT_ENTRY));
 
-    // 8K bytes (16 sectors) per PRDT
-
     int i;
+    uint16_t *buf_ptr = buf;
 
     for (i = 0; i < cmdheader->prdtl - 1; i++) {
-        cmdtbl->prdt_entry[i].dba = (uint32_t)(uintptr_t)buf;
-        cmdtbl->prdt_entry[i].dbc =
-            8 * 1024 - 1; // 8K bytes (this value should always be set to 1 less
-                          // than the actual value)
-        cmdtbl->prdt_entry[i].i  = 1;
-        buf                     += 4 * 1024; // 4K words
-        count                   -= 16;       // 16 sectors
+        uint64_t phys_addr = VIRT_TO_PHYSICAL((uint64_t)buf_ptr);
+        cmdtbl->prdt_entry[i].dba = (uint32_t)phys_addr;
+        cmdtbl->prdt_entry[i].dbau = (uint32_t)(phys_addr >> 32);
+        cmdtbl->prdt_entry[i].dbc = 8 * 1024 - 1;
+        cmdtbl->prdt_entry[i].i = 1;
+        buf_ptr += 4 * 1024; // 4K words
+        count -= 16;
     }
-    // Last entry
-    cmdtbl->prdt_entry[i].dba = (uint32_t)(uintptr_t)buf;
-    cmdtbl->prdt_entry[i].dbc = (count << 9) - 1; // 512 bytes per sector
-    cmdtbl->prdt_entry[i].i   = 1;
+    
+    uint64_t phys_addr = VIRT_TO_PHYSICAL((uint64_t)buf_ptr);
+    cmdtbl->prdt_entry[i].dba = (uint32_t)phys_addr;
+    cmdtbl->prdt_entry[i].dbau = (uint32_t)(phys_addr >> 32);
+    cmdtbl->prdt_entry[i].dbc = (count << 9) - 1;
+    cmdtbl->prdt_entry[i].i = 1;
 
-    // Setup command
     FIS_REG_H2D *cmdfis = (FIS_REG_H2D *)(&cmdtbl->cfis);
-
     cmdfis->fis_type = FIS_TYPE_REG_H2D;
-    cmdfis->c        = 1; // Command
-    cmdfis->command  = ATA_CMD_READ_DMA_EX;
-
-    cmdfis->lba0   = (uint8_t)startl;
-    cmdfis->lba1   = (uint8_t)(startl >> 8);
-    cmdfis->lba2   = (uint8_t)(startl >> 16);
-    cmdfis->device = 1 << 6; // LBA mode
-
+    cmdfis->c = 1;
+    cmdfis->command = ATA_CMD_READ_DMA_EX;
+    cmdfis->lba0 = (uint8_t)startl;
+    cmdfis->lba1 = (uint8_t)(startl >> 8);
+    cmdfis->lba2 = (uint8_t)(startl >> 16);
+    cmdfis->device = 1 << 6;
     cmdfis->lba3 = (uint8_t)(startl >> 24);
     cmdfis->lba4 = (uint8_t)starth;
     cmdfis->lba5 = (uint8_t)(starth >> 8);
-
     cmdfis->countl = count & 0xFF;
     cmdfis->counth = (count >> 8) & 0xFF;
 
-    // The below loop waits until the port is no longer busy before issuing a
-    // new command
     while ((port->tfd & (ATA_DEV_BUSY | ATA_DEV_DRQ)) && spin < 1000000) {
         spin++;
     }
@@ -205,22 +199,17 @@ bool READ(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count,
         return FALSE;
     }
 
-    port->ci = 1 << slot; // Issue command
+    port->ci = 1 << slot;
 
-    // Wait for completion
     while (1) {
-        // In some longer duration reads, it may be helpful to spin on the DPS
-        // bit in the PxIS port field as well (1 << 5)
         if ((port->ci & (1 << slot)) == 0)
             break;
-        if (port->is & HBA_PxIS_TFES) // Task file error
-        {
+        if (port->is & HBA_PxIS_TFES) {
             kprintf_warn("Read disk error\n");
             return FALSE;
         }
     }
 
-    // Check again
     if (port->is & HBA_PxIS_TFES) {
         kprintf_warn("Read disk error\n");
         return FALSE;
@@ -264,42 +253,47 @@ bool ahci_write(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
     if (slot == -1)
         return false;
 
-    HBA_CMD_HEADER *cmdheader  = (HBA_CMD_HEADER *)PHYS_TO_VIRTUAL(port->clb);
-    cmdheader                 += slot;
-    cmdheader->cfl             = sizeof(FIS_REG_H2D) / sizeof(uint32_t);
-    cmdheader->w               = 1;
-    cmdheader->prdtl           = (uint16_t)((count - 1) >> 4) + 1;
+    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER *)PHYS_TO_VIRTUAL(port->clb);
+    cmdheader += slot;
+    cmdheader->cfl = sizeof(FIS_REG_H2D) / sizeof(uint32_t);
+    cmdheader->w = 1;
+    cmdheader->prdtl = (uint16_t)((count - 1) >> 4) + 1;
 
     HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)PHYS_TO_VIRTUAL(cmdheader->ctba);
     memset(cmdtbl, 0,
            sizeof(HBA_CMD_TBL) +
                (cmdheader->prdtl - 1) * sizeof(HBA_PRDT_ENTRY));
 
+    void *buf_ptr = buffer;
+    
     for (int i = 0; i < cmdheader->prdtl - 1; i++) {
-        cmdtbl->prdt_entry[i].dba  = (uint32_t)(uintptr_t)buffer;
-        cmdtbl->prdt_entry[i].dbc  = 8 * 1024 - 1;
-        cmdtbl->prdt_entry[i].i    = 1;
-        buffer                    += 4 * 1024;
-        count                     -= 16;
+        // FIX: Convert virtual address to physical
+        uint64_t phys_addr = VIRT_TO_PHYSICAL((uint64_t)buf_ptr);
+        cmdtbl->prdt_entry[i].dba = (uint32_t)phys_addr;
+        cmdtbl->prdt_entry[i].dbau = (uint32_t)(phys_addr >> 32);
+        cmdtbl->prdt_entry[i].dbc = 8 * 1024 - 1;
+        cmdtbl->prdt_entry[i].i = 1;
+        buf_ptr += 4 * 1024;
+        count -= 16;
     }
 
-    cmdtbl->prdt_entry[cmdheader->prdtl - 1].dba = (uint32_t)(uintptr_t)buffer;
+    uint64_t phys_addr = VIRT_TO_PHYSICAL((uint64_t)buf_ptr);
+    cmdtbl->prdt_entry[cmdheader->prdtl - 1].dba = (uint32_t)phys_addr;
+    cmdtbl->prdt_entry[cmdheader->prdtl - 1].dbau = (uint32_t)(phys_addr >> 32);
     cmdtbl->prdt_entry[cmdheader->prdtl - 1].dbc = (count << 9) - 1;
-    cmdtbl->prdt_entry[cmdheader->prdtl - 1].i   = 1;
+    cmdtbl->prdt_entry[cmdheader->prdtl - 1].i = 1;
 
     FIS_REG_H2D *cmdfis = (FIS_REG_H2D *)(&cmdtbl->cfis);
-    cmdfis->fis_type    = FIS_TYPE_REG_H2D;
-    cmdfis->c           = 1;
-    cmdfis->command     = 0x35;
-
-    cmdfis->lba0   = (uint8_t)lba;
-    cmdfis->lba1   = (uint8_t)(lba >> 8);
-    cmdfis->lba2   = (uint8_t)(lba >> 16);
+    cmdfis->fis_type = FIS_TYPE_REG_H2D;
+    cmdfis->c = 1;
+    cmdfis->command = 0x35;
+    cmdfis->lba0 = (uint8_t)lba;
+    cmdfis->lba1 = (uint8_t)(lba >> 8);
+    cmdfis->lba2 = (uint8_t)(lba >> 16);
     cmdfis->device = 1 << 6;
-    cmdfis->lba3   = (uint8_t)(lba >> 24);
-    cmdfis->lba4   = (uint8_t)(lba >> 32);
-    cmdfis->lba5   = (uint8_t)(lba >> 40);
-
+    cmdfis->lba3 = (uint8_t)(lba >> 24);
+    cmdfis->lba4 = (uint8_t)(lba >> 32);
+    cmdfis->lba5 = (uint8_t)(lba >> 40);
     cmdfis->countl = count & 0xFF;
     cmdfis->counth = (count >> 8) & 0xFF;
 
@@ -364,4 +358,254 @@ void test_ahci_operations(HBA_MEM *abar) {
         kprintf("%s\n", bufferf);
     } else
         kprintf("Read failed!\n");
+}
+
+bool ahci_read_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
+    port->is = (uint32_t)-1;
+    int slot = find_cmdslot(port);
+    if (slot == -1)
+        return false;
+
+    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER *)PHYS_TO_VIRTUAL(port->clb);
+    cmdheader += slot;
+    cmdheader->cfl = sizeof(FIS_REG_H2D) / sizeof(uint32_t);
+    cmdheader->w = 0;
+    cmdheader->a = 1;
+    cmdheader->prdtl = 1;
+
+    HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)PHYS_TO_VIRTUAL(cmdheader->ctba);
+    memset(cmdtbl, 0, sizeof(HBA_CMD_TBL) + sizeof(HBA_PRDT_ENTRY));
+
+    cmdtbl->prdt_entry[0].dba = (uint32_t)(uintptr_t)buffer;
+    cmdtbl->prdt_entry[0].dbc = (count * ATAPI_SECTOR_SIZE) - 1;
+    cmdtbl->prdt_entry[0].i = 1;
+
+    FIS_REG_H2D *cmdfis = (FIS_REG_H2D *)(&cmdtbl->cfis);
+    cmdfis->fis_type = FIS_TYPE_REG_H2D;
+    cmdfis->c = 1;
+    cmdfis->command = ATA_CMD_PACKET;
+    cmdfis->device = 0;
+    cmdfis->featurel = 0; // DMA
+    cmdfis->featureh = 0;
+    cmdfis->lba1 = (count * ATAPI_SECTOR_SIZE) & 0xFF;
+    cmdfis->lba2 = (count * ATAPI_SECTOR_SIZE) >> 8;
+
+    uint8_t *acmd = cmdtbl->acmd;
+    memset(acmd, 0, 16);
+    acmd[0] = SCSI_CMD_READ_10;
+    acmd[2] = (lba >> 24) & 0xFF;
+    acmd[3] = (lba >> 16) & 0xFF;
+    acmd[4] = (lba >> 8) & 0xFF;
+    acmd[5] = lba & 0xFF;
+    acmd[7] = (count >> 8) & 0xFF;
+    acmd[8] = count & 0xFF;
+
+    int spin = 0;
+    while ((port->tfd & (ATA_DEV_BUSY | ATA_DEV_DRQ)) && spin < 1000000) {
+        spin++;
+    }
+    if (spin == 1000000) {
+        kprintf_warn("Port is hung\n");
+        return false;
+    }
+
+    port->ci = 1 << slot;
+
+    while (1) {
+        if ((port->ci & (1 << slot)) == 0)
+            break;
+        if (port->is & HBA_PxIS_TFES) {
+            kprintf_warn("ATAPI read error\n");
+            return false;
+        }
+    }
+
+    if (port->is & HBA_PxIS_TFES) {
+        kprintf_warn("ATAPI read error\n");
+        return false;
+    }
+
+    return true;
+}
+
+uint32_t ahci_get_atapi_capacity(HBA_PORT *port) {
+    uint8_t buffer[8];
+    
+    port->is = (uint32_t)-1;
+    int slot = find_cmdslot(port);
+    if (slot == -1)
+        return 0;
+
+    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER *)PHYS_TO_VIRTUAL(port->clb);
+    cmdheader += slot;
+    cmdheader->cfl = sizeof(FIS_REG_H2D) / sizeof(uint32_t);
+    cmdheader->w = 0;
+    cmdheader->a = 1;
+    cmdheader->prdtl = 1;
+
+    HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)PHYS_TO_VIRTUAL(cmdheader->ctba);
+    memset(cmdtbl, 0, sizeof(HBA_CMD_TBL) + sizeof(HBA_PRDT_ENTRY));
+
+    cmdtbl->prdt_entry[0].dba = (uint32_t)(uintptr_t)buffer;
+    cmdtbl->prdt_entry[0].dbc = 7;
+    cmdtbl->prdt_entry[0].i = 1;
+
+    FIS_REG_H2D *cmdfis = (FIS_REG_H2D *)(&cmdtbl->cfis);
+    cmdfis->fis_type = FIS_TYPE_REG_H2D;
+    cmdfis->c = 1;
+    cmdfis->command = ATA_CMD_PACKET;
+    cmdfis->featurel = 0;
+    cmdfis->lba1 = 8;
+    cmdfis->lba2 = 0;
+
+    uint8_t *acmd = cmdtbl->acmd;
+    memset(acmd, 0, 16);
+    acmd[0] = SCSI_CMD_READ_CAPACITY;
+
+    int spin = 0;
+    while ((port->tfd & (ATA_DEV_BUSY | ATA_DEV_DRQ)) && spin < 1000000)
+        spin++;
+    
+    if (spin == 1000000)
+        return 0;
+
+    port->ci = 1 << slot;
+
+    while (1) {
+        if ((port->ci & (1 << slot)) == 0)
+            break;
+        if (port->is & HBA_PxIS_TFES)
+            return 0;
+    }
+
+    uint32_t capacity = ((uint32_t)buffer[0] << 24) |
+                       ((uint32_t)buffer[1] << 16) |
+                       ((uint32_t)buffer[2] << 8) |
+                       buffer[3];
+    
+    return capacity + 1;
+}
+
+bool ahci_atapi_is_writable(HBA_PORT *port) {
+    uint8_t buffer[8];
+    
+    port->is = (uint32_t)-1;
+    int slot = find_cmdslot(port);
+    if (slot == -1)
+        return false;
+
+    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER *)PHYS_TO_VIRTUAL(port->clb);
+    cmdheader += slot;
+    cmdheader->cfl = sizeof(FIS_REG_H2D) / sizeof(uint32_t);
+    cmdheader->w = 0;
+    cmdheader->a = 1;
+    cmdheader->prdtl = 1;
+
+    HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)PHYS_TO_VIRTUAL(cmdheader->ctba);
+    memset(cmdtbl, 0, sizeof(HBA_CMD_TBL) + sizeof(HBA_PRDT_ENTRY));
+
+    cmdtbl->prdt_entry[0].dba = (uint32_t)(uintptr_t)buffer;
+    cmdtbl->prdt_entry[0].dbc = 7;
+    cmdtbl->prdt_entry[0].i = 1;
+
+    FIS_REG_H2D *cmdfis = (FIS_REG_H2D *)(&cmdtbl->cfis);
+    cmdfis->fis_type = FIS_TYPE_REG_H2D;
+    cmdfis->c = 1;
+    cmdfis->command = ATA_CMD_PACKET;
+    cmdfis->featurel = 0;
+    cmdfis->lba1 = 8;
+    cmdfis->lba2 = 0;
+
+    uint8_t *acmd = cmdtbl->acmd;
+    memset(acmd, 0, 16);
+    acmd[0] = 0x5A;
+    acmd[2] = 0x2A;
+    acmd[7] = 0;
+    acmd[8] = 8;
+
+    int spin = 0;
+    while ((port->tfd & (ATA_DEV_BUSY | ATA_DEV_DRQ)) && spin < 1000000)
+        spin++;
+    
+    if (spin == 1000000)
+        return false;
+
+    port->ci = 1 << slot;
+
+    while (1) {
+        if ((port->ci & (1 << slot)) == 0)
+            break;
+        if (port->is & HBA_PxIS_TFES)
+            return false;
+    }
+
+    return !(buffer[2] & 0x80);
+}
+
+bool ahci_write_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
+    port->is = (uint32_t)-1;
+    int slot = find_cmdslot(port);
+    if (slot == -1)
+        return false;
+
+    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER *)PHYS_TO_VIRTUAL(port->clb);
+    cmdheader += slot;
+    cmdheader->cfl = sizeof(FIS_REG_H2D) / sizeof(uint32_t);
+    cmdheader->w = 1;
+    cmdheader->a = 1;
+    cmdheader->prdtl = 1;
+
+    HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)PHYS_TO_VIRTUAL(cmdheader->ctba);
+    memset(cmdtbl, 0, sizeof(HBA_CMD_TBL) + sizeof(HBA_PRDT_ENTRY));
+
+    cmdtbl->prdt_entry[0].dba = (uint32_t)(uintptr_t)buffer;
+    cmdtbl->prdt_entry[0].dbc = (count * ATAPI_SECTOR_SIZE) - 1;
+    cmdtbl->prdt_entry[0].i = 1;
+
+    FIS_REG_H2D *cmdfis = (FIS_REG_H2D *)(&cmdtbl->cfis);
+    cmdfis->fis_type = FIS_TYPE_REG_H2D;
+    cmdfis->c = 1;
+    cmdfis->command = ATA_CMD_PACKET;
+    cmdfis->device = 0;
+    cmdfis->featurel = 0; // DMA
+    cmdfis->featureh = 0;
+    cmdfis->lba1 = (count * ATAPI_SECTOR_SIZE) & 0xFF;
+    cmdfis->lba2 = (count * ATAPI_SECTOR_SIZE) >> 8;
+
+    uint8_t *acmd = cmdtbl->acmd;
+    memset(acmd, 0, 16);
+    acmd[0] = 0x2A;
+    acmd[2] = (lba >> 24) & 0xFF;
+    acmd[3] = (lba >> 16) & 0xFF;
+    acmd[4] = (lba >> 8) & 0xFF;
+    acmd[5] = lba & 0xFF;
+    acmd[7] = (count >> 8) & 0xFF;
+    acmd[8] = count & 0xFF;
+
+    int spin = 0;
+    while ((port->tfd & (ATA_DEV_BUSY | ATA_DEV_DRQ)) && spin < 1000000) {
+        spin++;
+    }
+    if (spin == 1000000) {
+        kprintf_warn("Port is hung\n");
+        return false;
+    }
+
+    port->ci = 1 << slot;
+
+    while (1) {
+        if ((port->ci & (1 << slot)) == 0)
+            break;
+        if (port->is & HBA_PxIS_TFES) {
+            kprintf_warn("ATAPI write error\n");
+            return false;
+        }
+    }
+
+    if (port->is & HBA_PxIS_TFES) {
+        kprintf_warn("ATAPI write error\n");
+        return false;
+    }
+
+    return true;
 }

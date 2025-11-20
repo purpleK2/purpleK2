@@ -405,6 +405,8 @@ int devfs_open(vnode_t **vnode_r, int flags, bool clone, fileio_t **fio_out) {
     }
 
     fio_file->buf_start = NULL;
+    fio_file->flags |= SPECIAL_FILE_TYPE_DEVICE;
+    fio_file->size = 0;
 
     return EOK;
 }
@@ -416,14 +418,13 @@ int devfs_close(vnode_t *vnode, int flags, bool clone) {
     if (!vnode) {
         return ENULLPTR;
     }
-
-    // we don't need to do anything special for DEVFS
-    // just free the vnode's node_data
-    kfree(vnode->node_data);
-
-    // get rid of the vnode itself
-    kfree(vnode->path);
-    kfree(vnode->ops);
+    
+    if (vnode->path) {
+        kfree(vnode->path);
+    }
+    if (vnode->ops) {
+        kfree(vnode->ops);
+    }
     kfree(vnode);
 
     return EOK;
@@ -445,13 +446,13 @@ int devfs_ioctl(vnode_t *vnode, int request, void *arg) {
 }
 
 int devfs_read(vnode_t *vn, size_t *bytes, size_t *offset, void *out) {
+    
     if (!vn || !bytes || !offset || !out) {
         return ENULLPTR;
     }
 
-    device_t *dev =
-        vn->node_data ? ((devfs_node_t *)vn->node_data)->device : NULL;
-
+    device_t *dev = vn->node_data ? ((devfs_node_t *)vn->node_data)->device : NULL;
+    
     if (!dev || !dev->read) {
         return ENOIMPL;
     }

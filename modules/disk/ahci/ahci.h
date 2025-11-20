@@ -30,6 +30,20 @@
 #define CMD_SLOTS            32
 #define ATA_CMD_IDENTIFY     0xEC
 
+#define ATAPI_CMD_READ       0xA8
+#define ATAPI_CMD_EJECT      0x1B
+#define ATAPI_CMD_IDENTIFY   0xA1
+
+#define SCSI_CMD_READ_10     0x28
+#define SCSI_CMD_READ_12     0xA8
+#define SCSI_CMD_READ_CAPACITY 0x25
+#define SCSI_CMD_TEST_UNIT_READY 0x00
+#define SCSI_CMD_WRITE_10    0x2A
+#define SCSI_CMD_MODE_SENSE  0x5A
+
+#define ATA_CMD_PACKET       0xA0
+#define ATAPI_SECTOR_SIZE    2048
+
 typedef enum {
     FIS_TYPE_REG_H2D   = 0x27,
     FIS_TYPE_REG_D2H   = 0x34,
@@ -256,5 +270,11 @@ bool READ(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count,
 
 void test_ahci();
 void test_ahci_operations(HBA_MEM *abar);
+
+bool ahci_read_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer);
+uint32_t ahci_get_atapi_capacity(HBA_PORT *port);
+
+bool ahci_write_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer);
+bool ahci_atapi_is_writable(HBA_PORT *port);
 
 #endif // AHCI_H

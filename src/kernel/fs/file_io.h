@@ -22,6 +22,7 @@ typedef enum fcntl_cmd {
 #define PIPE_WRITE_END (1 << 3)
 
 #define SPECIAL_FILE_TYPE_PIPE (1 << 4)
+#define SPECIAL_FILE_TYPE_DEVICE (1 << 5)
 
 /*
     Proper structs and functions for file I/O

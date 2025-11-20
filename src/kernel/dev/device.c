@@ -41,6 +41,10 @@ int unregister_device(const char *name) {
         return -1;
     }
 
+    if (dev->dev_node_path) {
+        kfree((void *)dev->dev_node_path);
+    }
+
     kfree(dev);
 
     devfs_refresh(devfs);

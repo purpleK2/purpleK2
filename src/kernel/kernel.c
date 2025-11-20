@@ -500,9 +500,9 @@ void kstart(void) {
 
     devfs_print(devfs->root_node, 0);
 
-    init_scheduler();
-    init_cpu_scheduler(pk_init);
-    irq_registerHandler(0, scheduler_timer_tick);
+    //init_scheduler();
+    //init_cpu_scheduler(pk_init);
+    //irq_registerHandler(0, scheduler_timer_tick);
 
     for (;;)
         ;
