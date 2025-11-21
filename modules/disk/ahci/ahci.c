@@ -1,4 +1,5 @@
 #include "ahci.h"
+#include "util/dump.h"
 
 #include <memory/pmm/pmm.h>
 #include <paging/paging.h>
@@ -322,7 +323,7 @@ bool ahci_write(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
 
 pci_device_t *detect_controller() {
     pci_device_t *current = pci_devices_head;
-    while (pci_devices_head) {
+    while (current) {
         const char *name_1 = pci_get_class_name(current->class_code);
         if (strcmp(name_1, "Mass Storage Controller") == 0) {
             const char *name =
@@ -376,7 +377,8 @@ bool ahci_read_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer)
     HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)PHYS_TO_VIRTUAL(cmdheader->ctba);
     memset(cmdtbl, 0, sizeof(HBA_CMD_TBL) + sizeof(HBA_PRDT_ENTRY));
 
-    cmdtbl->prdt_entry[0].dba = (uint32_t)(uintptr_t)buffer;
+    cmdtbl->prdt_entry[0].dba = (uint32_t)VIRT_TO_PHYSICAL(buffer);
+    cmdtbl->prdt_entry[0].dbau = (uint32_t)(VIRT_TO_PHYSICAL(buffer) >> 32);
     cmdtbl->prdt_entry[0].dbc = (count * ATAPI_SECTOR_SIZE) - 1;
     cmdtbl->prdt_entry[0].i = 1;
 

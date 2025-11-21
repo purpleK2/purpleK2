@@ -54,7 +54,15 @@ static int ahci_diskdev_write(struct disk_device *disk, const uint8_t *buffer, u
 // SCSI / ATAPI stuff :3
 static int ahci_diskdev_read_atapi(struct disk_device *disk, uint8_t *buffer, 
                                    uint64_t lba, uint32_t sector_count) {
-    bool i =  ahci_read_atapi((HBA_PORT *)disk->data, lba, sector_count, buffer);
+    char *tmp = kmalloc(sector_count * ATAPI_SECTOR_SIZE);
+    debugf_debug("Read Buffer @ %p\n", tmp);
+    bool i =  ahci_read_atapi((HBA_PORT *)disk->data, lba, sector_count, tmp);
+    hex_dump_debug(tmp, sector_count * ATAPI_SECTOR_SIZE);
+    memcpy(buffer, tmp, sector_count * ATAPI_SECTOR_SIZE);
+    kfree(tmp);
+
+    debugf_debug("ATAPI read at LBA %llu, sectors %u returned %d\n", lba, sector_count, i);
+    
     if (i == true) {
         return 0;
     } else {
@@ -147,10 +155,11 @@ void module_entry() {
     // simple test
     fileio_t *fd = open("/dev/opta", 0);
     if (fd) {
-        char buffer[512];
+        char *buffer = kmalloc(512);
+        memset(buffer, 0, 512);
         read(fd, 512, buffer);
-        hex_dump_debug(buffer, 512);
         close(fd);
+        kfree(buffer);
     } else {
         kprintf_warn("Failed to open /dev/sda for reading test data\n");
     }
