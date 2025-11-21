@@ -135,11 +135,6 @@ void module_entry() {
 
             disk->data = (void *)port;
 
-            char buffer[2049];
-
-            //int i = ahci_read_atapi((HBA_PORT *)port, 0, 1, buffer);
-            //hex_dump_debug(buffer, 1 * 512);
-
             register_disk_device(disk);
 
             debugf_debug("AHCI: Registered ATAPI disk at port %d as /dev/opt%c\n",
