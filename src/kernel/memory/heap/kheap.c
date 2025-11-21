@@ -1,4 +1,5 @@
 #include "kheap.h"
+#include "memory/pmm/pmm.h"
 #include "stdio.h"
 
 #include <memory/vmm/vflags.h>
@@ -98,7 +99,7 @@ void *kmalloc(size_t size) {
     stats.total_allocs++;
     stats.total_bytes_allocated += cache->obj_size;
 
-    return obj;
+    return (void *)PHYS_TO_VIRTUAL((uint64_t)obj);
 }
 
 /// Free memory

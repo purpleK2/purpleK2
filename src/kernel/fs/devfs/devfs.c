@@ -414,18 +414,10 @@ int devfs_open(vnode_t **vnode_r, int flags, bool clone, fileio_t **fio_out) {
 int devfs_close(vnode_t *vnode, int flags, bool clone) {
     UNUSED(flags);
     UNUSED(clone);
-
     if (!vnode) {
         return ENULLPTR;
     }
-    
-    if (vnode->path) {
-        kfree(vnode->path);
-    }
-    if (vnode->ops) {
-        kfree(vnode->ops);
-    }
-    kfree(vnode);
+
 
     return EOK;
 }
