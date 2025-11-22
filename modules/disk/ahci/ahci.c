@@ -140,7 +140,7 @@ bool ahci_sata_read(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) 
     HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER *)PHYS_TO_VIRTUAL(port->clb);
     cmdheader += slot;
     cmdheader->cfl = sizeof(FIS_REG_H2D) / sizeof(uint32_t);
-    cmdheader->w = 0;
+    cmdheader->w = 0; // Read
     cmdheader->prdtl = (uint16_t)((count - 1) >> 4) + 1;
 
     HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)PHYS_TO_VIRTUAL(cmdheader->ctba);
@@ -149,22 +149,25 @@ bool ahci_sata_read(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) 
                (cmdheader->prdtl - 1) * sizeof(HBA_PRDT_ENTRY));
 
     int i;
-    uint16_t *buf_ptr = buffer;
+    void *buf_ptr = buffer;  // FIXED: Use void* instead of uint16_t*
+    uint32_t remaining_count = count;
 
     for (i = 0; i < cmdheader->prdtl - 1; i++) {
-        uint64_t phys_addr = pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uint64_t)buf_ptr);
+        // FIXED: Use pg_virtual_to_phys like in working ATAPI functions
+        uint64_t phys_addr = pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buf_ptr);
         cmdtbl->prdt_entry[i].dba = (uint32_t)phys_addr;
         cmdtbl->prdt_entry[i].dbau = (uint32_t)(phys_addr >> 32);
-        cmdtbl->prdt_entry[i].dbc = 8 * 1024 - 1;
+        cmdtbl->prdt_entry[i].dbc = 8 * 1024 - 1; // 8KB per entry
         cmdtbl->prdt_entry[i].i = 1;
-        buf_ptr += 4 * 1024;
-        count -= 16;
+        buf_ptr += 8 * 1024; // FIXED: Add bytes, not words
+        remaining_count -= 16; // 16 sectors of 512 bytes = 8KB
     }
     
-    uint64_t phys_addr = pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uint64_t)buf_ptr);
+    // Last PRDT entry
+    uint64_t phys_addr = pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buf_ptr);
     cmdtbl->prdt_entry[i].dba = (uint32_t)phys_addr;
     cmdtbl->prdt_entry[i].dbau = (uint32_t)(phys_addr >> 32);
-    cmdtbl->prdt_entry[i].dbc = (count << 9) - 1;
+    cmdtbl->prdt_entry[i].dbc = (remaining_count << 9) - 1; // Convert sectors to bytes
     cmdtbl->prdt_entry[i].i = 1;
 
     FIS_REG_H2D *cmdfis = (FIS_REG_H2D *)(&cmdtbl->cfis);
@@ -174,7 +177,7 @@ bool ahci_sata_read(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) 
     cmdfis->lba0 = (uint8_t)startl;
     cmdfis->lba1 = (uint8_t)(startl >> 8);
     cmdfis->lba2 = (uint8_t)(startl >> 16);
-    cmdfis->device = 1 << 6;
+    cmdfis->device = 1 << 6; // LBA mode
     cmdfis->lba3 = (uint8_t)(startl >> 24);
     cmdfis->lba4 = (uint8_t)starth;
     cmdfis->lba5 = (uint8_t)(starth >> 8);
@@ -186,7 +189,7 @@ bool ahci_sata_read(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) 
     }
     if (spin == 1000000) {
         debugf_warn("Port is hung\n");
-        return FALSE;
+        return false;
     }
 
     port->ci = 1 << slot;
@@ -196,13 +199,13 @@ bool ahci_sata_read(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) 
             break;
         if (port->is & HBA_PxIS_TFES) {
             debugf_warn("Read disk error\n");
-            return FALSE;
+            return false;
         }
     }
 
     if (port->is & HBA_PxIS_TFES) {
         debugf_warn("Read disk error\n");
-        return FALSE;
+        return false;
     }
 
     return true;

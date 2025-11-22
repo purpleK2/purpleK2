@@ -1,9 +1,7 @@
 #include "ahci.h"
 #include "errors.h"
-#include "fs/file_io.h"
 #include "memory/heap/kheap.h"
 #include "paging/paging.h"
-#include "util/dump.h"
 #include <util/assert.h>
 #include <stdio.h>
 
@@ -139,15 +137,5 @@ void module_entry() {
             debugf_debug("AHCI: Registered ATAPI disk at port %d as /dev/opt%c\n\tBlock size: %u bytes\n\tBlock count: %u blocks\n\tSize: %u MB\n",
                     i, disk->id.letter, disk->block_size, disk->block_count, disk->block_size * disk->block_count / (1024 * 1024));
         }
-    }
-
-    fileio_t *fio = open("/dev/sda", 0);
-    if (fio) {
-        char *buffer = kmalloc(512);
-        read(fio, 512, buffer);
-        kprintf("First 512 bytes of /dev/sda:\n");
-        hex_dump(buffer, 512);
-        kfree(buffer);
-        close(fio);
     }
 }
