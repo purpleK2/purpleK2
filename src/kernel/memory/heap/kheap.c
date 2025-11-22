@@ -99,7 +99,7 @@ void *kmalloc(size_t size) {
     stats.total_allocs++;
     stats.total_bytes_allocated += cache->obj_size;
 
-    return (void *)PHYS_TO_VIRTUAL((uint64_t)obj);
+    return (void *)obj;
 }
 
 /// Free memory
