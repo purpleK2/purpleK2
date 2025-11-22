@@ -1,4 +1,5 @@
 #include "ahci.h"
+#include "uacpi/internal/types.h"
 #include "util/dump.h"
 
 #include <memory/pmm/pmm.h>
@@ -278,9 +279,8 @@ bool ahci_write(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
         count -= 16;
     }
 
-    uint64_t phys_addr = VIRT_TO_PHYSICAL((uint64_t)buf_ptr);
-    cmdtbl->prdt_entry[cmdheader->prdtl - 1].dba = (uint32_t)phys_addr;
-    cmdtbl->prdt_entry[cmdheader->prdtl - 1].dbau = (uint32_t)(phys_addr >> 32);
+    cmdtbl->prdt_entry[0].dba = pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buffer);
+    cmdtbl->prdt_entry[0].dbau = (uint32_t)(pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buffer) >> 32);
     cmdtbl->prdt_entry[cmdheader->prdtl - 1].dbc = (count << 9) - 1;
     cmdtbl->prdt_entry[cmdheader->prdtl - 1].i = 1;
 
@@ -362,6 +362,8 @@ void test_ahci_operations(HBA_MEM *abar) {
 }
 
 bool ahci_read_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
+    debugf_debug("Buffer %p\n", buffer);
+
     port->is = (uint32_t)-1;
     int slot = find_cmdslot(port);
     if (slot == -1)
@@ -377,8 +379,8 @@ bool ahci_read_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer)
     HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)PHYS_TO_VIRTUAL(cmdheader->ctba);
     memset(cmdtbl, 0, sizeof(HBA_CMD_TBL) + sizeof(HBA_PRDT_ENTRY));
 
-    cmdtbl->prdt_entry[0].dba = (uint32_t)VIRT_TO_PHYSICAL(buffer);
-    cmdtbl->prdt_entry[0].dbau = (uint32_t)(VIRT_TO_PHYSICAL(buffer) >> 32);
+    cmdtbl->prdt_entry[0].dba = pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buffer);
+    cmdtbl->prdt_entry[0].dbau = (uint32_t)(pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buffer) >> 32);
     cmdtbl->prdt_entry[0].dbc = (count * ATAPI_SECTOR_SIZE) - 1;
     cmdtbl->prdt_entry[0].i = 1;
 
@@ -448,7 +450,8 @@ uint32_t ahci_get_atapi_capacity(HBA_PORT *port) {
     HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)PHYS_TO_VIRTUAL(cmdheader->ctba);
     memset(cmdtbl, 0, sizeof(HBA_CMD_TBL) + sizeof(HBA_PRDT_ENTRY));
 
-    cmdtbl->prdt_entry[0].dba = (uint32_t)(uintptr_t)buffer;
+    cmdtbl->prdt_entry[0].dba = pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buffer);
+    cmdtbl->prdt_entry[0].dbau = (uint32_t)(pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buffer) >> 32);
     cmdtbl->prdt_entry[0].dbc = 7;
     cmdtbl->prdt_entry[0].i = 1;
 
@@ -506,7 +509,8 @@ bool ahci_atapi_is_writable(HBA_PORT *port) {
     HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)PHYS_TO_VIRTUAL(cmdheader->ctba);
     memset(cmdtbl, 0, sizeof(HBA_CMD_TBL) + sizeof(HBA_PRDT_ENTRY));
 
-    cmdtbl->prdt_entry[0].dba = (uint32_t)(uintptr_t)buffer;
+    cmdtbl->prdt_entry[0].dba = pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buffer);
+    cmdtbl->prdt_entry[0].dbau = (uint32_t)(pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buffer) >> 32);
     cmdtbl->prdt_entry[0].dbc = 7;
     cmdtbl->prdt_entry[0].i = 1;
 
@@ -560,7 +564,8 @@ bool ahci_write_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer
     HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)PHYS_TO_VIRTUAL(cmdheader->ctba);
     memset(cmdtbl, 0, sizeof(HBA_CMD_TBL) + sizeof(HBA_PRDT_ENTRY));
 
-    cmdtbl->prdt_entry[0].dba = (uint32_t)(uintptr_t)buffer;
+    cmdtbl->prdt_entry[0].dba = pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buffer);
+    cmdtbl->prdt_entry[0].dbau = (uint32_t)(pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buffer) >> 32);
     cmdtbl->prdt_entry[0].dbc = (count * ATAPI_SECTOR_SIZE) - 1;
     cmdtbl->prdt_entry[0].i = 1;
 
