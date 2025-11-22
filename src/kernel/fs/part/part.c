@@ -91,6 +91,7 @@ int parse_partitions(disk_device_t *disk, partition_t **out)
 }
 
 static int partdev_read(struct device *dev, void *buffer, size_t size, size_t offset) {
+    debugf("partdev read called\n");
     assert(dev != NULL && dev->data != NULL);
     partition_t *part = (partition_t *)dev->data;
     assert(part->parent_disk != NULL);
@@ -145,11 +146,9 @@ void register_partiton_dev(partition_t *part) {
     dev->write = partdev_write;
     dev->ioctl = partdev_ioctl;
 
-    dev->dev_node_path = strdup(part->dev_path);
-    assert(dev->dev_node_path != NULL);
-
     dev->data = (void *)part;
 
-    int r = register_device(dev);
-    assert(r == 0);
+    kprintf("Name: %s\nDev Node Path: %s\n", dev->name, dev->dev_node_path);
+
+    register_device(dev);
 }
