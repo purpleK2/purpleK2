@@ -125,6 +125,8 @@ int register_disk_device(disk_device_t *disk) {
     dev->ioctl        = diskdev_ctl;
     dev->data         = (void *)disk;
     dev->dev_node_path = strdup(final_name);
+
+    kprintf("Name: %s\nDev Node Path: %s\n", dev->name, dev->dev_node_path);
     if (!dev->dev_node_path) {
         kfree(dev);
         return -ENOMEM;
