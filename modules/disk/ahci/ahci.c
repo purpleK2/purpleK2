@@ -1,6 +1,4 @@
 #include "ahci.h"
-#include "uacpi/internal/types.h"
-#include "util/dump.h"
 
 #include <memory/pmm/pmm.h>
 #include <paging/paging.h>
@@ -362,8 +360,6 @@ void test_ahci_operations(HBA_MEM *abar) {
 }
 
 bool ahci_read_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
-    debugf_debug("Buffer %p\n", buffer);
-
     port->is = (uint32_t)-1;
     int slot = find_cmdslot(port);
     if (slot == -1)
@@ -615,4 +611,86 @@ bool ahci_write_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer
     }
 
     return true;
+}
+
+uint64_t ahci_get_sata_capacity(HBA_PORT *port) {
+    port->is = (uint32_t)-1;
+    int slot = find_cmdslot(port);
+    if (slot == -1)
+        return 0;
+
+    // Allocate buffer for IDENTIFY DEVICE response (512 bytes)
+    uint16_t identify_buffer[256];
+    memset(identify_buffer, 0, 512);
+
+    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER *)PHYS_TO_VIRTUAL(port->clb);
+    cmdheader += slot;
+    cmdheader->cfl = sizeof(FIS_REG_H2D) / sizeof(uint32_t);
+    cmdheader->w = 0; // Read from device
+    cmdheader->prdtl = 1; // One PRDT entry
+
+    HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)PHYS_TO_VIRTUAL(cmdheader->ctba);
+    memset(cmdtbl, 0, sizeof(HBA_CMD_TBL) + sizeof(HBA_PRDT_ENTRY));
+
+    // Setup PRDT entry
+    uint64_t phys_addr = VIRT_TO_PHYSICAL((uint64_t)identify_buffer);
+    cmdtbl->prdt_entry[0].dba = (uint32_t)phys_addr;
+    cmdtbl->prdt_entry[0].dbau = (uint32_t)(phys_addr >> 32);
+    cmdtbl->prdt_entry[0].dbc = 511; // 512 bytes - 1
+    cmdtbl->prdt_entry[0].i = 1;
+
+    // Setup command FIS
+    FIS_REG_H2D *cmdfis = (FIS_REG_H2D *)(&cmdtbl->cfis);
+    cmdfis->fis_type = FIS_TYPE_REG_H2D;
+    cmdfis->c = 1; // Command
+    cmdfis->command = ATA_CMD_IDENTIFY; // 0xEC - IDENTIFY DEVICE
+    cmdfis->device = 0;
+
+    // Wait for port to be ready
+    int spin = 0;
+    while ((port->tfd & (ATA_DEV_BUSY | ATA_DEV_DRQ)) && spin < 1000000) {
+        spin++;
+    }
+    if (spin == 1000000) {
+        kprintf_warn("Port is hung during IDENTIFY\n");
+        return 0;
+    }
+
+    // Issue command
+    port->ci = 1 << slot;
+
+    // Wait for completion
+    while (1) {
+        if ((port->ci & (1 << slot)) == 0)
+            break;
+        if (port->is & HBA_PxIS_TFES) {
+            kprintf_warn("IDENTIFY command failed\n");
+            return 0;
+        }
+    }
+
+    // Check for errors
+    if (port->is & HBA_PxIS_TFES) {
+        kprintf_warn("IDENTIFY command error\n");
+        return 0;
+    }
+
+    // Parse the IDENTIFY data
+    // Words 60-61 contain total number of user addressable sectors (28-bit LBA)
+    // Words 100-103 contain total number of user addressable sectors (48-bit LBA)
+    
+    // Check if 48-bit LBA is supported (bit 10 of word 83)
+    if (identify_buffer[83] & (1 << 10)) {
+        // Use 48-bit LBA (words 100-103)
+        uint64_t capacity = ((uint64_t)identify_buffer[103] << 48) |
+                           ((uint64_t)identify_buffer[102] << 32) |
+                           ((uint64_t)identify_buffer[101] << 16) |
+                           ((uint64_t)identify_buffer[100]);
+        return capacity;
+    } else {
+        // Use 28-bit LBA (words 60-61)
+        uint32_t capacity = ((uint32_t)identify_buffer[61] << 16) |
+                           ((uint32_t)identify_buffer[60]);
+        return (uint64_t)capacity;
+    }
 }
