@@ -1,11 +1,9 @@
 #include "ahci.h"
 #include "errors.h"
-#include "fs/file_io.h"
 #include "fs/part/part.h"
 #include "memory/heap/kheap.h"
 #include "memory/pmm/pmm.h"
 #include "paging/paging.h"
-#include "util/dump.h"
 #include <util/assert.h>
 #include <stdio.h>
 
@@ -127,17 +125,6 @@ void module_entry() {
                         current->dev_path, current->start_lba, current->size_sectors);
                 current = current->next;
             }
-
-            char *buf = kmalloc(512);
-            char bufStack[512];
-            ahci_sata_read(port, 0, 1, buf);
-            hex_dump_debug(buf, 512);
-
-            uint64_t phys_heap = pg_virtual_to_phys((uint64_t*)PHYS_TO_VIRTUAL(_get_pml4()), (uint64_t)buf);
-            uint64_t phys_stack = pg_virtual_to_phys((uint64_t*)PHYS_TO_VIRTUAL(_get_pml4()), (uint64_t)bufStack);
-            kprintf("Heap: 0x%.16llx (0x%p)\nStack: 0x%.16llx (0x%p) [0x%.16llx]\n", phys_heap, buf, phys_stack, bufStack, VIRT_TO_PHYSICAL(bufStack));
-
-            kfree(buf);
         } else if (drivetypes[i] == DRV_SATAPI) {
             HBA_PORT *port = &abar->ports[i];
 

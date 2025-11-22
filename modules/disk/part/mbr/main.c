@@ -52,16 +52,6 @@ static int mbr_probe(disk_device_t *disk, partition_t **out) {
 
         register_partiton_dev(part);
 
-        char buf2[64];
-        snprintf(buf2, 64, "/dev/%s", part->dev_path);
-        fileio_t *fd = open(buf2, 0);
-        assert(fd != NULL);
-        char buf3[512];
-        seek(fd, 2048 * 512, SEEK_SET);
-        read(fd, 512, buf3);
-        hex_dump_debug(buf3, 512);
-        close(fd);
-
         part->next = part_list;
         part_list = part;
         current = current->next;
@@ -95,5 +85,5 @@ void module_exit() {
 void module_entry() {
     register_part_parser(&mbr_parser);
 
-    
+
 }
