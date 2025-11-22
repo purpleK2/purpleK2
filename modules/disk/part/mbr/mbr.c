@@ -1,7 +1,10 @@
 #include "mbr.h"
+#include "fs/file_io.h"
+#include "util/dump.h"
 
 #include <memory/heap/kheap.h>
 #include <stdbool.h>
+#include <util/assert.h>
 #include <stdio.h>
 
 partition_info_t *g_partitions = NULL;
@@ -112,19 +115,17 @@ partition_info_t *add_partition(partition_info_t **head, uint8_t type,
 
 int parse_ebr(char *dev_path, uint32_t ebr_lba, uint32_t extended_start_lba,
               partition_info_t **partitions) {
-    /*mbr_t ebr;
+    mbr_t ebr;
 
-    detect_disk(abar);
+    fileio_t *fd = open(dev_path, 0);
+    assert(fd != NULL);
 
-    int port = get_sata_port(abar);
+    seek(fd, ebr_lba * 512, SEEK_SET);
 
-    if (ahci_sata_read(&abar->ports[port], ebr_lba, 1, &ebr) != true) {
-        kprintf("Error: Failed to read EBR at LBA %u\n", ebr_lba);
-        return -1;
-    }
+    read(fd, 512, &ebr);
 
     if (ebr.signature != 0xAA55) {
-        kprintf("Error: Invalid EBR signature at LBA %u\n", ebr_lba);
+        debugf_warn("Error: Invalid EBR signature at LBA %u\n", ebr_lba);
         return -1;
     }
 
@@ -141,28 +142,27 @@ int parse_ebr(char *dev_path, uint32_t ebr_lba, uint32_t extended_start_lba,
         if (is_extended_partition(ebr.partitions[1].type)) {
             uint32_t next_ebr_lba =
                 extended_start_lba + ebr.partitions[1].lba_first;
-            return parse_ebr(abar, next_ebr_lba, extended_start_lba,
+                close(fd);
+            return parse_ebr(dev_path, next_ebr_lba, extended_start_lba,
                              partitions);
         }
     }
 
-    return 0;*/
+    close(fd);
+
+    return 0;
 }
 
 int parse_mbr(char *dev_path, partition_info_t **partitions) {
-    /*mbr_t mbr;
+    mbr_t mbr;
 
-    detect_disk(abar);
+    fileio_t *fd = open(dev_path, 0);
+    assert(fd != NULL);
 
-    int port = get_sata_port(abar);
-
-    if (ahci_sata_read(&abar->ports[port], 0, 1, &mbr) != true) {
-        kprintf("Error: Failed to read MBR\n");
-        return -1;
-    }
+    read(fd, 512, &mbr);
 
     if (mbr.signature != 0xAA55) {
-        kprintf("Error: Invalid MBR signature (0x%04X)\n", mbr.signature);
+        debugf_warn("Error: Invalid MBR signature (0x%04X)\n", mbr.signature);
         return -1;
     }
 
@@ -178,40 +178,44 @@ int parse_mbr(char *dev_path, partition_info_t **partitions) {
             add_partition(partitions, part->type, part->status, part->lba_first,
                           part->sectors, 1, 0);
 
-            if (parse_ebr(abar, part->lba_first, part->lba_first, partitions) !=
+            close(fd);
+
+            if (parse_ebr(dev_path, part->lba_first, part->lba_first, partitions) !=
                 0) {
-                kprintf("Error parsing EBR chain\n");
+                debugf_warn("Error parsing EBR chain\n");
             }
         } else {
-            kprintf("\n");
+            debugf("\n");
             add_partition(partitions, part->type, part->status, part->lba_first,
                           part->sectors, 0, 0);
         }
     }
 
-    return 0;*/
+    close(fd);
+
+    return 0;
 }
 
 void print_partition_summary(partition_info_t *partitions) {
     int count                 = 0;
     partition_info_t *current = partitions;
 
-    kprintf("\n=== PARTITION SUMMARY ===\n");
+    debugf("\n=== PARTITION SUMMARY ===\n");
     while (current) {
-        kprintf("Partition %d:\n", ++count);
-        kprintf("  Type: %s (0x%02X)\n", get_partition_type_name(current->type),
+        debugf("Partition %d:\n", ++count);
+        debugf("  Type: %s (0x%02X)\n", get_partition_type_name(current->type),
                 current->type);
-        kprintf("  Start LBA: %u\n", current->start_lba);
-        kprintf("  Size: %u sectors (%.2f MB)\n", current->size_sectors,
+        debugf("  Start LBA: %u\n", current->start_lba);
+        debugf("  Size: %u sectors (%.2f MB)\n", current->size_sectors,
                 (current->size_sectors * 512.0) / (1024.0 * 1024.0));
-        kprintf("  Properties: %s%s%s\n",
+        debugf("  Properties: %s%s%s\n",
                 current->status == 0x80 ? "Bootable " : "",
                 current->is_extended ? "Extended " : "",
                 current->is_logical ? "Logical" : "Primary");
-        kprintf("\n");
+        debugf("\n");
         current = current->next;
     }
-    kprintf("Total partitions found: %d\n", count);
+    debugf("Total partitions found: %d\n", count);
 }
 
 void free_partitions(partition_info_t *partitions) {

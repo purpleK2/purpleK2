@@ -494,11 +494,15 @@ void kstart(void) {
     } else {
         kprintf_ok("PCIe devices parsing done\n");
     }*/
+    
+    mod_t *mbr = load_module("/initrd/modules/mbr.km");
+    start_module(mbr);
 
     mod_t *ahci = load_module("/initrd/modules/ahci.km");
     start_module(ahci);
 
     devfs_print(devfs->root_node, 0);
+
 
     //init_scheduler();
     //init_cpu_scheduler(pk_init);

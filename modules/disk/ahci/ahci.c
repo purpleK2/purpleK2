@@ -148,29 +148,39 @@ bool ahci_sata_read(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) 
            sizeof(HBA_CMD_TBL) +
                (cmdheader->prdtl - 1) * sizeof(HBA_PRDT_ENTRY));
 
-    int i;
-    void *buf_ptr = buffer;  // FIXED: Use void* instead of uint16_t*
-    uint32_t remaining_count = count;
+    // Setup PRDT entries
+    uint8_t *buf_ptr = (uint8_t *)buffer;  // Use uint8_t* for byte arithmetic
+    uint32_t bytes_remaining = count * ahci_sata_get_block_size(port);  // Total bytes to transfer
 
-    for (i = 0; i < cmdheader->prdtl - 1; i++) {
-        // FIXED: Use pg_virtual_to_phys like in working ATAPI functions
-        uint64_t phys_addr = pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buf_ptr);
+    for (int i = 0; i < cmdheader->prdtl - 1; i++) {
+        uint64_t phys_addr = pg_virtual_to_phys((uint64_t*)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buf_ptr);
+        //phys_addr = pg_virtual_to_phys((uint64_t*)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buf_ptr);
+
+        if ((uint64_t)buffer % PFRAME_SIZE) { // we can use pg_virtual_to_phys
+            phys_addr = VIRT_TO_PHYSICAL((uintptr_t)buf_ptr);
+        }
         cmdtbl->prdt_entry[i].dba = (uint32_t)phys_addr;
         cmdtbl->prdt_entry[i].dbau = (uint32_t)(phys_addr >> 32);
         cmdtbl->prdt_entry[i].dbc = 8 * 1024 - 1; // 8KB per entry
         cmdtbl->prdt_entry[i].i = 1;
-        buf_ptr += 8 * 1024; // FIXED: Add bytes, not words
-        remaining_count -= 16; // 16 sectors of 512 bytes = 8KB
+        buf_ptr += 8 * 1024;
+        bytes_remaining -= 8 * 1024;
     }
     
     // Last PRDT entry
-    uint64_t phys_addr = pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buf_ptr);
-    cmdtbl->prdt_entry[i].dba = (uint32_t)phys_addr;
-    cmdtbl->prdt_entry[i].dbau = (uint32_t)(phys_addr >> 32);
-    cmdtbl->prdt_entry[i].dbc = (remaining_count << 9) - 1; // Convert sectors to bytes
-    cmdtbl->prdt_entry[i].i = 1;
+    uint64_t phys_addr = pg_virtual_to_phys((uint64_t*)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buf_ptr);
+    //phys_addr = pg_virtual_to_phys((uint64_t*)PHYS_TO_VIRTUAL(_get_pml4()), (uintptr_t)buf_ptr);
+    if ((uint64_t)buffer % PFRAME_SIZE) { // we can use pg_virtual_to_phys
+        phys_addr = VIRT_TO_PHYSICAL((uintptr_t)buf_ptr);
+    }
+    cmdtbl->prdt_entry[cmdheader->prdtl - 1].dba = (uint32_t)phys_addr;
+    cmdtbl->prdt_entry[cmdheader->prdtl - 1].dbau = (uint32_t)(phys_addr >> 32);
+    cmdtbl->prdt_entry[cmdheader->prdtl - 1].dbc = bytes_remaining - 1;
+    cmdtbl->prdt_entry[cmdheader->prdtl - 1].i = 1;
 
+    // Setup command FIS
     FIS_REG_H2D *cmdfis = (FIS_REG_H2D *)(&cmdtbl->cfis);
+    memset(cmdfis, 0, sizeof(FIS_REG_H2D));
     cmdfis->fis_type = FIS_TYPE_REG_H2D;
     cmdfis->c = 1;
     cmdfis->command = ATA_CMD_READ_DMA_EX;
@@ -184,6 +194,7 @@ bool ahci_sata_read(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) 
     cmdfis->countl = count & 0xFF;
     cmdfis->counth = (count >> 8) & 0xFF;
 
+    // Wait for port to be ready
     while ((port->tfd & (ATA_DEV_BUSY | ATA_DEV_DRQ)) && spin < 1000000) {
         spin++;
     }
@@ -192,20 +203,17 @@ bool ahci_sata_read(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) 
         return false;
     }
 
+    // Issue command
     port->ci = 1 << slot;
 
+    // Wait for completion
     while (1) {
         if ((port->ci & (1 << slot)) == 0)
             break;
         if (port->is & HBA_PxIS_TFES) {
-            debugf_warn("Read disk error\n");
+            debugf_warn("Read disk error, IS=0x%x, SERR=0x%x\n", port->is, port->serr);
             return false;
         }
-    }
-
-    if (port->is & HBA_PxIS_TFES) {
-        debugf_warn("Read disk error\n");
-        return false;
     }
 
     return true;
