@@ -118,7 +118,7 @@ int parse_ebr(char *dev_path, uint32_t ebr_lba, uint32_t extended_start_lba,
 
     int port = get_sata_port(abar);
 
-    if (ahci_read(&abar->ports[port], ebr_lba, 1, &ebr) != true) {
+    if (ahci_sata_read(&abar->ports[port], ebr_lba, 1, &ebr) != true) {
         kprintf("Error: Failed to read EBR at LBA %u\n", ebr_lba);
         return -1;
     }
@@ -156,7 +156,7 @@ int parse_mbr(char *dev_path, partition_info_t **partitions) {
 
     int port = get_sata_port(abar);
 
-    if (ahci_read(&abar->ports[port], 0, 1, &mbr) != true) {
+    if (ahci_sata_read(&abar->ports[port], 0, 1, &mbr) != true) {
         kprintf("Error: Failed to read MBR\n");
         return -1;
     }

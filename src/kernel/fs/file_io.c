@@ -82,8 +82,6 @@ size_t read(fileio_t *file, size_t size, void *out) {
         }
     }
 
-    debugf("vnode in file before vfs_read: %p\n", (vnode_t *)file->private);
-
     int ret = vfs_read(((vnode_t *)file->private), size, file->offset, out);
     if (ret != 0) {
         debugf_warn("o, vfs_read failed with error: %d\n", ret);
@@ -91,8 +89,6 @@ size_t read(fileio_t *file, size_t size, void *out) {
     }
 
     file->offset += size;
-
-    debugf("File @ end of read(...): %p\n", file);
 
     return size;
 }
@@ -122,7 +118,6 @@ int write(fileio_t *file, void *buf, size_t size) {
 }
 
 int close(fileio_t *file) {
-    debugf("File inside close(...): %p\n", file);
     vnode_t *vn = file->private;
 
     if (file->flags & PIPE_READ_END || file->flags & PIPE_WRITE_END) {
