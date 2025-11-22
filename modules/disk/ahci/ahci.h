@@ -277,4 +277,6 @@ uint32_t ahci_get_atapi_capacity(HBA_PORT *port);
 bool ahci_write_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer);
 bool ahci_atapi_is_writable(HBA_PORT *port);
 
+uint64_t ahci_get_sata_capacity(HBA_PORT *port);
+
 #endif // AHCI_H

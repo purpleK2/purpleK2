@@ -102,7 +102,7 @@ void module_entry() {
             disk->namespace   = DISK_NAMESPACE_MODERN;
             disk->id.letter   = letter_counter++;
             disk->block_size  = 512;
-            disk->block_count = 1000000000; // TODO: identify
+            disk->block_count = ahci_get_sata_capacity(port); // TODO: identify
 
             disk->read  = ahci_diskdev_read;
             disk->write = ahci_diskdev_write;
@@ -117,8 +117,8 @@ void module_entry() {
 
             register_disk_device(disk);
 
-            debugf_debug("AHCI: Registered SATA disk at port %d as /dev/sd%c\n",
-                    i, disk->id.letter);
+            debugf_debug("AHCI: Registered SATA disk at port %d as /dev/sd%c\n\tBlock size: %u bytes\n\tBlock count: %u\n\tSize: %u MB\n",
+                    i, disk->id.letter, disk->block_size, disk->block_count, disk->block_size * disk->block_count / (1024 * 1024));
         } else if (drivetypes[i] == DRV_SATAPI) {
             HBA_PORT *port = &abar->ports[i];
 
@@ -151,13 +151,12 @@ void module_entry() {
     fileio_t *fd = open("/dev/opta", 0);
     if (fd) {
         char *buffer = kmalloc(512);
-        memset(buffer, 0, 512);
+        assert(buffer != NULL);
         read(fd, 512, buffer);
-        hex_dump_debug(buffer, 512);
         close(fd);
         kfree(buffer);
     } else {
-        kprintf_warn("Failed to open /dev/sda for reading test data\n");
+        kprintf_warn("Failed to open /dev/opta for reading test data\n");
     }
 
     
