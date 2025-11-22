@@ -8,20 +8,17 @@
 
 extern pci_device_t *pci_devices_head;
 
-bool sata_found = false;
-
 drivetype_t drivetypes[32] = { [0 ... 31] = DRV_INVALID };
 
-void probe_port(HBA_MEM *abar) {
+void ahci_probe_ports(HBA_MEM *abar) {
     uint32_t pi = abar->pi;
     int i       = 0;
     while (pi && i < 32) {
         if (pi & 1) {
-            int dt = check_type(&abar->ports[i]);
+            int dt = ahci_check_port_type(&abar->ports[i]);
             switch (dt) {
             case AHCI_DEV_SATA:
                 debugf_debug("SATA drive found at port %d\n", i);
-                sata_found    = true;
                 drivetypes[i] = DRV_SATA;
                 break;
             case AHCI_DEV_SATAPI:
@@ -47,7 +44,7 @@ void probe_port(HBA_MEM *abar) {
     }
 }
 
-int check_type(HBA_PORT *port) {
+int ahci_check_port_type(HBA_PORT *port) {
     uint32_t ssts = port->ssts;
     uint8_t ipm   = (ssts >> 8) & 0x0F;
     uint8_t det   = ssts & 0x0F;
@@ -69,28 +66,8 @@ int check_type(HBA_PORT *port) {
     }
 }
 
-int get_sata_port(HBA_MEM *abar) {
-    uint32_t pi = abar->pi;
-    int i       = 0;
-    while (pi && i < 32) {
-        if (pi & 1) {
-            int dt = check_type(&abar->ports[i]);
-            switch (dt) {
-            case AHCI_DEV_SATA:
-                return i;
-                break;
-            default:
-                break;
-            }
-        }
-        pi >>= 1;
-        i++;
-    }
-    return -1;
-}
-
-void port_rebase(HBA_PORT *port) {
-    stop_cmd(port); // Stop command engine
+void ahci_port_rebase(HBA_PORT *port) {
+    ahci_stop_cmd(port); // Stop command engine
 
     // Allocate 1 page (4KB) for Command List Base (CLB)
     uint64_t clb_phys = (uint64_t)pmm_alloc_pages(1);
@@ -117,17 +94,17 @@ void port_rebase(HBA_PORT *port) {
         memset((void *)PHYS_TO_VIRTUAL(ctba_phys), 0, 4096);
     }
 
-    start_cmd(port); // Start command engine
+    ahci_start_cmd(port); // Start command engine
 }
 
-void start_cmd(HBA_PORT *port) {
+void ahci_start_cmd(HBA_PORT *port) {
     while (port->cmd & HBA_PxCMD_CR)
         ;
     port->cmd |= HBA_PxCMD_FRE;
     port->cmd |= HBA_PxCMD_ST;
 }
 
-void stop_cmd(HBA_PORT *port) {
+void ahci_stop_cmd(HBA_PORT *port) {
     port->cmd &= ~HBA_PxCMD_ST;
     port->cmd &= ~HBA_PxCMD_FRE;
     while (1) {
@@ -139,11 +116,24 @@ void stop_cmd(HBA_PORT *port) {
     }
 }
 
-bool READ(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count,
-          uint16_t *buf) {
+int ahci_find_cmdslot(HBA_PORT *port) {
+    uint32_t slots = (port->sact | port->ci);
+    for (int i = 0; i < CMD_SLOTS; i++) {
+        if ((slots & 1) == 0)
+            return i;
+        slots >>= 1;
+    }
+    debugf_warn("Cannot find free command list entry\n");
+    return -1;
+}
+
+bool ahci_sata_read(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
+    uint32_t startl = (uint32_t)lba;
+    uint32_t starth = (uint32_t)(lba >> 32);
+
     port->is = (uint32_t)-1;
     int spin = 0;
-    int slot = find_cmdslot(port);
+    int slot = ahci_find_cmdslot(port);
     if (slot == -1)
         return false;
 
@@ -159,19 +149,19 @@ bool READ(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count,
                (cmdheader->prdtl - 1) * sizeof(HBA_PRDT_ENTRY));
 
     int i;
-    uint16_t *buf_ptr = buf;
+    uint16_t *buf_ptr = buffer;
 
     for (i = 0; i < cmdheader->prdtl - 1; i++) {
-        uint64_t phys_addr = VIRT_TO_PHYSICAL((uint64_t)buf_ptr);
+        uint64_t phys_addr = pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uint64_t)buf_ptr);
         cmdtbl->prdt_entry[i].dba = (uint32_t)phys_addr;
         cmdtbl->prdt_entry[i].dbau = (uint32_t)(phys_addr >> 32);
         cmdtbl->prdt_entry[i].dbc = 8 * 1024 - 1;
         cmdtbl->prdt_entry[i].i = 1;
-        buf_ptr += 4 * 1024; // 4K words
+        buf_ptr += 4 * 1024;
         count -= 16;
     }
     
-    uint64_t phys_addr = VIRT_TO_PHYSICAL((uint64_t)buf_ptr);
+    uint64_t phys_addr = pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), (uint64_t)buf_ptr);
     cmdtbl->prdt_entry[i].dba = (uint32_t)phys_addr;
     cmdtbl->prdt_entry[i].dbau = (uint32_t)(phys_addr >> 32);
     cmdtbl->prdt_entry[i].dbc = (count << 9) - 1;
@@ -195,7 +185,7 @@ bool READ(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count,
         spin++;
     }
     if (spin == 1000000) {
-        kprintf_warn("Port is hung\n");
+        debugf_warn("Port is hung\n");
         return FALSE;
     }
 
@@ -205,51 +195,22 @@ bool READ(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count,
         if ((port->ci & (1 << slot)) == 0)
             break;
         if (port->is & HBA_PxIS_TFES) {
-            kprintf_warn("Read disk error\n");
+            debugf_warn("Read disk error\n");
             return FALSE;
         }
     }
 
     if (port->is & HBA_PxIS_TFES) {
-        kprintf_warn("Read disk error\n");
+        debugf_warn("Read disk error\n");
         return FALSE;
     }
 
     return true;
 }
 
-int find_cmdslot(HBA_PORT *port) {
-    uint32_t slots = (port->sact | port->ci);
-    for (int i = 0; i < CMD_SLOTS; i++) {
-        if ((slots & 1) == 0)
-            return i;
-        slots >>= 1;
-    }
-    kprintf_warn("Cannot find free command list entry\n");
-    return -1;
-}
-
-void test_ahci() {
-    FIS_REG_H2D fis;
-    memset(&fis, 0, sizeof(FIS_REG_H2D));
-    fis.fis_type = FIS_TYPE_REG_H2D;
-    fis.command  = ATA_CMD_IDENTIFY;
-    fis.device   = 0;
-    fis.c        = 1;
-}
-
-void detect_disk(HBA_MEM *abar) {
-    probe_port(abar);
-}
-
-bool ahci_read(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
-    return READ(port, (uint32_t)lba, (uint32_t)(lba >> 32), count,
-                (uint16_t *)buffer);
-}
-
-bool ahci_write(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
+bool ahci_sata_write(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
     port->is = (uint32_t)-1;
-    int slot = find_cmdslot(port);
+    int slot = ahci_find_cmdslot(port);
     if (slot == -1)
         return false;
 
@@ -301,7 +262,7 @@ bool ahci_write(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
         spin++;
 
     if (spin == 1000000) {
-        kprintf_warn("Port is hung\n");
+        debugf_warn("Port is hung\n");
         return FALSE;
     }
 
@@ -311,7 +272,7 @@ bool ahci_write(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
         if ((port->ci & (1 << slot)) == 0)
             break;
         if (port->is & HBA_PxIS_TFES) {
-            kprintf_warn("Write disk error\n");
+            debugf_warn("Write disk error\n");
             return FALSE;
         }
     }
@@ -319,7 +280,7 @@ bool ahci_write(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
     return TRUE;
 }
 
-pci_device_t *detect_controller() {
+pci_device_t *ahci_detect_controller() {
     pci_device_t *current = pci_devices_head;
     while (current) {
         const char *name_1 = pci_get_class_name(current->class_code);
@@ -335,33 +296,9 @@ pci_device_t *detect_controller() {
     return NULL;
 }
 
-bool is_ahci_mode(HBA_MEM *abar) {
-    if (abar->ghc & (1 << 31))
-        return TRUE; // AHCI mode
-    else
-        return FALSE; // IDE mode
-}
-
-void test_ahci_operations(HBA_MEM *abar) {
-    detect_disk(abar);
-
-    int sata_port = get_sata_port(abar);
-
-    char write_buffer[512] = {0};
-    strcpy(write_buffer, "Hello from disk!");
-
-    ahci_write(&abar->ports[sata_port], 566, 1, write_buffer);
-    char bufferf[512] = {0};
-    if (ahci_read(&abar->ports[sata_port], 566, 1, bufferf)) {
-        kprintf("Read successful!\n");
-        kprintf("%s\n", bufferf);
-    } else
-        kprintf("Read failed!\n");
-}
-
-bool ahci_read_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
+bool ahci_atapi_read(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
     port->is = (uint32_t)-1;
-    int slot = find_cmdslot(port);
+    int slot = ahci_find_cmdslot(port);
     if (slot == -1)
         return false;
 
@@ -405,7 +342,7 @@ bool ahci_read_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer)
         spin++;
     }
     if (spin == 1000000) {
-        kprintf_warn("Port is hung\n");
+        debugf_warn("Port is hung\n");
         return false;
     }
 
@@ -415,24 +352,24 @@ bool ahci_read_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer)
         if ((port->ci & (1 << slot)) == 0)
             break;
         if (port->is & HBA_PxIS_TFES) {
-            kprintf_warn("ATAPI read error\n");
+            debugf_warn("ATAPI read error\n");
             return false;
         }
     }
 
     if (port->is & HBA_PxIS_TFES) {
-        kprintf_warn("ATAPI read error\n");
+        debugf_warn("ATAPI read error\n");
         return false;
     }
 
     return true;
 }
 
-uint32_t ahci_get_atapi_capacity(HBA_PORT *port) {
+uint32_t ahci_atapi_get_capacity(HBA_PORT *port) {
     uint8_t buffer[8];
     
     port->is = (uint32_t)-1;
-    int slot = find_cmdslot(port);
+    int slot = ahci_find_cmdslot(port);
     if (slot == -1)
         return 0;
 
@@ -491,7 +428,7 @@ bool ahci_atapi_is_writable(HBA_PORT *port) {
     uint8_t buffer[8];
     
     port->is = (uint32_t)-1;
-    int slot = find_cmdslot(port);
+    int slot = ahci_find_cmdslot(port);
     if (slot == -1)
         return false;
 
@@ -544,9 +481,9 @@ bool ahci_atapi_is_writable(HBA_PORT *port) {
     return !(buffer[2] & 0x80);
 }
 
-bool ahci_write_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
+bool ahci_atapi_write(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer) {
     port->is = (uint32_t)-1;
-    int slot = find_cmdslot(port);
+    int slot = ahci_find_cmdslot(port);
     if (slot == -1)
         return false;
 
@@ -590,7 +527,7 @@ bool ahci_write_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer
         spin++;
     }
     if (spin == 1000000) {
-        kprintf_warn("Port is hung\n");
+        debugf_warn("Port is hung\n");
         return false;
     }
 
@@ -600,97 +537,150 @@ bool ahci_write_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer
         if ((port->ci & (1 << slot)) == 0)
             break;
         if (port->is & HBA_PxIS_TFES) {
-            kprintf_warn("ATAPI write error\n");
+            debugf_warn("ATAPI write error\n");
             return false;
         }
     }
 
     if (port->is & HBA_PxIS_TFES) {
-        kprintf_warn("ATAPI write error\n");
+        debugf_warn("ATAPI write error\n");
         return false;
     }
 
     return true;
 }
 
-uint64_t ahci_get_sata_capacity(HBA_PORT *port) {
+uint64_t ahci_sata_get_capacity(HBA_PORT *port) {
     port->is = (uint32_t)-1;
-    int slot = find_cmdslot(port);
+    int slot = ahci_find_cmdslot(port);
     if (slot == -1)
         return 0;
 
-    // Allocate buffer for IDENTIFY DEVICE response (512 bytes)
     uint16_t identify_buffer[256];
     memset(identify_buffer, 0, 512);
 
     HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER *)PHYS_TO_VIRTUAL(port->clb);
     cmdheader += slot;
     cmdheader->cfl = sizeof(FIS_REG_H2D) / sizeof(uint32_t);
-    cmdheader->w = 0; // Read from device
-    cmdheader->prdtl = 1; // One PRDT entry
+    cmdheader->w = 0;
+    cmdheader->prdtl = 1;
 
     HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)PHYS_TO_VIRTUAL(cmdheader->ctba);
     memset(cmdtbl, 0, sizeof(HBA_CMD_TBL) + sizeof(HBA_PRDT_ENTRY));
 
-    // Setup PRDT entry
     uint64_t phys_addr = VIRT_TO_PHYSICAL((uint64_t)identify_buffer);
     cmdtbl->prdt_entry[0].dba = (uint32_t)phys_addr;
     cmdtbl->prdt_entry[0].dbau = (uint32_t)(phys_addr >> 32);
-    cmdtbl->prdt_entry[0].dbc = 511; // 512 bytes - 1
+    cmdtbl->prdt_entry[0].dbc = 511;
     cmdtbl->prdt_entry[0].i = 1;
 
-    // Setup command FIS
     FIS_REG_H2D *cmdfis = (FIS_REG_H2D *)(&cmdtbl->cfis);
     cmdfis->fis_type = FIS_TYPE_REG_H2D;
-    cmdfis->c = 1; // Command
-    cmdfis->command = ATA_CMD_IDENTIFY; // 0xEC - IDENTIFY DEVICE
+    cmdfis->c = 1;
+    cmdfis->command = ATA_CMD_IDENTIFY;
     cmdfis->device = 0;
 
-    // Wait for port to be ready
     int spin = 0;
     while ((port->tfd & (ATA_DEV_BUSY | ATA_DEV_DRQ)) && spin < 1000000) {
         spin++;
     }
     if (spin == 1000000) {
-        kprintf_warn("Port is hung during IDENTIFY\n");
+        debugf_warn("Port is hung during IDENTIFY\n");
         return 0;
     }
 
-    // Issue command
     port->ci = 1 << slot;
 
-    // Wait for completion
     while (1) {
         if ((port->ci & (1 << slot)) == 0)
             break;
         if (port->is & HBA_PxIS_TFES) {
-            kprintf_warn("IDENTIFY command failed\n");
+            debugf_warn("IDENTIFY command failed\n");
             return 0;
         }
     }
 
-    // Check for errors
     if (port->is & HBA_PxIS_TFES) {
-        kprintf_warn("IDENTIFY command error\n");
+        debugf_warn("IDENTIFY command error\n");
         return 0;
     }
 
-    // Parse the IDENTIFY data
-    // Words 60-61 contain total number of user addressable sectors (28-bit LBA)
-    // Words 100-103 contain total number of user addressable sectors (48-bit LBA)
-    
-    // Check if 48-bit LBA is supported (bit 10 of word 83)
     if (identify_buffer[83] & (1 << 10)) {
-        // Use 48-bit LBA (words 100-103)
         uint64_t capacity = ((uint64_t)identify_buffer[103] << 48) |
                            ((uint64_t)identify_buffer[102] << 32) |
                            ((uint64_t)identify_buffer[101] << 16) |
                            ((uint64_t)identify_buffer[100]);
         return capacity;
     } else {
-        // Use 28-bit LBA (words 60-61)
         uint32_t capacity = ((uint32_t)identify_buffer[61] << 16) |
                            ((uint32_t)identify_buffer[60]);
         return (uint64_t)capacity;
     }
+}
+
+uint32_t ahci_sata_get_block_size(HBA_PORT *port) {
+    port->is = (uint32_t)-1;
+    int slot = ahci_find_cmdslot(port);
+    if (slot == -1)
+        return 512;
+
+    uint16_t identify_buffer[256];
+    memset(identify_buffer, 0, 512);
+
+    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER *)PHYS_TO_VIRTUAL(port->clb);
+    cmdheader += slot;
+    cmdheader->cfl = sizeof(FIS_REG_H2D) / sizeof(uint32_t);
+    cmdheader->w = 0;
+    cmdheader->prdtl = 1;
+
+    HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)PHYS_TO_VIRTUAL(cmdheader->ctba);
+    memset(cmdtbl, 0, sizeof(HBA_CMD_TBL) + sizeof(HBA_PRDT_ENTRY));
+
+    uint64_t phys_addr = VIRT_TO_PHYSICAL((uint64_t)identify_buffer);
+    cmdtbl->prdt_entry[0].dba = (uint32_t)phys_addr;
+    cmdtbl->prdt_entry[0].dbau = (uint32_t)(phys_addr >> 32);
+    cmdtbl->prdt_entry[0].dbc = 511;
+    cmdtbl->prdt_entry[0].i = 1;
+
+    FIS_REG_H2D *cmdfis = (FIS_REG_H2D *)(&cmdtbl->cfis);
+    cmdfis->fis_type = FIS_TYPE_REG_H2D;
+    cmdfis->c = 1;
+    cmdfis->command = ATA_CMD_IDENTIFY;
+    cmdfis->device = 0;
+
+    int spin = 0;
+    while ((port->tfd & (ATA_DEV_BUSY | ATA_DEV_DRQ)) && spin < 1000000) {
+        spin++;
+    }
+    if (spin == 1000000) {
+        debugf_warn("Port is hung during IDENTIFY\n");
+        return 512;
+    }
+
+    port->ci = 1 << slot;
+
+    while (1) {
+        if ((port->ci & (1 << slot)) == 0)
+            break;
+        if (port->is & HBA_PxIS_TFES) {
+            debugf_warn("IDENTIFY command failed\n");
+            return 512;
+        }
+    }
+
+    if (port->is & HBA_PxIS_TFES) {
+        debugf_warn("IDENTIFY command error\n");
+        return 512;
+    }
+    
+    uint16_t word106 = identify_buffer[106];
+    uint32_t logical_sector_size = 512;
+    
+    if (word106 & (1 << 12)) {
+        uint32_t words_per_sector = ((uint32_t)identify_buffer[118] << 16) | 
+                                    ((uint32_t)identify_buffer[117]);
+        logical_sector_size = words_per_sector * 2;
+    }
+    
+    return logical_sector_size;
 }

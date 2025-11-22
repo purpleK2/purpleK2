@@ -249,34 +249,26 @@ typedef enum _edrvtype {
 
 extern HBA_MEM *abar_mem;
 
-extern bool sata_found;
 extern drivetype_t drivetypes[32];
 
-void probe_port(HBA_MEM *abar);
-int check_type(HBA_PORT *port);
-void port_rebase(HBA_PORT *port);
-void start_cmd(HBA_PORT *port);
-void stop_cmd(HBA_PORT *port);
-bool ahci_read(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer);
-int find_cmdslot(HBA_PORT *port);
-bool ahci_write(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer);
-void detect_disk(HBA_MEM *abar);
-pci_device_t *detect_controller();
-int get_sata_port(HBA_MEM *abar);
-bool is_ahci_mode(HBA_MEM *abar);
+void ahci_probe_ports(HBA_MEM *abar);
+int ahci_check_port_type(HBA_PORT *port);
+void ahci_port_rebase(HBA_PORT *port);
+void ahci_start_cmd(HBA_PORT *port);
+void ahci_stop_cmd(HBA_PORT *port);
+bool ahci_sata_read(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer);
+int ahci_find_cmdslot(HBA_PORT *port);
+bool ahci_sata_write(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer);
 
-bool READ(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count,
-          uint16_t *buf);
+pci_device_t *ahci_detect_controller();
 
-void test_ahci();
-void test_ahci_operations(HBA_MEM *abar);
+bool ahci_atapi_read(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer);
+uint32_t ahci_atapi_get_capacity(HBA_PORT *port);
 
-bool ahci_read_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer);
-uint32_t ahci_get_atapi_capacity(HBA_PORT *port);
-
-bool ahci_write_atapi(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer);
+bool ahci_atapi_write(HBA_PORT *port, uint64_t lba, uint32_t count, void *buffer);
 bool ahci_atapi_is_writable(HBA_PORT *port);
 
-uint64_t ahci_get_sata_capacity(HBA_PORT *port);
+uint64_t ahci_sata_get_capacity(HBA_PORT *port);
+uint32_t ahci_sata_get_block_size(HBA_PORT *port);
 
 #endif // AHCI_H
