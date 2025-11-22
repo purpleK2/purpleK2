@@ -1,7 +1,8 @@
-#include "dev/device.h"
-#include <stdint.h>
 #ifndef DISKDEV_H
 #define DISKDEV_H 1
+
+#include "dev/device.h"
+#include <stdint.h>
 
 typedef enum disk_namespace {
     DISK_NAMESPACE_INVALID = -1,
@@ -40,10 +41,17 @@ typedef struct disk_device {
     void *data;
     
 } disk_device_t;
+
+typedef struct diskdev_node {
+    disk_device_t *disk;
+    struct diskdev_node *next;
+} diskdev_node_t;
+
  
 int register_disk_device(disk_device_t *disk);
 disk_device_t *get_disk_by_id(disk_namespace_e ns, char id_letter);
 disk_device_t *get_disk_by_nvmeid(int controller, int namespace);
 int unregister_disk_device(disk_namespace_e ns, char id_letter);
+disk_device_t *get_diskdev(const char *name);
 
 #endif // DISKDEV_H

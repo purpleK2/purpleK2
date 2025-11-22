@@ -3,7 +3,10 @@
 #include "errors.h"
 #include "memory/heap/kheap.h"
 #include "string.h"
+#include <util/assert.h>
 #include <stdio.h>
+
+static diskdev_node_t *disk_list = NULL;
 
 static int diskdev_read(struct device *dev, void *buffer, size_t size, size_t offset) {
     disk_device_t *disk = (disk_device_t *)dev->data;
@@ -40,6 +43,33 @@ static int diskdev_ctl(struct device *dev, int request, void *arg) {
     return -ENOIMPL;
 }
 
+static void remove_disk_from_list(disk_device_t *disk)
+{
+    diskdev_node_t **cur = &disk_list;
+
+    while (*cur) {
+        if ((*cur)->disk == disk) {
+            diskdev_node_t *tmp = *cur;
+            *cur = (*cur)->next;
+            kfree(tmp);
+            return;
+        }
+        cur = &((*cur)->next);
+    }
+}
+
+static void add_disk_to_list(disk_device_t *disk)
+{
+    diskdev_node_t *node = kmalloc(sizeof(diskdev_node_t));
+    assert(node != NULL);
+
+    node->disk = disk;
+    node->next = disk_list;
+    disk_list  = node;
+}
+
+
+
 int register_disk_device(disk_device_t *disk) {
     char prefix[8];
     char final_name[32];
@@ -48,7 +78,8 @@ int register_disk_device(disk_device_t *disk) {
     case DISK_NAMESPACE_PATA:
         snprintf(prefix, sizeof(prefix), "hd");
         break;
-    case DISK_NAMESPACE_MODERN:
+    case DISK_NAMESPACE_MODERN:remove_disk_from_list(disk);
+
         snprintf(prefix, sizeof(prefix), "sd");
         break;
     case DISK_NAMESPACE_NVME:
@@ -101,6 +132,7 @@ int register_disk_device(disk_device_t *disk) {
 
     register_device(dev);
     disk->dev = dev;
+    add_disk_to_list(disk);
 
     return EOK;
 }
@@ -184,5 +216,29 @@ int unregister_disk_device(disk_namespace_e ns, char id_letter) {
              prefix,
              id_letter);
 
+    device_t *dev = get_device(final_name);
+    
+    assert(dev != NULL);
+
+    disk_device_t *disk = dev->data;
+    remove_disk_from_list(disk);
+    
+
     return unregister_device(final_name);
 }
+
+disk_device_t *get_diskdev(const char *name) {
+    diskdev_node_t *cur = disk_list;
+
+    while (cur) {
+        disk_device_t *disk = cur->disk;
+
+        if (disk->dev && strcmp(disk->dev->name, name) == 0)
+            return disk;
+
+        cur = cur->next;
+    }
+
+    return NULL;
+}
+

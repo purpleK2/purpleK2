@@ -173,6 +173,23 @@ uint64_t pg_virtual_to_phys(uint64_t *pml4_table, uint64_t virtual) {
     return PG_GET_ADDR(get_page_entry(pml4_table, virtual));
 }
 
+bool is_mapped(uint64_t *pml4_table, uint64_t address) {
+    uint64_t pml4_index = PML4_INDEX(address);
+    uint64_t pdp_index  = PDP_INDEX(address);
+    uint64_t pdir_index = PDIR_INDEX(address);
+    uint64_t ptab_index = PTAB_INDEX(address);
+
+    uint64_t *pdp_table  = get_create_pmlt(pml4_table, pml4_index, 0b111);
+    uint64_t *pdir_table = get_create_pmlt(pdp_table, pdp_index, 0b111);
+    uint64_t *page_table = get_create_pmlt(pdir_table, pdir_index, 0b111);
+
+    if (page_table[ptab_index] & 0b1) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
 // map a page frame to a physical address that gets mapped to a virtual one
 void map_phys_to_page(uint64_t *pml4_table, uint64_t physical, uint64_t virtual,
                       uint64_t flags) {

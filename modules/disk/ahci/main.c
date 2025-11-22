@@ -1,7 +1,11 @@
 #include "ahci.h"
 #include "errors.h"
+#include "fs/file_io.h"
+#include "fs/part/part.h"
 #include "memory/heap/kheap.h"
+#include "memory/pmm/pmm.h"
 #include "paging/paging.h"
+#include "util/dump.h"
 #include <util/assert.h>
 #include <stdio.h>
 
@@ -29,16 +33,14 @@ void module_exit() {
 }
 
 static int ahci_sata_diskdev_read(struct disk_device *disk, uint8_t *buffer, uint64_t lba,
-                uint32_t sector_count) {
+                                   uint32_t sector_count) {
     bool i = ahci_sata_read((HBA_PORT *)disk->data, lba, sector_count, buffer);
-
     if (i == true) {
         return 0;
     } else {
         return -EIO;
     }
 }
-
 static int ahci_sata_diskdev_write(struct disk_device *disk, const uint8_t *buffer, uint64_t lba,
                  uint32_t sector_count) {
     bool i =  ahci_sata_write((HBA_PORT *)disk->data, lba, sector_count, (void *)buffer);
@@ -53,7 +55,10 @@ static int ahci_sata_diskdev_write(struct disk_device *disk, const uint8_t *buff
 // ATAPI stuff :3
 static int ahci_atapi_diskdev_read(struct disk_device *disk, uint8_t *buffer, 
                                    uint64_t lba, uint32_t sector_count) {
+    char *tmp = kmalloc(disk->block_size * sector_count);
     bool i =  ahci_atapi_read((HBA_PORT *)disk->data, lba, sector_count, buffer);
+    memcpy(buffer, tmp, disk->block_size * sector_count);
+    kfree(tmp);
     
     if (i == true) {
         return 0;
@@ -65,7 +70,6 @@ static int ahci_atapi_diskdev_read(struct disk_device *disk, uint8_t *buffer,
 static int ahci_atapi_diskdev_write(struct disk_device *disk, const uint8_t *buffer, 
                                     uint64_t lba, uint32_t sector_count) {
     if (!ahci_atapi_is_writable((HBA_PORT *)disk->data)) {
-
         debugf_warn("Attempted write to read-only ATAPI device\n");
         return -EIO;
     }
@@ -113,6 +117,27 @@ void module_entry() {
 
             debugf_debug("AHCI: Registered SATA disk at port %d as /dev/sd%c\n\tBlock size: %u bytes\n\tBlock count: %u blocks\n\tSize: %u MB\n",
                     i, disk->id.letter, disk->block_size, disk->block_count, disk->block_size * disk->block_count / (1024 * 1024));
+
+            partition_t *partitions = NULL;
+            parse_partitions(disk, &partitions);
+            // print partitons
+            partition_t *current = partitions;
+            while (current) {
+                debugf_debug("  Partition: %s, Start LBA: %llu, Size: %llu sectors\n",
+                        current->dev_path, current->start_lba, current->size_sectors);
+                current = current->next;
+            }
+
+            char *buf = kmalloc(512);
+            char bufStack[512];
+            ahci_sata_read(port, 0, 1, buf);
+            hex_dump_debug(buf, 512);
+
+            uint64_t phys_heap = pg_virtual_to_phys((uint64_t*)PHYS_TO_VIRTUAL(_get_pml4()), (uint64_t)buf);
+            uint64_t phys_stack = pg_virtual_to_phys((uint64_t*)PHYS_TO_VIRTUAL(_get_pml4()), (uint64_t)bufStack);
+            kprintf("Heap: 0x%.16llx (0x%p)\nStack: 0x%.16llx (0x%p) [0x%.16llx]\n", phys_heap, buf, phys_stack, bufStack, VIRT_TO_PHYSICAL(bufStack));
+
+            kfree(buf);
         } else if (drivetypes[i] == DRV_SATAPI) {
             HBA_PORT *port = &abar->ports[i];
 
