@@ -1,5 +1,5 @@
 #include "part.h"
-#include "util/dump.h"
+#include "util/macro.h"
 #include <string.h>
 #include <memory/heap/kheap.h>
 #include <util/assert.h>
@@ -103,14 +103,10 @@ static int partdev_read(struct device *dev, void *buffer, size_t size, size_t of
     if (offset + size > part->size_sectors * sector_size)
         size = part->size_sectors * sector_size - offset;
 
-    uint64_t start_lba   = part->start_lba + (offset / sector_size);
-    uint32_t sector_count = (size + sector_size - 1) / sector_size;
+    uint64_t start_lba   = part->start_lba + (ROUND_DOWN(offset, sector_size));
+    uint32_t sector_count = ROUND_UP(size, sector_size);
 
-    /*return*/ part->parent_disk->read(part->parent_disk, buffer, start_lba, sector_count);
-
-    hex_dump_debug(buffer, sector_count* sector_size);
-
-    return 0;
+    return part->parent_disk->read(part->parent_disk, buffer, start_lba, sector_count);
 }
 
 static int partdev_write(struct device *dev, const void *buffer, size_t size, size_t offset) {
@@ -120,14 +116,8 @@ static int partdev_write(struct device *dev, const void *buffer, size_t size, si
 
     uint64_t sector_size = part->parent_disk->block_size;
 
-    if (offset >= part->size_sectors * sector_size)
-        return 0;
-
-    if (offset + size > part->size_sectors * sector_size)
-        size = part->size_sectors * sector_size - offset;
-
-    uint64_t start_lba   = part->start_lba + (offset / sector_size);
-    uint32_t sector_count = (size + sector_size - 1) / sector_size;
+    uint64_t start_lba   = part->start_lba + (ROUND_DOWN(offset, sector_size));
+    uint32_t sector_count = ROUND_UP(size, sector_size);
 
     return part->parent_disk->write(part->parent_disk, buffer, start_lba, sector_count);
 }
