@@ -61,7 +61,7 @@ toolchain/gcc*
 toolchain/x86_64-elf
 
 # External libraries will be updated and copied from their repos
-src/kernel/system/limine.*
+# src/kernel/system/limine.* IMPORTANT: THIS IS TEMPORARY UNTIL MINTSUKI FIXES THIS ON THE UPSTREAM
 src/kernel/system/nanoprintf.*
 src/kernel/memory/heap/beap.*
 src/kernel/memory/heap/tlsf.*

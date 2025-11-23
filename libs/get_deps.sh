@@ -7,9 +7,10 @@ KERNEL_DIR=$1
 LIBS_DIR=$2
 
 # required libraries
-declare -a libs=("limine"
-				 "nanoprintf"
+declare -a libs=("nanoprintf"
                  "uacpi"
+# IMPORTANT: THIS IS TEMPORARY UNTIL MINSTUKI PUTS BACK THE LIMINE.H IN THE BINARY BRANCH
+#                 "limine"
                  )
 
 stderr_echo() { 
@@ -77,7 +78,8 @@ do
 done
 
 # copy limine
-copy_if_exists $LIBS_DIR/limine/limine.h $KERNEL_DIR/system/limine.h
+# IMPORTANT: THIS IS TEMPORARY UNTIL MINSTUKI PUTS BACK THE LIMINE.H IN THE BINARY BRANCH
+# copy_if_exists $LIBS_DIR/limine/limine.h $KERNEL_DIR/system/limine.h
 
 # copy npf
 copy_if_exists $LIBS_DIR/nanoprintf/nanoprintf.h $KERNEL_DIR/system/nanoprintf.h
