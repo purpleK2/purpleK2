@@ -166,7 +166,7 @@ void vmmlist_free(vmm_node_t **root_node, size_t item_size, void *tofree) {
         v_prev->next = v_tofree->next;
     }
 
-    pmm_free(v_prev, v_prev->len / PFRAME_SIZE);
+    pmm_free(v_tofree, v_tofree->len / PFRAME_SIZE);
 }
 
 // useful wrapper functions //
