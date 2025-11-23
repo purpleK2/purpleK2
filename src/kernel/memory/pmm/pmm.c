@@ -103,6 +103,7 @@ int pmm_frees  = 0; // keeping track of how many times pmm_free was called
 
 // Omar, this is a PAGE FRAME allocator no need for custom <bytes> parameter
 void *pmm_alloc_page() {
+    spinlock_acquire(&PMM_LOCK);
     pmm_allocs++;
 #ifdef CONFIG_PMM_DEBUG
     debugf_debug("--- Allocation n.%d ---\n", pmm_allocs);
@@ -158,6 +159,8 @@ void *pmm_alloc_page() {
     // zero out the whole allocated region
     memset((void *)ptr, 0, PFRAME_SIZE);
 
+    spinlock_release(&PMM_LOCK);
+
     // we need the physical address of the free entry
     return (void *)VIRT_TO_PHYSICAL(ptr);
 }
@@ -172,6 +175,7 @@ void *pmm_alloc_pages(size_t pages) {
 }
 
 void pmm_free(void *ptr, size_t pages) {
+    spinlock_acquire(&PMM_LOCK);
     pmm_frees++;
 #ifdef CONFIG_PMM_DEBUG
     debugf_debug("--- Deallocation n.%d ---\n", pmm_frees);
@@ -205,4 +209,6 @@ void pmm_free(void *ptr, size_t pages) {
 
         break;
     }
+
+    spinlock_release(&PMM_LOCK);
 }
