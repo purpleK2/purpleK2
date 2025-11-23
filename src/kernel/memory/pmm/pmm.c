@@ -17,7 +17,9 @@
 #include <stdio.h>
 #include <string.h>
 
-lock_t PMM_LOCK;
+#include <stdatomic.h>
+
+lock_t PMM_LOCK = ATOMIC_FLAG_INIT;
 
 int usable_entry_count;
 
