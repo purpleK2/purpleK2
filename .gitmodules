@@ -10,3 +10,7 @@
 [submodule "libs/nanoprintf"]
 	path = libs/nanoprintf
 	url = https://github.com/charlesnicholson/nanoprintf.git
+
+[submodule "libs/limine-protocol"]
+	path = libs/limine-protocol
+	url = https://github.com/limine-bootloader/limine-protocol.git
