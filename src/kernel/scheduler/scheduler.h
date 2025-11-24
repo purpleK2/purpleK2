@@ -11,6 +11,8 @@
 
 #include <fs/file_io.h>
 
+#define SCHEDULER_PROCFS_PATH "/proc"
+
 // **T**ime **S**lice, not that "ts"
 #define SCHEDULER_THREAD_TS 10
 
