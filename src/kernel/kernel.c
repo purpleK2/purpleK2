@@ -24,6 +24,7 @@
 #include <fs/cpio/newc.h>
 #include <fs/devfs/devfs.h>
 #include <fs/file_io.h>
+#include <fs/procfs/procfs.h>
 #include <fs/ramfs/ramfs.h>
 #include <fs/vfs/vfs.h>
 
@@ -122,9 +123,9 @@ vmc_t *kernel_vmm_ctx;
 
 extern void __sched_test(void);
 
-//HBA_MEM *abar_mem = NULL;
+// HBA_MEM *abar_mem = NULL;
 
-//HBA_MEM *mem;
+// HBA_MEM *mem;
 
 void a() {
     for (;;) {
@@ -134,14 +135,20 @@ void a() {
 
 devfs_t *devfs = NULL;
 
+extern procfs_t *procfs;
+
 void pk_init() {
-    debugf_debug("We're in pt.2\n");
     proc_create(a, 0, "Aprinter");
-    proc_create(b, 0, "Bprinter");
+
     proc_create(__sched_test, 0, "Scheduler test");
     debugf_ok("Starting __sched_test\n");
 
-    // load_tga_to_framebuffer("/initrd/pk2startup_1year.tga");
+    fileio_t *f = open("/proc/self/procinfo", 0);
+    char buf_test[200];
+    read(f, sizeof(buf_test), buf_test);
+
+    // yes you can
+    // procfs_print(procfs);
 }
 
 // kernel main function
