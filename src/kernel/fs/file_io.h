@@ -21,7 +21,7 @@ typedef enum fcntl_cmd {
 #define PIPE_READ_END  (1 << 2)
 #define PIPE_WRITE_END (1 << 3)
 
-#define SPECIAL_FILE_TYPE_PIPE (1 << 4)
+#define SPECIAL_FILE_TYPE_PIPE   (1 << 4)
 #define SPECIAL_FILE_TYPE_DEVICE (1 << 5)
 
 /*
@@ -37,7 +37,7 @@ typedef struct file_io {
     // for reading and writing
     size_t offset;
 
-    void *private; // for internal use
+    void *private; // for internal use (aka you put the vnode in here :P)
 } fileio_t;
 
 fileio_t *fio_create();
