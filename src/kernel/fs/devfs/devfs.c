@@ -321,7 +321,7 @@ int devfs_refresh(devfs_t *devfs) {
         }
 
         prev = cur;
-        cur = next;
+        cur  = next;
     }
 
     for (int i = 0; i < device_count; i++) {
@@ -343,8 +343,8 @@ int devfs_refresh(devfs_t *devfs) {
 
         if (!found) {
             devfs_node_t *new_node = devfs_create_node(
-                dev->type == DEVICE_TYPE_BLOCK ? DEVFS_TYPE_BLOCK : DEVFS_TYPE_CHAR
-            );
+                dev->type == DEVICE_TYPE_BLOCK ? DEVFS_TYPE_BLOCK
+                                               : DEVFS_TYPE_CHAR);
             if (!new_node) {
                 return ENOMEM;
             }
@@ -363,7 +363,6 @@ int devfs_refresh(devfs_t *devfs) {
 
     return EOK;
 }
-
 
 int devfs_open(vnode_t **vnode_r, int flags, bool clone, fileio_t **fio_out) {
     UNUSED(flags);

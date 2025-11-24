@@ -114,7 +114,10 @@
         "pci.h": "c",
         "ipi.h": "c",
         "lapic.h": "c",
-        "tga.h": "c"
+        "tga.h": "c",
+        "procfs.h": "c",
+        "parallel.h": "c",
+        "file_io.h": "c"
     },
     "dotnet.defaultSolution": "disable",
     "cmake.configureOnOpen": false,

@@ -22,6 +22,7 @@ typedef enum vfs_fstype {
     VFS_ISO9660,
     VFS_FAT32,
     VFS_DEVFS,
+    VFS_PROCFS,
     VFS_EXT, // TODO: maybe one for each version?
 } vfs_fstype_t;
 

@@ -247,7 +247,6 @@ size_t ramfs_get_node_size(ramfs_node_t *node) {
 // VNODE operations
 
 int ramfs_open(vnode_t **vnode_r, int flags, bool clone, fileio_t **fio_out) {
-    UNUSED(flags);
     UNUSED(clone);
 
     // TODO: flags
@@ -308,9 +307,6 @@ int ramfs_open(vnode_t **vnode_r, int flags, bool clone, fileio_t **fio_out) {
     v_ramfs_node->sibling = NULL;
 
     vnode->node_data = v_ramfs_node;
-    if (!vnode->node_data) {
-        debugf("help me\n");
-    }
 
     fileio_t *fio = *fio_out;
     if (!fio || !fio_out) {
@@ -319,18 +315,13 @@ int ramfs_open(vnode_t **vnode_r, int flags, bool clone, fileio_t **fio_out) {
 
     fio->buf_start = v_ramfs_node->data;
     fio->size      = v_ramfs_node->size;
-    fio->private   = v_ramfs_node;
-
-    if (!((vnode_t *)fio->private)->node_data) {
-        debugf("ahhh\n");
-    }
+    fio->private   = vnode;
 
     return EOK;
 }
 
 int ramfs_read(vnode_t *vn, size_t *bytes, size_t *offset, void *out) {
     if (!vn) {
-        debugf("ts aint tuff\n");
         return -ENULLPTR;
     }
 
@@ -417,7 +408,7 @@ int ramfs_close(vnode_t *vnode, int flags, bool clone) {
 
     if (ramfs_node_original->data != ramfs_node->data) {
         kfree(ramfs_node_original->data);
-        // the old node points to the (probably updated) data
+        // the old node points to the original (now probably updated) data
         ramfs_node_original->data = ramfs_node->data;
         ramfs_node_original->size = ramfs_node->size;
     }

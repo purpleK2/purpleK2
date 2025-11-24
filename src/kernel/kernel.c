@@ -24,6 +24,7 @@
 #include <fs/cpio/newc.h>
 #include <fs/devfs/devfs.h>
 #include <fs/file_io.h>
+#include <fs/procfs/procfs.h>
 #include <fs/ramfs/ramfs.h>
 #include <fs/vfs/vfs.h>
 
@@ -60,7 +61,7 @@
 #define INITRD_PATH "/" INITRD_FILE
 
 USED SECTION(".requests") static volatile uint64_t limine_base_revision[] =
-    LIMINE_BASE_REVISION(3);
+    LIMINE_BASE_REVISION(4);
 
 USED SECTION(".requests") static volatile struct limine_framebuffer_request
     framebuffer_request = {.id = LIMINE_FRAMEBUFFER_REQUEST_ID, .revision = 0};
@@ -122,33 +123,32 @@ vmc_t *kernel_vmm_ctx;
 
 extern void __sched_test(void);
 
-//HBA_MEM *abar_mem = NULL;
+// HBA_MEM *abar_mem = NULL;
 
-//HBA_MEM *mem;
+// HBA_MEM *mem;
 
 void a() {
     for (;;) {
-        kprintf("A");
+        // debugf("A");
     }
 }
 
-void b() {
-    for (;;) {
-        kprintf("B");
-    }
-}
-
-#include <tga/tga.h>
 devfs_t *devfs = NULL;
 
+extern procfs_t *procfs;
+
 void pk_init() {
-    debugf_debug("We're in pt.2\n");
     proc_create(a, 0, "Aprinter");
-    proc_create(b, 0, "Bprinter");
+
     proc_create(__sched_test, 0, "Scheduler test");
     debugf_ok("Starting __sched_test\n");
 
-    // load_tga_to_framebuffer("/initrd/pk2startup_1year.tga");
+    fileio_t *f = open("/proc/self/procinfo", 0);
+    char buf_test[200];
+    read(f, sizeof(buf_test), buf_test);
+
+    // yes you can
+    // procfs_print(procfs);
 }
 
 // kernel main function
@@ -409,6 +409,14 @@ void kstart(void) {
             limine_parsed_data.memory_usable_total,
             limine_parsed_data.memory_usable_total / 0x100000);
 
+    // first scheduler, then FS
+
+    limine_parsed_data.cpu_count = smp_request.response->cpu_count;
+    limine_parsed_data.cpus      = smp_request.response->cpus;
+
+    init_scheduler();
+    init_cpu_scheduler(pk_init);
+
     if (!module_request.response) {
         kprintf_warn("No modules loaded.\n");
     }
@@ -479,9 +487,6 @@ void kstart(void) {
     dev_parallel_init();
     dev_fb_init();
 
-    limine_parsed_data.cpu_count = smp_request.response->cpu_count;
-    limine_parsed_data.cpus      = smp_request.response->cpus;
-
     // smp_init();
     // limine_parsed_data.smp_enabled = true;
 
@@ -489,24 +494,25 @@ void kstart(void) {
 
     pci_scan(pci_ids);
     kprintf_ok("PCI devices parsing done\n");
-    /*if (pcie_devices_init(pci_ids) != 0) {
-        kprintf_warn("Failed to parse PCIe devices!\n");
-    } else {
-        kprintf_ok("PCIe devices parsing done\n");
-    }*/
-    
+    // if (pcie_devices_init(pci_ids) != 0) {
+    //     kprintf_warn("Failed to parse PCIe devices!\n");
+    // } else {
+    //     kprintf_ok("PCIe devices parsing done\n");
+    // }
+
     mod_t *mbr = load_module("/initrd/modules/mbr.km");
     start_module(mbr);
 
     mod_t *ahci = load_module("/initrd/modules/ahci.km");
+    if (!ahci) {
+        debugf_warn("Couldn't find AHCI driver!\n");
+    }
     start_module(ahci);
 
     devfs_print(devfs->root_node, 0);
 
-
-    //init_scheduler();
-    //init_cpu_scheduler(pk_init);
-    //irq_registerHandler(0, scheduler_timer_tick);
+    // boom
+    irq_registerHandler(0, scheduler_timer_tick);
 
     for (;;)
         ;

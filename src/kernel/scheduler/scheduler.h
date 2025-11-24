@@ -11,6 +11,8 @@
 
 #include <fs/file_io.h>
 
+#define SCHEDULER_PROCFS_PATH "/proc"
+
 // **T**ime **S**lice, not that "ts"
 #define SCHEDULER_THREAD_TS 10
 
@@ -76,7 +78,7 @@ typedef struct process {
 
     int fd_count;
     fileio_t **fds;
-    fileio_t *cwd; // just in case: Current Working Directory
+    fileio_t *cwd; // Current Working Directory (yes it's a file :3c)
 
     int cpu; // the cpu we're running on
 

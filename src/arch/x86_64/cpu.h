@@ -191,4 +191,6 @@ void _set_cpu_flags(uint64_t flags); // uhmmm apparently uACPI wants this :/
 void cpu_reg_write(uint32_t *reg, uint32_t value);
 uint32_t cpu_reg_read(uint32_t *reg);
 
+uint64_t get_current_cpu();
+
 #endif

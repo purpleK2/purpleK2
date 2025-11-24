@@ -92,27 +92,24 @@ int strncmp(const char *s1, const char *s2, size_t len) {
     return 0;
 }
 
-char *strstr(const char *s1, const char *s2) {
-    char *orig_s2 = (char *)s2;
-    if (*s2 == '\0') {
-        return (char *)s1;
-    }
-    while (*s1 != '\0') {
-        if (*s1 == *s2) {
-            while (*s2 != '\0') {
-                if (*s1 != *s2) {
-                    break;
-                }
-                s1++;
-                s2++;
-            }
-            if (*s2 == '\0') {
-                return (char *)s1;
-            }
-            s2 = orig_s2;
+char *strstr(const char *str, const char *substr) {
+    size_t len        = strlen(str);
+    size_t substr_len = strlen(substr);
+    size_t offs       = 0; // offset into str
+    int idx           = 0; // index used for substr
+
+    for (; offs < len; offs++) {
+        if (str[offs] == substr[idx] && idx < substr_len) {
+            idx++;
+        } else {
+            idx = 0;
         }
-        s1++;
     }
+
+    if (idx) {
+        return (str + (offs - substr_len));
+    }
+
     return NULL;
 }
 
@@ -334,6 +331,7 @@ uint64_t strtoull(const char *str, const char **endptr, int base) {
     return result;
 }
 
+// atoi, but with a determined size and radix/base
 int nnatoi(char *s, size_t n, size_t base) {
     int a = 0;
 
@@ -349,6 +347,10 @@ int nnatoi(char *s, size_t n, size_t base) {
 
 int natoi(char *s, size_t n) {
     return nnatoi(s, n, 10);
+}
+
+int atoi(char *s) {
+    return natoi(s, strlen(s));
 }
 
 int nxatoi(char *s, size_t n) {

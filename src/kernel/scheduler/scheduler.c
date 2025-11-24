@@ -13,9 +13,13 @@
 
 #include <stdio.h>
 
+#include <fs/procfs/procfs.h>
+
 static cpu_queue_t *thread_queues;
 static tcb_t **current_threads;
 static int cpu_count;
+
+procfs_t *procfs;
 
 // SHOULD BE CALLED **ONLY ONCE** IN KSTART. NOWHERE ELSE.
 int init_scheduler() {
@@ -25,6 +29,10 @@ int init_scheduler() {
     current_threads = kmalloc(sizeof(tcb_t *) * cpu_count);
     memset(thread_queues, 0, sizeof(cpu_queue_t) * cpu_count);
     memset(current_threads, 0, sizeof(tcb_t *) * cpu_count);
+
+    // create the procFS
+    procfs = procfs_create();
+    procfs_vfs_init(procfs, SCHEDULER_PROCFS_PATH);
     return 0;
 }
 
@@ -57,12 +65,17 @@ int proc_create(void (*entry)(), int flags, char *name) {
     proc->fds      = NULL;
     proc->fd_count = 0;
 
-    int vflags        = (flags & TF_MODE_USER ? VMO_USER_RW : VMO_KERNEL_RW);
-    proc->vmm_ctx     = vmc_init(NULL, vflags);
-    proc->cwd         = NULL;
+    int vflags    = (flags & TF_MODE_USER ? VMO_USER_RW : VMO_KERNEL_RW);
+    proc->vmm_ctx = vmc_init(NULL, vflags);
+    proc->cwd     = NULL;
     thread_create(proc, entry, flags);
 
-    debugf_debug("Created new process with entry %p PID=%d\n", entry, proc->pid);
+    procfs_pcb_t *procfs_proc =
+        procfs_proc_create(proc); // automatically creates the threads inside
+    procfs_proc_append(procfs, procfs_proc);
+
+    debugf_debug("Created new process with entry %p PID=%d\n", entry,
+                 proc->pid);
 
     return proc->pid;
 }
