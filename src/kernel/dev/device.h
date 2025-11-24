@@ -12,14 +12,6 @@ typedef struct device device_t;
 extern int device_count;
 extern device_t *device_table[DEVICES_MAX];
 
-/*
- * Major device types:
- * - 1: Psudo devices
- * - 2: Block storage devices
- * - 3: TTYs
- * - 4: Screen related devices
- */
-
 typedef enum {
     DEVICE_TYPE_BLOCK,
     DEVICE_TYPE_CHAR
