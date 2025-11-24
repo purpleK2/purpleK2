@@ -99,9 +99,12 @@ A build (`.iso` file) will be released every time a Milestone is completed. The 
   - DevFS
     - [x] (Re)Design
     - [x] (Re)Implementation
+  - ProcFS
+    - [X] Design
+    - [X] Implementation
 
-- [ ] Scheduler
-  - [ ] with threads and stuff
+- [X] Scheduler
+  - [X] with threads and stuff
 - [ ] SMP
 
 - [ ] Jump to userspace
