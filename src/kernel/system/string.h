@@ -43,7 +43,8 @@ static const char *const memory_block_type[] = {"USABLE",
                                                 "BAD",
                                                 "BOOTLOADER_RECLAIMABLE",
                                                 "KERNEL_AND_MODULES",
-                                                "FRAMEBUFFER"};
+                                                "FRAMEBUFFER",
+                                                "ACPI_TABLES"};
 
 uint64_t strtoull(const char *str, const char **endptr, int base);
 

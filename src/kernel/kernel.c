@@ -60,7 +60,7 @@
 #define INITRD_PATH "/" INITRD_FILE
 
 USED SECTION(".requests") static volatile uint64_t limine_base_revision[] =
-    LIMINE_BASE_REVISION(3);
+    LIMINE_BASE_REVISION(4);
 
 USED SECTION(".requests") static volatile struct limine_framebuffer_request
     framebuffer_request = {.id = LIMINE_FRAMEBUFFER_REQUEST_ID, .revision = 0};
