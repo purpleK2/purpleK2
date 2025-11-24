@@ -76,7 +76,7 @@ typedef struct process {
 
     int fd_count;
     fileio_t **fds;
-    fileio_t *cwd; // just in case: Current Working Directory
+    fileio_t *cwd; // Current Working Directory (yes it's a file :3c)
 
     int cpu; // the cpu we're running on
 
