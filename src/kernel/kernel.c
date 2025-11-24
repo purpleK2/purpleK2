@@ -128,17 +128,10 @@ extern void __sched_test(void);
 
 void a() {
     for (;;) {
-        kprintf("A");
+        // debugf("A");
     }
 }
 
-void b() {
-    for (;;) {
-        kprintf("B");
-    }
-}
-
-#include <tga/tga.h>
 devfs_t *devfs = NULL;
 
 void pk_init() {
@@ -409,6 +402,14 @@ void kstart(void) {
             limine_parsed_data.memory_usable_total,
             limine_parsed_data.memory_usable_total / 0x100000);
 
+    // first scheduler, then FS
+
+    limine_parsed_data.cpu_count = smp_request.response->cpu_count;
+    limine_parsed_data.cpus      = smp_request.response->cpus;
+
+    init_scheduler();
+    init_cpu_scheduler(pk_init);
+
     if (!module_request.response) {
         kprintf_warn("No modules loaded.\n");
     }
@@ -479,9 +480,6 @@ void kstart(void) {
     dev_parallel_init();
     dev_fb_init();
 
-    limine_parsed_data.cpu_count = smp_request.response->cpu_count;
-    limine_parsed_data.cpus      = smp_request.response->cpus;
-
     // smp_init();
     // limine_parsed_data.smp_enabled = true;
 
@@ -499,14 +497,15 @@ void kstart(void) {
     start_module(mbr);
 
     mod_t *ahci = load_module("/initrd/modules/ahci.km");
+    if (!ahci) {
+        debugf_warn("Couldn't find AHCI driver!\n");
+    }
     start_module(ahci);
 
     devfs_print(devfs->root_node, 0);
 
-
-    //init_scheduler();
-    //init_cpu_scheduler(pk_init);
-    //irq_registerHandler(0, scheduler_timer_tick);
+    // boom
+    irq_registerHandler(0, scheduler_timer_tick);
 
     for (;;)
         ;
