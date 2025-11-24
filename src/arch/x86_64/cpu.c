@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#include <apic/lapic/lapic.h>
+
 bool check_pae() {
     uint64_t cr4 = cpu_get_cr(4);
 
@@ -130,4 +132,8 @@ int get_cpu_name(char *out) {
     }
 
     return 0;
+}
+
+uint64_t get_current_cpu() {
+    return lapic_get_id();
 }
