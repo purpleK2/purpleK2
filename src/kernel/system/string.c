@@ -331,6 +331,7 @@ uint64_t strtoull(const char *str, const char **endptr, int base) {
     return result;
 }
 
+// atoi, but with a determined size and radix/base
 int nnatoi(char *s, size_t n, size_t base) {
     int a = 0;
 
@@ -346,6 +347,10 @@ int nnatoi(char *s, size_t n, size_t base) {
 
 int natoi(char *s, size_t n) {
     return nnatoi(s, n, 10);
+}
+
+int atoi(char *s) {
+    return natoi(s, strlen(s));
 }
 
 int nxatoi(char *s, size_t n) {

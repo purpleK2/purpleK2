@@ -49,6 +49,9 @@ uint64_t strtoull(const char *str, const char **endptr, int base);
 
 // atoi but you specify the length of the string
 int natoi(char *s, size_t n);
+
+int atoi(char *s);
+
 // natoi but for strings with hex numbers
 int nxatoi(char *s, size_t n);
 
