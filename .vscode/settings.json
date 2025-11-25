@@ -2,7 +2,6 @@
     "files.associations": {
         "*.embeddedhtml": "html",
         "*.s": "gas",
-        "*.asm": "fasm",
         "chrono": "c",
         "span": "c",
         "stdarg.h": "c",
@@ -105,24 +104,11 @@
         "beap.h": "c",
         "device.h": "c",
         "limits.h": "c",
-        "kheap.h": "c",
-        "ioapic.h": "c",
-        "newc.h": "c",
-        "mutex.h": "c",
-        "errors.h": "c",
-        "vmware_svga.h": "c",
-        "pci.h": "c",
-        "ipi.h": "c",
-        "lapic.h": "c",
-        "tga.h": "c",
-        "procfs.h": "c",
-        "parallel.h": "c",
-        "file_io.h": "c"
+        "kheap.h": "c"
     },
     "dotnet.defaultSolution": "disable",
     "cmake.configureOnOpen": false,
     "C_Cpp.default.compilerPath": "${workspaceFolder}/toolchain/x86_64-elf/bin/x86_64-elf-gcc",
     "C_Cpp.clang_format_path": "/usr/bin/clang-format",
-    "editor.formatOnSave": true,
-    "makefile.configureOnOpen": false
+    "editor.formatOnSave": true
 }

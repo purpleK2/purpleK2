@@ -1,12 +1,11 @@
-format ELF64
-section '.text' executable align 16
+[bits 64]
 
-public _enable_interrupts
+global _enable_interrupts
 _enable_interrupts:
     sti
     ret
 
-public _disable_interrupts
+global _disable_interrupts
 _disable_interrupts:
     cli
     ret

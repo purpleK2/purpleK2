@@ -1,9 +1,9 @@
 #ifndef IOAPIC_H
 #define IOAPIC_H 1
 
-#include <interrupts/irq.h>
-
 #include <stdint.h>
+
+#include <interrupts/irq.h>
 
 #define IOAPIC_REDTBL_ENTRIES 24
 

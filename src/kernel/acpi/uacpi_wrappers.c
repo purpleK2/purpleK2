@@ -1,31 +1,33 @@
+#include "time.h"
 #include "uacpi/kernel_api.h"
 
-#include <arch.h>
-#include <cpu.h>
-#include <interrupts/isr.h>
-#include <io.h>
+#include <acpi/uacpi/types.h>
+#include <uacpi/status.h>
+
 #include <kernel.h>
 
+#include <interrupts/isr.h>
+
 #include <memory/heap/kheap.h>
-#include <memory/vmm/vflags.h>
-#include <memory/vmm/vmm.h>
+#include <memory/vmm/vma.h>
 #include <paging/paging.h>
 
-#include <acpi/uacpi/types.h>
+#include <util/assert.h>
+#include <util/string.h>
+#include <util/util.h>
 
-#include <pci/pci.h>
+#include <stdio.h>
+
+#include <io.h>
+
+#include <dev/pcie/pcie.h>
 
 #include <semaphore.h>
 #include <spinlock.h>
 
-#include <uacpi/status.h>
+#include <arch.h>
 
-#include <util/assert.h>
-#include <util/util.h>
-
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
+#include <cpu.h>
 
 // --- fun fact: `uacpi_phys_addr` is uint64_t btw ---
 
@@ -50,8 +52,7 @@ void *uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
     size_t actual_len = len + offset; // this is BYTES!!!
     size_t pages      = ROUND_UP(actual_len, PFRAME_SIZE) / PFRAME_SIZE;
 
-    void *virt = valloc(get_current_ctx(), pages, VMO_KERNEL_RW | VMO_NX,
-                        (void *)aligned);
+    void *virt = vma_alloc(get_current_ctx(), pages, (void *)aligned);
 
     // re-align the pointer to original addr offset
 
@@ -64,7 +65,7 @@ void uacpi_kernel_unmap(void *addr, uacpi_size len) {
     uint64_t aligned = ROUND_DOWN((uint64_t)addr, PFRAME_SIZE);
     UNUSED(len);
 
-    vfree(get_current_ctx(), (void *)aligned, false);
+    vma_free(get_current_ctx(), (void *)aligned, false);
 }
 
 #ifndef UACPI_FORMATTED_LOGGING
@@ -176,7 +177,7 @@ void uacpi_kernel_vlog(uacpi_log_level log_level, const uacpi_char *fmt,
         return;
     }
 
-    uacpi_kernel_log(log_level, "%s", buffer);
+    uacpi_kernel_log(log_level, buffer);
 }
 #endif
 
@@ -520,7 +521,7 @@ uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle spinlock,
 
         break;
 
-    case 0x0001 ... 0xFFFE: {
+    case 0x0001 ... 0xFFFE:
         uint64_t t = timeout;
         while (atomic_flag_test_and_set(spinlock)) {
             if (--t == 0) {
@@ -535,9 +536,9 @@ uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle spinlock,
             asm("pause");
         }
         break;
-    }
+
     case 0xFFFF:
-        // spinlock_acquire(spinlock);
+        spinlock_acquire(spinlock);
         break;
 
     default:
@@ -548,7 +549,7 @@ uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle spinlock,
 }
 
 void uacpi_kernel_release_mutex(uacpi_handle spinlock) {
-    // spinlock_release(spinlock);
+    spinlock_release(spinlock);
 }
 
 uacpi_bool uacpi_kernel_wait_for_event(uacpi_handle semaphore,

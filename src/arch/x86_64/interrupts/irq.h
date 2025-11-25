@@ -1,14 +1,13 @@
 #ifndef IRQ_H
 #define IRQ_H 1
 
-#include <interrupts/isr.h>
-
 #include <stdint.h>
+
+#include "isr.h"
 
 typedef void (*irq_handler)(void *ctx);
 
 void irq_registerHandler(int irq, irq_handler handler);
-void irq_sendEOI(uint8_t irq);
 
 extern void _enable_interrupts();
 extern void _disable_interrupts();

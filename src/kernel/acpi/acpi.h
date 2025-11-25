@@ -6,4 +6,4 @@
 
 int uacpi_init();
 
-#endif // ACPI_H
+#endif

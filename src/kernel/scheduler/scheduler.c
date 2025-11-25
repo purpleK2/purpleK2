@@ -1,311 +1,285 @@
 #include "scheduler.h"
 
-#include <cpu.h>
-#include <errors.h>
-#include <kernel.h>
-#include <string.h>
-
-#include <memory/heap/kheap.h>
-#include <memory/vmm/vflags.h>
-#include <memory/vmm/vmm.h>
-
-#include <smp/smp.h>
-
+#include <stdatomic.h>
 #include <stdio.h>
 
-#include <fs/procfs/procfs.h>
+#include <fs/vfs/vfs.h>
+#include <gdt/gdt.h>
+#include <interrupts/isr.h>
+#include <kernel.h>
+#include <spinlock.h>
 
-static cpu_queue_t *thread_queues;
-static tcb_t **current_threads;
-static int cpu_count;
+#include <memory/heap/kheap.h>
+#include <memory/vmm/vmm.h>
+#include <paging/paging.h>
 
-procfs_t *procfs;
+#include <smp/smp.h>
+#include <util/assert.h>
+#include <util/string.h>
 
-// SHOULD BE CALLED **ONLY ONCE** IN KSTART. NOWHERE ELSE.
-int init_scheduler() {
-    cpu_count = get_bootloader_data()->cpu_count;
+#include <autoconf.h>
 
-    thread_queues   = kmalloc(sizeof(cpu_queue_t) * cpu_count);
-    current_threads = kmalloc(sizeof(tcb_t *) * cpu_count);
-    memset(thread_queues, 0, sizeof(cpu_queue_t) * cpu_count);
-    memset(current_threads, 0, sizeof(tcb_t *) * cpu_count);
+scheduler_manager_t *scheduler_manager;
 
-    // create the procFS
-    procfs = procfs_create();
-    procfs_vfs_init(procfs, SCHEDULER_PROCFS_PATH);
-    return 0;
+void idle(void) {
+    for (;;)
+        ;
 }
 
-static tcb_t *pick_next_thread(int cpu) {
-    tcb_t *thread = thread_queues[cpu].head;
+proc_t *create_idle_process(uint8_t core) {
+    proc_t *idle_proc       = kmalloc(sizeof(proc_t));
+    idle_proc->pid          = scheduler_manager->next_pid++;
+    idle_proc->whoami.user  = 0;
+    idle_proc->whoami.group = 0;
+    idle_proc->pml4         = get_kernel_pml4();
 
-    for (; thread != NULL; thread = thread->next) {
-        if (thread->state == THREAD_READY) {
-            return thread;
+    asm volatile("movq %%rsp, %0" : "=r"(idle_proc->regs.rsp));
+    idle_proc->regs.rsp -= PROC_STACK_SIZE;
+
+    idle_proc->regs.rbp    = idle_proc->regs.rsp;
+    idle_proc->regs.rflags = 0x202;
+
+    idle_proc->regs.rip = (uint64_t)idle;
+    idle_proc->regs.cs  = GDT_CODE_SEGMENT;
+    idle_proc->regs.ss  = GDT_DATA_SEGMENT;
+    idle_proc->regs.ds  = GDT_DATA_SEGMENT;
+
+    idle_proc->time_slice = PROC_TIME_SLICE;
+    idle_proc->sched_flags =
+        SCHED_PROC_KERNEL_PAGE_MAP | SCHED_PROC_KERNEL_STACK;
+    idle_proc->current_fd     = 0;
+    idle_proc->state          = PROC_STATE_RUNNING;
+    idle_proc->current_core   = core;
+    idle_proc->preferred_core = core;
+
+    idle_proc->next  = NULL;
+    idle_proc->errno = 0;
+
+    return idle_proc;
+}
+
+void scheduler_init() {
+    scheduler_manager = kmalloc(sizeof(scheduler_manager_t));
+
+    bootloader_data *bootloader_data = get_bootloader_data();
+    scheduler_manager->core_count    = bootloader_data->cpu_count;
+    scheduler_manager->core_schedulers =
+        kmalloc(sizeof(core_scheduler_t *) * bootloader_data->cpu_count);
+
+    scheduler_manager->process_list_head     = NULL;
+    scheduler_manager->process_count         = 0;
+    scheduler_manager->next_pid              = 0;
+    scheduler_manager->load_balance_interval = 0;
+    scheduler_manager->last_load_balance     = 0;
+
+    for (size_t i = 0; i < scheduler_manager->core_count; i++) {
+        scheduler_manager->core_schedulers[i] =
+            kmalloc(sizeof(core_scheduler_t));
+        // lapic_timer_init(); we maybe just init this outside of scheduler
+        scheduler_init_cpu(i);
+    }
+
+    spinlock_release(&scheduler_manager->glob_lock);
+
+#ifdef CONFIG_SCHED_DEBUG
+    debugf_debug("Scheduler initialized with %zu cores\n",
+                 scheduler_manager->core_count);
+#endif
+}
+
+void scheduler_init_cpu(uint8_t core) {
+    scheduler_manager->core_schedulers[core]->core_id      = core;
+    scheduler_manager->core_schedulers[core]->current_proc = NULL;
+    scheduler_manager->core_schedulers[core]->idle_proc =
+        create_idle_process(core);
+    scheduler_manager->core_schedulers[core]->run_queue_head     = NULL;
+    scheduler_manager->core_schedulers[core]->run_queue_tail     = NULL;
+    scheduler_manager->core_schedulers[core]->run_queue_size     = 0;
+    scheduler_manager->core_schedulers[core]->context_switches   = 0;
+    scheduler_manager->core_schedulers[core]->last_schedule_time = 0;
+    scheduler_manager->core_schedulers[core]->flags              = 0;
+    scheduler_manager->core_schedulers[core]->default_time_slice =
+        PROC_TIME_SLICE;
+
+    spinlock_release(&scheduler_manager->core_schedulers[core]->lock);
+}
+
+proc_t *scheduler_add(void (*entry_point)(), int flags) {
+    asm("cli");
+
+    uint8_t least_loaded_cpu      = 0;
+    size_t least_loaded_cpu_count = SIZE_MAX;
+    for (size_t i = 0; i < scheduler_manager->core_count; i++) {
+        if (scheduler_manager->core_schedulers[i]->run_queue_size <
+            least_loaded_cpu_count) {
+            least_loaded_cpu_count =
+                scheduler_manager->core_schedulers[i]->run_queue_size;
+            least_loaded_cpu = i;
         }
     }
 
-    return NULL;
-}
-
-// I WANT ALL OF THE BITS :speaking_head: :fire: :fire:
-static uint64_t global_pid = 0;
-
-// @param name name of the process (it's optional)
-int proc_create(void (*entry)(), int flags, char *name) {
-    pcb_t *proc = kmalloc(sizeof(pcb_t));
-    memset(proc, 0, sizeof(pcb_t));
-    proc->pid   = __sync_fetch_and_add(&global_pid, 1);
-    proc->state = PROC_READY;
-
-    if (name) {
-        proc->name = strdup(name);
+    proc_t *proc = kmalloc(sizeof(proc_t));
+    proc->pid    = scheduler_manager->next_pid;
+    scheduler_manager->next_pid++;
+    proc->whoami.user  = 0;
+    proc->whoami.group = 0;
+    if (flags & SCHED_PROC_KERNEL_PAGE_MAP) {
+        proc->pml4 = get_kernel_pml4();
+    } else {
+        proc->pml4 = (uint64_t *)pmm_alloc_page();
+        pagemap_copy_to(proc->pml4);
+        copy_range_to_pagemap(proc->pml4, get_kernel_pml4(), 0x1000, 0x10000);
     }
 
-    proc->fds      = NULL;
-    proc->fd_count = 0;
+    memset(&proc->regs, 0, sizeof(registers_t));
 
-    int vflags    = (flags & TF_MODE_USER ? VMO_USER_RW : VMO_KERNEL_RW);
-    proc->vmm_ctx = vmc_init(NULL, vflags);
-    proc->cwd     = NULL;
-    thread_create(proc, entry, flags);
+    proc->regs.ds = GDT_DATA_SEGMENT;
+    proc->regs.cs = GDT_CODE_SEGMENT;
+    proc->regs.ss = GDT_DATA_SEGMENT;
 
-    procfs_pcb_t *procfs_proc =
-        procfs_proc_create(proc); // automatically creates the threads inside
-    procfs_proc_append(procfs, procfs_proc);
-
-    debugf_debug("Created new process with entry %p PID=%d\n", entry,
-                 proc->pid);
-
-    return proc->pid;
-}
-
-int thread_create(pcb_t *parent, void (*entry)(), int flags) {
-    tcb_t *thread = kmalloc(sizeof(tcb_t));
-    memset(thread, 0, sizeof(tcb_t));
-    thread->tid    = __sync_fetch_and_add(&parent->thread_count, 1);
-    thread->flags  = flags;
-    thread->state  = THREAD_READY;
-    thread->parent = parent;
-
-    thread->time_slice = SCHEDULER_THREAD_TS;
-
-    void *stack =
-        (void *)PHYS_TO_VIRTUAL(pmm_alloc_pages(SCHEDULER_STACK_PAGES));
-
-    // so the struct sits on the top of the stack
-    registers_t *ctx = kmalloc(sizeof(registers_t));
-    memset(ctx, 0, sizeof(registers_t));
-
-    ctx->rip     = (uint64_t)entry;
-    ctx->cs      = (flags & TF_MODE_USER) ? 0x1B : 0x08;
-    ctx->ss      = (flags & TF_MODE_USER) ? 0x23 : 0x10;
-    ctx->ds      = (flags & TF_MODE_USER) ? 0x23 : 0x10;
-    ctx->rflags  = 0x202;
-    ctx->rsp     = (uint64_t)(stack + SCHEDULER_STACKSZ);
-    thread->regs = ctx;
-    thread->fpu  = (void *)PHYS_TO_VIRTUAL(pmm_alloc_page());
-
-    int cpu                 = get_cpu();
-    thread->next            = thread_queues[cpu].head;
-    thread_queues[cpu].head = thread;
-    thread_queues[cpu].count++;
-
-    parent->threads =
-        krealloc(parent->threads, sizeof(tcb_t *) * parent->thread_count);
-    parent->threads[thread->tid] = thread;
-
-    if (!current_threads[cpu]) {
-        current_threads[cpu] = thread;
+    if (flags & SCHED_PROC_KERNEL_STACK) {
+        asm volatile("movq %%rsp, %0" : "=r"(proc->regs.rsp));
+        proc->regs.rsp -= PROC_STACK_SIZE;
+    } else {
+        proc->regs.rsp =
+            ((uint64_t)PHYS_TO_VIRTUAL(pmm_alloc_pages(PROC_STACK_PAGES))) +
+            (PROC_STACK_SIZE);
     }
 
-    return thread->tid;
+    proc->regs.rbp    = proc->regs.rsp;
+    proc->regs.rflags = 0x202;
+    proc->regs.rip    = (uint64_t)entry_point;
+
+    proc->time_slice     = PROC_TIME_SLICE;
+    proc->sched_flags    = flags;
+    proc->current_fd     = 0;
+    proc->state          = PROC_STATE_READY;
+    proc->current_core   = least_loaded_cpu;
+    proc->preferred_core = least_loaded_cpu;
+    proc->next           = NULL;
+    proc->errno          = 0;
+
+    if (scheduler_manager->process_list_head == NULL) {
+        scheduler_manager->process_list_head = proc;
+    } else {
+        proc_t *last_proc = scheduler_manager->process_list_head;
+        while (last_proc->next != NULL) {
+            last_proc = last_proc->next;
+        }
+        last_proc->next = proc;
+    }
+    scheduler_manager->process_count++;
+
+    core_scheduler_t *sched =
+        scheduler_manager->core_schedulers[least_loaded_cpu];
+    if (sched->run_queue_head == NULL) {
+        sched->run_queue_head = proc;
+        sched->run_queue_tail = proc;
+    } else {
+        sched->run_queue_tail->next = proc;
+        sched->run_queue_tail       = proc;
+    }
+    sched->run_queue_size++;
+
+    proc->next  = NULL;
+    proc->state = PROC_STATE_READY;
+
+#ifdef CONFIG_SCHED_DEBUG
+    debugf_debug("Added process %d to CPU %d, RIP: 0x%.16llx, RBP 0x%.16llx, "
+                 "PML4: 0x%.16llx\n",
+                 proc->pid, least_loaded_cpu, proc->regs.rip, proc->regs.rbp,
+                 proc->pml4);
+#endif
+    asm("sti");
+    return proc;
 }
 
-pcb_t *pcb_lookup(int pid) {
-    int cpu  = get_cpu();
-    tcb_t *t = thread_queues[cpu].head;
-    pcb_t *p = NULL;
-    for (; t != NULL; t = t->next) {
-        p = t->parent;
-        if (!p) { // ...somehow??
-            continue;
+void scheduler_remove(proc_t *proc) {
+    asm("cli");
+    if (scheduler_manager->process_list_head == proc) {
+        scheduler_manager->process_list_head = proc->next;
+    } else {
+        proc_t *prev_proc = scheduler_manager->process_list_head;
+        while (prev_proc->next != proc) {
+            prev_proc = prev_proc->next;
+        }
+        prev_proc->next = proc->next;
+    }
+    scheduler_manager->process_count--;
+
+    core_scheduler_t *sched =
+        scheduler_manager->core_schedulers[proc->current_core];
+    if (sched->run_queue_head == proc) {
+        sched->run_queue_head = proc->next;
+    } else {
+        proc_t *prev_proc = sched->run_queue_head;
+        while (prev_proc->next != proc) {
+            prev_proc = prev_proc->next;
+        }
+        prev_proc->next = proc->next;
+    }
+    sched->run_queue_size--;
+    asm("sti");
+}
+
+proc_t *get_current_process() {
+    asm("cli");
+    core_scheduler_t *sched = scheduler_manager->core_schedulers[get_cpu()];
+    if (sched->current_proc == NULL) {
+        return sched->idle_proc;
+    }
+    asm("sti");
+    return sched->current_proc;
+}
+
+void scheduler_switch_context(proc_t *proc, registers_t *current_regs) {
+    memcpy(&proc->regs, current_regs, sizeof(registers_t));
+    _load_pml4(proc->pml4);
+}
+
+void scheduler_schedule(void *ctx) {
+    asm("cli");
+    _load_pml4(get_kernel_pml4());
+
+    core_scheduler_t *sched = scheduler_manager->core_schedulers[get_cpu()];
+
+    registers_t *regs = ctx;
+
+    if (sched->current_proc) {
+        memcpy(&sched->current_proc->regs, regs, sizeof(registers_t));
+    }
+
+    if (sched->run_queue_head) {
+        proc_t *next_proc     = sched->run_queue_head;
+        sched->run_queue_head = next_proc->next;
+        if (!sched->run_queue_head) {
+            sched->run_queue_tail = NULL;
+        }
+        sched->run_queue_size--;
+
+        if (sched->current_proc &&
+            sched->current_proc->state == PROC_STATE_READY) {
+            if (sched->run_queue_tail) {
+                sched->run_queue_tail->next = sched->current_proc;
+            } else {
+                sched->run_queue_head = sched->current_proc;
+            }
+            sched->run_queue_tail = sched->current_proc;
+            sched->run_queue_size++;
         }
 
-        if (p->pid == pid) {
-            break;
+        sched->current_proc = next_proc;
+        memcpy(regs, &next_proc->regs, sizeof(registers_t));
+        _load_pml4(next_proc->pml4);
+    } else {
+        if (sched->current_proc != sched->idle_proc) {
+            sched->current_proc    = sched->idle_proc;
+            sched->idle_proc->next = NULL; // Ensure idle proc's next is NULL
+            memcpy(regs, &sched->idle_proc->regs, sizeof(registers_t));
+            _load_pml4(sched->idle_proc->pml4);
         }
     }
 
-    return p;
-}
-
-tcb_t *tcb_lookup(int pid, int tid) {
-    int cpu  = get_cpu();
-    tcb_t *t = thread_queues[cpu].head;
-
-    for (; t != NULL; t = t->next) {
-        if (!t->parent) {
-            continue;
-        }
-
-        pcb_t *parent = t->parent;
-        if (parent->pid != pid) {
-            continue;
-        }
-
-        if (t->tid != tid) {
-            continue;
-        }
-    }
-
-    return t;
-}
-
-// creates the "init process" per-CPU
-int init_cpu_scheduler(void (*p)()) {
-    proc_create(p, 0, "initproc");
-    return 0;
-}
-
-int pcb_destroy(int pid) {
-    pcb_t *p = pcb_lookup(pid);
-    if (!p) {
-        return ENULLPTR;
-    }
-
-    p->state = PROC_DEAD;
-    for (int i = 0; i < p->thread_count; i++) {
-        if (!p->threads[i]) {
-            continue;
-        }
-
-        tcb_t *t = p->threads[i];
-        t->state = THREAD_DEAD;
-    }
-
-    // also remove it from the queue in the next yield just like the thread
-
-    return EOK;
-}
-
-void thread_push_to_queue(tcb_t *to_push) {
-    int cpu   = get_cpu();
-    tcb_t **p = &thread_queues[cpu].head;
-
-    while (*p && *p != to_push) {
-        p = &(*p)->next;
-    }
-    if (*p == NULL) {
-        return;
-    }
-    *p            = to_push->next;
-    to_push->next = NULL;
-
-    tcb_t **q = &thread_queues[cpu].head;
-    while (*q) {
-        q = &(*q)->next;
-    }
-    *q = to_push;
-}
-
-void thread_remove_from_queue(tcb_t *to_remove) {
-    int cpu   = get_cpu();
-    tcb_t **p = &thread_queues[cpu].head;
-
-    while (*p && *p != to_remove) {
-        p = &(*p)->next;
-    }
-
-    if (*p == NULL) {
-        return;
-    }
-
-    *p              = to_remove->next;
-    to_remove->next = NULL;
-}
-
-int thread_destroy(int pid, int tid) {
-    tcb_t *t = tcb_lookup(pid, tid);
-    if (!t) {
-        return ENULLPTR;
-    }
-
-    t->state = THREAD_DEAD;
-
-    // thread_remove_from_queue(t);
-    // actually cleanup in the next yield
-
-    return EOK;
-}
-
-pcb_t *get_current_pcb() {
-    int cpu        = get_cpu();
-    tcb_t *current = current_threads[cpu];
-    return current ? current->parent : NULL;
-}
-
-// destroys current process
-int proc_exit() {
-    int cpu        = get_cpu();
-    tcb_t *current = current_threads[cpu];
-
-    int ret = pcb_destroy(current->parent->pid);
-    return ret;
-}
-
-void yield(registers_t *regs) {
-    int cpu        = get_cpu();
-    tcb_t *current = current_threads[cpu];
-    tcb_t *next;
-
-    switch (current->state) {
-    case THREAD_READY:
-        next = current;
-        break;
-
-    case THREAD_RUNNING:
-        if (--current->time_slice > 0) {
-            return;
-        }
-
-        fpu_save(current->fpu);
-        // RIP context_save (08/2025-11/2025)
-        // TODO: find some way to save registers if regs == NULL
-        memcpy(current->regs, regs, sizeof(registers_t));
-
-        current->state      = THREAD_READY;
-        current->time_slice = SCHEDULER_THREAD_TS;
-
-        thread_push_to_queue(current);
-
-        next = pick_next_thread(cpu);
-        break;
-
-    case THREAD_WAITING:
-    case THREAD_DEAD:
-        thread_remove_from_queue(current);
-        next = pick_next_thread(cpu);
-        break;
-    }
-
-    if (!next) {
-        mprintf_warn(
-            "No more processes left to run. If you want, you can "
-            "reboot your compooter, or, you can keep your computer on to "
-            "unlock a very high electrical bill :kekw:\n");
-        scheduler_idle(); // good luck getting out of here >^D
-    }
-
-    current_threads[cpu] = next;
-    next->state          = THREAD_RUNNING;
-
-    fpu_restore(next->fpu);
-    // it instantly returns to the RIP in here
-    if (!regs) {
-        // we won't return from here
-        context_load(next->regs);
-    }
-    // or else... just do it the gentle way
-    memcpy(regs, next->regs, sizeof(registers_t));
+    sched->context_switches++;
+    asm("sti");
 }

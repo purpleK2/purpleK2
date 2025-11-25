@@ -1,8 +1,9 @@
 #include "time.h"
 
-#include <interrupts/irq.h>
 #include <scheduler/scheduler.h>
 #include <util/util.h>
+
+#include <stdio.h>
 
 static uint64_t ticks;
 
@@ -18,11 +19,4 @@ void timer_tick(void *ctx) {
     UNUSED(ctx);
 
     set_ticks(get_ticks() + 1);
-}
-
-void scheduler_timer_tick(void *ctx) {
-    timer_tick(ctx);
-
-    irq_sendEOI(((registers_t *)ctx)->interrupt);
-    yield(ctx);
 }

@@ -1,8 +1,8 @@
-#include "ipi.h"
-#include "util/macro.h"
+#include <smp/ipi.h>
 
 #include <apic/lapic/lapic.h>
 #include <interrupts/isr.h>
+#include <util/string.h>
 
 extern void ipi_handler_halt(void *ctx);
 extern void ipi_handler_tlb_flush(void *ctx);
@@ -51,6 +51,5 @@ void ipi_self(uint8_t vector) {
 }
 
 void tlb_shootdown(uint64_t virtual) {
-    UNUSED(virtual);
     ipi_broadcast(IPI_VECTOR_TLB_FLUSH);
 }

@@ -1,7 +1,7 @@
 [submodule "libs/limine"]
 	path = libs/limine
-	url = https://codeberg.org/Limine/Limine.git
-	branch = v10.x-binary
+	url = https://github.com/limine-bootloader/limine.git
+	branch = v9.x-binary
 
 [submodule "libs/uacpi"]
 	path = libs/uacpi
@@ -10,7 +10,3 @@
 [submodule "libs/nanoprintf"]
 	path = libs/nanoprintf
 	url = https://github.com/charlesnicholson/nanoprintf.git
-
-[submodule "libs/limine-protocol"]
-	path = libs/limine-protocol
-	url = https://github.com/limine-bootloader/limine-protocol.git

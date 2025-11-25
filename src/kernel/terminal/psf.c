@@ -1,8 +1,7 @@
-#include "psf.h"
-
+#include "kernel.h"
 #include <graphical/framebuffer.h>
-#include <kernel.h>
 #include <terminal/font.h>
+#include <terminal/psf.h>
 #include <terminal/terminal.h>
 
 #include <stdio.h>
@@ -14,14 +13,16 @@ bool psfLoad(void *buffer) {
     PSF1Header *header = (PSF1Header *)buffer;
 
     if (header->magic != PSF1_MAGIC) {
-        debugf("Invalid PSF magic! Only PSF1 is supported{0x0436} "
+        debugf("[console] Invalid PSF magic! Only PSF1 is supported{0x0436} "
                "supplied{%04X}\n",
                header->magic);
         return false;
     }
 
     if (!(header->mode & PSF1_MODE512) && !(header->mode & PSF1_MODEHASTAB)) {
-        debugf("Invalid PSF mode!\n");
+        debugf("[console] Invalid PSF mode! No unicode table found... "
+               "mode{%02X}\n",
+               header->mode);
         return false;
     }
 

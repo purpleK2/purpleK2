@@ -1,15 +1,11 @@
 #include "device.h"
-#include "fs/devfs/devfs.h"
 
 #include <memory/heap/kheap.h>
-
 #include <stdio.h>
-#include <string.h>
+#include <util/string.h>
 
-device_t *device_table[DEVICES_MAX];
-int device_count = 0;
-
-extern devfs_t *devfs;
+static device_t *device_table[DEVICES_MAX];
+static int device_count = 0;
 
 int register_device(device_t *dev) {
     if (device_count >= DEVICES_MAX) {
@@ -19,8 +15,6 @@ int register_device(device_t *dev) {
     device_table[device_count++] = dev;
     debugf_debug("Device '%s' registered with type %s\n", dev->name,
                  dev->type == DEVICE_TYPE_BLOCK ? "BLK" : "CHR");
-
-    devfs_refresh(devfs);
 
     return 0;
 }
@@ -41,13 +35,7 @@ int unregister_device(const char *name) {
         return -1;
     }
 
-    if (dev->dev_node_path) {
-        kfree((void *)dev->dev_node_path);
-    }
-
     kfree(dev);
-
-    devfs_refresh(devfs);
 
     return 0;
 }

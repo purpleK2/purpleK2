@@ -1,183 +1,251 @@
 #include "vfs.h"
-#include "fs/file_io.h"
-#include "stdio.h"
-
 #include <memory/heap/kheap.h>
+#include <util/string.h>
 
-#include <stdint.h>
-#include <string.h>
+static fs_node_t *vfs_root_node = NULL;
+static AVLTree *vfs_mount_table = NULL;
 
-#include <errors.h>
-
-vfs_t *vfs_list = NULL;
-
-vfs_t *vfs_create(vfs_fstype_t fs_type, void *fs_data) {
-    vfs_t *vfs = kmalloc(sizeof(vfs_t));
-    memset(vfs, 0, sizeof(vfs_t));
-
-    vfs->fs_type = fs_type;
-
-    vfs->ops = kmalloc(sizeof(vfsops_t));
-    memset(vfs->ops, 0, sizeof(vfsops_t));
-
-    // vfs->root_vnode = vnode_create(root_path, NULL);
-
-    vfs->vfs_data = fs_data;
-
-    vfs_append(vfs);
-
-    return vfs;
+static int vfs_mount_compare(const void *a, const void *b) {
+    return strcmp((const char *)a, (const char *)b);
 }
 
-vfs_t *vfs_mount(void *fs, vfs_fstype_t fs_type, char *path,
-                 void *rootvn_data) {
-    if (!fs) {
-        return NULL;
+fs_node_t *vfs_root(void) {
+    return vfs_root_node;
+}
+
+int vfs_register(fs_vfs_t *vfs) {
+    if (!vfs_mount_table)
+        vfs_mount_table = avl_create(vfs_mount_compare);
+    if (!vfs_root_node && vfs && vfs->root)
+        vfs_root_node = vfs->root;
+    return 0;
+}
+
+int vfs_unregister(fs_vfs_t *vfs) {
+    return 0;
+}
+
+int vfs_mount(const char *path, fs_vfs_t *vfs, int flags) {
+    fs_mount_t *mount = kmalloc(sizeof(fs_mount_t));
+    if (!mount)
+        return -1;
+    mount->vfs    = vfs;
+    mount->flags  = flags;
+    mount->path   = strdup(path);
+    mount->prefix = strdup(path);
+    mount->node   = vfs->root;
+    if (avl_insert(vfs_mount_table, mount->prefix, mount) != 0) {
+        kfree(mount);
+        return -1;
     }
-
-    vfs_t *vfs = vfs_create(fs_type, fs);
-
-    vfs_t *rootvfs; // the vfs in which the mountpoint resides
-    if (vfs_resolve_mount(path, &rootvfs) != EOK) {
-        rootvfs = vfs;
-    }
-
-    vfs->root_vnode           = vnode_create(rootvfs, path, rootvn_data);
-    // the vfs in which the new filesystem resides
-    vfs->root_vnode->vfs_here = vfs;
-
-    return vfs;
+    return 0;
 }
 
-int vfs_append(vfs_t *vfs) {
-    if (!vfs_list) {
-        vfs_list = vfs;
-        return EOK;
-    }
-
-    vfs_t *v;
-    for (v = vfs_list; v->next != NULL; v = v->next)
-        ;
-
-    v->next = vfs;
-
-    return EOK;
+int vfs_unmount(const char *path) {
+    return avl_remove(vfs_mount_table, (void *)path);
 }
 
-vnode_t *vnode_create(vfs_t *root_vfs, char *path, void *data) {
-    vnode_t *vnode = kmalloc(sizeof(vnode_t));
-    memset(vnode, 0, sizeof(vnode_t));
-
-    vnode->path = strdup(path);
-
-    vnode->root_vfs  = root_vfs;
-    vnode->node_data = data;
-
-    vnode->ops = kmalloc(sizeof(vnops_t));
-    memset(vnode->ops, 0, sizeof(vnops_t));
-
-    return vnode;
-}
-
-int vfs_resolve_mount(char *path, vfs_t **out) {
-    vfs_t *v = vfs_list;
-    for (; v != NULL; v = v->next) {
-        if (!v->root_vnode) {
-            return ENULLPTR;
+static fs_mount_t *vfs_resolve_mount(const char *path) {
+    AVLNode *node    = avl_first(vfs_mount_table);
+    fs_mount_t *best = NULL;
+    while (node) {
+        fs_mount_t *mount = (fs_mount_t *)avl_node_value(node);
+        if (strncmp(path, mount->prefix, strlen(mount->prefix)) == 0) {
+            if (!best || strlen(mount->prefix) > strlen(best->prefix)) {
+                best = mount;
+            }
         }
+        node = avl_next(node);
+    }
+    return best;
+}
 
-        char *prefix = v->root_vnode->path;
-
-        // - eg. you're searching for "/" and the current VFS is "/initrd"
-        // - maybe you're checking for "/mnt/path/something", which would be
-        //   longer than "/initrd", but the check after this one would still
-        //   fail
-        if (strlen(path) < strlen(prefix)) {
-            continue;
+int vfs_lookup(const char *path, fs_node_t **out) {
+    fs_mount_t *mnt = vfs_resolve_mount(path);
+    if (!mnt)
+        return -1;
+    fs_node_t *current = mnt->node;
+    char *dup          = strdup(path + strlen(mnt->prefix));
+    char *token        = strtok(dup, "/");
+    while (token) {
+        if (!current->ops || !current->ops->lookup) {
+            kfree(dup);
+            return -1;
         }
-
-        // this way we are sure it compares all of the mnt prefix string
-        if (strncmp(path, prefix, strlen(prefix)) == 0) {
-            *out = v;
-            break;
+        if (current->ops->lookup(current, token, &current) != 0) {
+            kfree(dup);
+            return -1;
         }
+        token = strtok(NULL, "/");
     }
-
-    if (!v) {
-        return ENOENT;
-    }
-
-    return EOK;
+    *out = current;
+    kfree(dup);
+    return 0;
 }
 
-int vfs_open(vfs_t *vfs, char *path, int flags, fileio_t **out) {
-    vnode_t *vn_file  = vnode_create(vfs, path, NULL);
-    vn_file->vfs_here = vfs;
-    memcpy(vn_file->ops, vfs->root_vnode->ops, sizeof(vnops_t));
-    // ignore the mountpoint part
-    vn_file->path += strlen(vfs->root_vnode->path);
-
-    fileio_t *fio_file = fio_create();
-
-    if (vn_file->ops->open(&vn_file, flags, false, &fio_file) != EOK) {
-        kfree(vn_file->path);
-        kfree(vn_file);
-        return ENOENT;
-    }
-
-    fio_file->private = vn_file;
-
-    *out = fio_file;
-
-    // put it back just in case
-    vn_file->path -= strlen(vfs->root_vnode->path);
-
-    return EOK;
+int vfs_open(const char *path, int flags, fs_open_file_t **out) {
+    fs_node_t *node;
+    if (vfs_lookup(path, &node) != 0)
+        return -1;
+    fs_open_file_t *file = kmalloc(sizeof(fs_open_file_t));
+    file->node           = node;
+    file->offset         = 0;
+    file->flags          = flags;
+    if (node->ops && node->ops->open)
+        node->ops->open(node, file);
+    *out = file;
+    return 0;
 }
 
-int vfs_read(vnode_t *vnode, size_t size, size_t offset, void *out) {
-    if (!vnode) {
-        return -ENULLPTR;
-    }
-
-
-    int ret = vnode->ops->read(vnode, &size, &offset, out);
-
-    return ret;
+int vfs_close(fs_open_file_t *file) {
+    if (file->node->ops && file->node->ops->close)
+        file->node->ops->close(file->node, file);
+    kfree(file);
+    return 0;
 }
 
-int vfs_write(vnode_t *vnode, void *buf, size_t size, size_t offset) {
-    if (!vnode) {
-        return ENULLPTR;
-    }
-
-    int ret = vnode->ops->write(vnode, buf, &size, &offset);
-
-    return ret;
+int vfs_read(fs_open_file_t *file, void *buf, size_t len) {
+    if (!file->node->ops || !file->node->ops->read)
+        return -1;
+    int r = file->node->ops->read(file->node, buf, len, file->offset);
+    if (r > 0)
+        file->offset += r;
+    return r;
 }
 
-int vfs_ioctl(vnode_t *vnode, int request, void *arg) {
-    if (!vnode) {
-        return ENULLPTR;
-    }
-
-    int ret = vnode->ops->ioctl(vnode, request, arg);
-
-    return ret;
+int vfs_write(fs_open_file_t *file, const void *buf, size_t len) {
+    if (!file->node->ops || !file->node->ops->write)
+        return -1;
+    int w = file->node->ops->write(file->node, buf, len, file->offset);
+    if (w > 0)
+        file->offset += w;
+    return w;
 }
 
-int vfs_close(vnode_t *vnode) {
-    if (!vnode) {
-        return ENULLPTR;
+int vfs_seek(fs_open_file_t *file, size_t offset, int whence) {
+    if (!file->node->ops || !file->node->ops->seek)
+        return -1;
+    return file->node->ops->seek(file->node, offset, whence);
+}
+
+int vfs_stat(const char *path, stat_t *st) {
+    fs_node_t *node;
+    if (vfs_lookup(path, &node) != 0)
+        return -1;
+    if (!node->ops || !node->ops->stat)
+        return -1;
+    return node->ops->stat(node, st);
+}
+
+int vfs_mkdir(const char *path, int flags) {
+    fs_node_t *dir;
+    char *dup  = strdup(path);
+    char *base = strrchr(dup, '/');
+    if (!base || base == dup)
+        return -1;
+    *base = 0;
+    base++;
+    if (vfs_lookup(dup, &dir) != 0) {
+        kfree(dup);
+        return -1;
     }
-
-    int r = vnode->ops->close(vnode, 0, false);
-
-    if (r != EOK) {
-        return r;
+    if (!dir->ops || !dir->ops->mkdir) {
+        kfree(dup);
+        return -1;
     }
+    int res = dir->ops->mkdir(dir, base, flags);
+    kfree(dup);
+    return res;
+}
 
-    kfree(vnode);
+int vfs_unlink(const char *path) {
+    fs_node_t *dir;
+    char *dup  = strdup(path);
+    char *base = strrchr(dup, '/');
+    if (!base || base == dup)
+        return -1;
+    *base = 0;
+    base++;
+    if (vfs_lookup(dup, &dir) != 0) {
+        kfree(dup);
+        return -1;
+    }
+    if (!dir->ops || !dir->ops->unlink) {
+        kfree(dup);
+        return -1;
+    }
+    int res = dir->ops->unlink(dir, base);
+    kfree(dup);
+    return res;
+}
 
-    return EOK;
+int vfs_rename(const char *oldpath, const char *newpath) {
+    fs_node_t *old_dir, *new_dir;
+    char *old      = strdup(oldpath);
+    char *new      = strdup(newpath);
+    char *old_base = strrchr(old, '/');
+    char *new_base = strrchr(new, '/');
+    if (!old_base || !new_base)
+        return -1;
+    *old_base = 0;
+    *new_base = 0;
+    old_base++;
+    new_base++;
+    if (vfs_lookup(old, &old_dir) != 0 || vfs_lookup(new, &new_dir) != 0) {
+        kfree(old);
+        kfree(new);
+        return -1;
+    }
+    if (!old_dir->ops || !old_dir->ops->rename) {
+        kfree(old);
+        kfree(new);
+        return -1;
+    }
+    int res = old_dir->ops->rename(old_dir, old_base, new_dir, new_base);
+    kfree(old);
+    kfree(new);
+    return res;
+}
+
+int vfs_sync(void) {
+    AVLNode *node = avl_first(vfs_mount_table);
+    while (node) {
+        fs_mount_t *mnt = avl_node_value(node);
+        if (mnt->vfs && mnt->vfs->ops && mnt->vfs->ops->sync)
+            mnt->vfs->ops->sync(mnt->vfs);
+        node = avl_next(node);
+    }
+    return 0;
+}
+
+int vfs_create(const char *path, fs_node_type type, int flags) {
+    fs_node_t *parent;
+    char *dup  = strdup(path);
+    char *name = strrchr(dup, '/');
+    if (!name || name == dup) {
+        kfree(dup);
+        return -1;
+    }
+    *name = 0;
+    name++;
+    if (strlen(name) == 0) {
+        kfree(dup);
+        return -1;
+    }
+    if (vfs_lookup(dup, &parent) != 0) {
+        kfree(dup);
+        return -1;
+    }
+    if (parent->vfs && parent->vfs->ops && parent->vfs->ops->create) {
+        if (parent->vfs->ops->create(parent->vfs, parent, name, type, flags) !=
+            0) {
+            kfree(dup);
+            return -1;
+        }
+    } else {
+        kfree(dup);
+        return -1;
+    }
+    kfree(dup);
+    return 0;
 }

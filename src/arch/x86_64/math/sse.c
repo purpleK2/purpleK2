@@ -1,6 +1,5 @@
 #include "sse.h"
-
-#include <cpu.h>
+#include "cpu.h"
 
 #include <stdio.h>
 
@@ -17,7 +16,7 @@ void init_sse() {
         _hcf();
     }
 
-    if (!check_sse2()) {
+    if (!check_sse()) {
         kprintf_panic("SSE2 not available!\n");
         _hcf();
     }

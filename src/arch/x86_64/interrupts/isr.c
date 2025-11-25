@@ -1,29 +1,24 @@
 #include "isr.h"
-#include "elf/sym.h"
-#include "loader/module/module_loader.h"
-#include "syscalls/syscall.h"
 
-#include <apic/lapic/lapic.h>
-#include <gdt/gdt.h>
-#include <idt/idt.h>
 #include <kernel.h>
-#include <limine.h>
+
 #include <smp/ipi.h>
 #include <smp/smp.h>
+
+#include <apic/lapic/lapic.h>
+
+#include <gdt/gdt.h>
+#include <idt/idt.h>
+
+#include <limine.h>
 
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 
 extern struct limine_hhdm_request *hhdm_request;
 
 isrHandler isr_handlers[IDT_MAX_DESCRIPTORS];
-
-struct stackFrame {
-    struct stackFrame *rbp;
-    uint64_t rip;
-};
 
 static const char *const exceptions[] = {"Divide by zero error",
                                          "Debug",
@@ -58,40 +53,12 @@ static const char *const exceptions[] = {"Divide by zero error",
                                          "Security Exception",
                                          ""};
 
-void isr_syscall(void *ctx) {
-    registers_t *regs = ctx;
-
-    long syscall_num = regs->rax;
-    long arg1        = regs->rdi;
-    long arg2        = regs->rsi;
-    long arg3        = regs->rdx;
-    long arg4        = regs->r8;
-    long arg5        = regs->r9;
-    long arg6        = regs->r10;
-
-    long ret = handle_syscall(syscall_num, arg1, arg2, arg3, arg4, arg5, arg6);
-
-    regs->rax = ret;
-}
-
-
-static void isr_debug(void *ctx)
-{
-    registers_t *regs = ctx;
-    debugf_warn("Debug exception at RIP=0x%llx\n", regs->rip);
-
-    regs->rflags &= ~(1ULL << 8);
-
-    regs->rip += 1;
-}
-
 void isr_init() {
     for (int i = 0; i < 256; i++) {
         idt_gate_enable(i);
     }
 
-    isr_registerHandler(0x80, isr_syscall);
-    isr_registerHandler(0x1, isr_debug);
+    idt_gate_disable(0x80);
 }
 
 void print_reg_dump(void *ctx) {
@@ -130,80 +97,73 @@ void print_reg_dump(void *ctx) {
             regs->rsi);
 }
 
-static void print_symbol(int frame, uintptr_t addr) {
-    static struct SymbolInfo info = {0};
-    memset(&info, 0, sizeof(info)); // because its static
-    const char *mod_name = NULL;
-
-    // Check kernel
-    if (currently_running_mod &&
-        addr >= (uintptr_t)currently_running_mod->base_address &&
-        addr < (uintptr_t)currently_running_mod->end_address &&
-        resolve_symbol(currently_running_mod->ehdr,
-                       (uintptr_t)currently_running_mod->end_address -
-                           (uintptr_t)currently_running_mod->base_address,
-                       addr - (uintptr_t)currently_running_mod->base_address,
-                       &info)) {
-        mod_name = currently_running_mod->modinfo->name;
-    } else {
-        mod_name = "kernel";
-        resolve_symbol(get_bootloader_data()->kernel_file_data,
-                       get_bootloader_data()->kernel_file_size, addr, &info);
-    }
-
-    if (info.name) {
-        if (strcmp(mod_name, "kernel") == 0) {
-            size_t offset = addr - info.start;
-            if (info.size > 0)
-                mprintf("[%d][%p] %s:%s+0x%zx/0x%zx\n", frame, (void *)addr,
-                        mod_name, info.name, offset, info.size);
-            else
-                mprintf("[%d][%p] %s:%s+0x%zx\n", frame, (void *)addr, mod_name,
-                        info.name, offset);
-        } else {
-            size_t offset =
-                addr -
-                ((uintptr_t)currently_running_mod->base_address + info.start);
-            if (info.size > 0)
-                mprintf(
-                    "[%d][%p] %s:%s+0x%zx/0x%zx -- (0x%zx)\n", frame,
-                    (void *)addr, mod_name, info.name, offset, info.size,
-                    (addr - (uintptr_t)currently_running_mod->base_address));
-            else
-                mprintf(
-                    "[%d][%p] %s:%s+0x%zx  -- (0x%zx)\n", frame, (void *)addr,
-                    mod_name, info.name, offset,
-                    (addr - (uintptr_t)currently_running_mod->base_address));
-        }
-    } else {
-        mprintf("[%d][%p] <unknown>\n", frame, (void *)addr);
-    }
-}
-
 void panic_common(void *ctx) {
     registers_t *regs = ctx;
+
+    debugf(ANSI_COLOR_BLUE);
+
+    bsod_init();
+
+    uint64_t cpu = 0;
+    if (is_lapic_enabled())
+        cpu = lapic_get_id();
+
+    mprintf("KERNEL PANIC! \"%s\" (Exception n. %d) on CPU %hhu\n",
+            exceptions[regs->interrupt], regs->interrupt, cpu);
+    mprintf("\terrcode: %llx\n", regs->error);
 
     print_reg_dump(regs);
 
     // stacktrace
     mprintf("\n\n --- STACK TRACE ---\n");
-    struct stackFrame *stack = (struct stackFrame *)regs->rbp;
-    int frame                = 0;
+    uint64_t *rbp = (uint64_t *)regs->rbp;
+    int frame     = 0;
 
-    print_symbol(frame++, regs->rip);
+    bootloader_data *bootloader_data = get_bootloader_data();
 
-    while (stack) {
-        print_symbol(frame++, stack->rip);
-        stack = (struct stackFrame *)stack->rbp;
+    while (rbp) {
+        // In x86_64 calling convention:
+        // rbp[0] = previous rbp
+        // rbp[1] = return address
+
+        uint64_t return_addr =
+            rbp[1]; // Return address (points after call instruction)
+        uint64_t *prev_rbp = (uint64_t *)rbp[0];
+
+        // Approximate function address calculation
+        // Note: This is a simplification - normally you'd use debug info
+        // The function address is typically a few bytes before the return
+        // address
+        uint64_t approx_func_addr =
+            return_addr - 5; // Typical x86_64 call instruction is 5 bytes
+
+        // If this is in the higher-half kernel space, convert to physical
+        // address
+        uint64_t phys_addr = 0;
+        if (return_addr >= bootloader_data->kernel_base_virtual) {
+            // Using HHDM offset from limine bootloader
+            phys_addr = return_addr - bootloader_data->kernel_base_virtual;
+            mprintf("Frame %d: [%p] func addr: %llx (phys: %llx)\n", frame, rbp,
+                    approx_func_addr, phys_addr);
+        } else {
+            mprintf("Frame %d: [%p] func addr: %llx\n", frame, rbp,
+                    approx_func_addr);
+        }
+
+        // Move to previous frame
+        rbp = prev_rbp;
+        frame++;
+
+        // Guard against invalid pointers or corrupted stack
+        if (frame > 20 || !rbp || (uint64_t)rbp < 0x1000)
+            break;
     }
-
     mprintf("\nPANIC LOG END --- HALTING ---\n");
     debugf(ANSI_COLOR_RESET);
     asm("cli");
-    _hcf();
+    for (;;)
+        _hcf();
 }
-
-
 
 void isr_handler(void *ctx) {
     registers_t *regs = ctx;
@@ -211,8 +171,6 @@ void isr_handler(void *ctx) {
     uint64_t cpu = 0;
     if (is_lapic_enabled())
         cpu = lapic_get_id();
-
-    UNUSED(cpu);
 
     if (isr_handlers[regs->interrupt] != NULL) {
         isr_handlers[regs->interrupt](regs);
@@ -222,21 +180,12 @@ void isr_handler(void *ctx) {
     } else {
         stdio_panic_init();
 
-        debugf(ANSI_COLOR_BLUE);
-
-        bsod_init();
-
-        uint64_t cpu = 0;
-        if (is_lapic_enabled())
-            cpu = lapic_get_id();
-
-        mprintf("KERNEL PANIC! \"%s\" (Exception n. %d) on CPU %hhu\n",
-                exceptions[regs->interrupt], regs->interrupt, cpu);
-        mprintf("\terrcode: %llx\n", regs->error);
-
         panic_common(regs);
 
         _hcf();
+        for (;;) {
+            asm("hlt");
+        }
     }
 }
 
