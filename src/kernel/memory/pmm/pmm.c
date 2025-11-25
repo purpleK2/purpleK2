@@ -6,27 +6,28 @@
 
 #include "pmm.h"
 
-#include <autoconf.h>
 #include <kernel.h>
 #include <limine.h>
-#include <spinlock.h>
+
+#include <util/string.h>
 #include <util/util.h>
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
-#include <string.h>
 
-#include <stdatomic.h>
+#include <spinlock.h>
 
-lock_t PMM_LOCK = ATOMIC_FLAG_INIT;
+#include <autoconf.h>
+
+lock_t PMM_LOCK;
 
 int usable_entry_count;
 
 extern struct limine_memmap_response *memmap_response;
 extern void _hcf();
 
-freelist_node *pmm_headnode;
+freelist_node *fl_head;
 
 void pmm_init() {
     // array of nodes (used only on initialization)
@@ -55,7 +56,7 @@ void pmm_init() {
         fl_node->length = memmap_entry->length;
 
         if (temp == 0)
-            pmm_headnode = fl_node;
+            fl_head = fl_node;
 
         fl_nodes[temp] = fl_node;
 
@@ -73,7 +74,7 @@ void pmm_init() {
     kprintf_info("Found %d usable regions\n", usable_entry_count);
 
     // prints all nodes
-    for (freelist_node *fl_node = pmm_headnode; fl_node != NULL;
+    for (freelist_node *fl_node = fl_head; fl_node != NULL;
          fl_node                = fl_node->next) {
         debugf_debug("ENTRY n. %p\n", fl_node);
         debugf_debug("\tlength: %llx\n", fl_node->length);
@@ -93,11 +94,11 @@ int get_freelist_entry_count() {
 */
 freelist_node *fl_update_nodes() {
     usable_entry_count = 0;
-    for (freelist_node *i = pmm_headnode; i != NULL;
+    for (freelist_node *i = fl_head; i != NULL;
          i                = i->next, usable_entry_count++)
         ;
 
-    return pmm_headnode;
+    return fl_head;
 }
 
 int pmm_allocs = 0; // keeping track of how many times pmm_alloc was called
@@ -105,7 +106,6 @@ int pmm_frees  = 0; // keeping track of how many times pmm_free was called
 
 // Omar, this is a PAGE FRAME allocator no need for custom <bytes> parameter
 void *pmm_alloc_page() {
-    spinlock_acquire(&PMM_LOCK);
     pmm_allocs++;
 #ifdef CONFIG_PMM_DEBUG
     debugf_debug("--- Allocation n.%d ---\n", pmm_allocs);
@@ -113,7 +113,7 @@ void *pmm_alloc_page() {
 
     void *ptr = NULL;
     freelist_node *cur_node;
-    for (cur_node = pmm_headnode; cur_node != NULL; cur_node = cur_node->next) {
+    for (cur_node = fl_head; cur_node != NULL; cur_node = cur_node->next) {
 #ifdef CONFIG_PMM_DEBUG
         debugf_debug("Looking for available memory at address %p\n", cur_node);
 #endif
@@ -129,7 +129,7 @@ void *pmm_alloc_page() {
 
     // if we've got here and nothing was found, then kernel panic
     if (cur_node == NULL) {
-        kprintf_panic("OUT OF MEMORY!");
+        kprintf_panic("OUT OF MEMORY!!\n");
         _hcf();
     }
 
@@ -141,13 +141,13 @@ void *pmm_alloc_page() {
     ptr = (void *)(cur_node);
 
     if (cur_node->length - PFRAME_SIZE <= 0) {
-        pmm_headnode = pmm_headnode->next;
+        fl_head = fl_head->next;
     } else {
-        // shift the node
+        // we'll "increment" that node
         freelist_node *new_node = (ptr + PFRAME_SIZE);
         new_node->length        = (cur_node->length - PFRAME_SIZE);
         new_node->next          = cur_node->next;
-        pmm_headnode            = new_node;
+        fl_head                 = new_node;
     }
 
     fl_update_nodes();
@@ -160,8 +160,6 @@ void *pmm_alloc_page() {
 
     // zero out the whole allocated region
     memset((void *)ptr, 0, PFRAME_SIZE);
-
-    spinlock_release(&PMM_LOCK);
 
     // we need the physical address of the free entry
     return (void *)VIRT_TO_PHYSICAL(ptr);
@@ -177,7 +175,6 @@ void *pmm_alloc_pages(size_t pages) {
 }
 
 void pmm_free(void *ptr, size_t pages) {
-    spinlock_acquire(&PMM_LOCK);
     pmm_frees++;
 #ifdef CONFIG_PMM_DEBUG
     debugf_debug("--- Deallocation n.%d ---\n", pmm_frees);
@@ -186,31 +183,15 @@ void pmm_free(void *ptr, size_t pages) {
                  ptr + (pages * PFRAME_SIZE));
 #endif
 
-    freelist_node *deallocated = (freelist_node *)PHYS_TO_VIRTUAL(ptr);
+    freelist_node *fl_deallocated = (freelist_node *)PHYS_TO_VIRTUAL(ptr);
+    fl_deallocated->length        = PFRAME_SIZE * pages;
+    fl_deallocated->next          = NULL;
 
-    // you can check vmm.c for an explanation of the same behaviour
-    for (freelist_node *f = pmm_headnode; f != NULL; f = f->next) {
-        freelist_node *next = f->next;
+    // add the node to end of list
 
-        if (next < deallocated) {
-            continue;
-        }
+    freelist_node *fl_last = NULL;
+    for (fl_last = fl_head; fl_last->next != NULL; fl_last = fl_last->next)
+        ;
 
-        if ((f + (f->length)) == deallocated) {
-            f->length += (PFRAME_SIZE * pages);
-        } else if ((f - (PFRAME_SIZE * pages)) == deallocated) {
-            freelist_node *new = next - (PFRAME_SIZE * pages);
-            new->length        = next->length + (PFRAME_SIZE * pages);
-            new->next          = next->next;
-            f->next            = new;
-        } else {
-            deallocated->length = (PFRAME_SIZE * pages);
-            deallocated->next   = next;
-            f->next             = deallocated;
-        }
-
-        break;
-    }
-
-    spinlock_release(&PMM_LOCK);
+    fl_last->next = fl_deallocated;
 }

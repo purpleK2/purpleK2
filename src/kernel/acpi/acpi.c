@@ -1,6 +1,9 @@
 #include "acpi/acpi.h"
 
-#include <uacpi/uacpi.h>
+#include "uacpi/acpi.h"
+#include "uacpi/uacpi.h"
+
+#include <stdio.h>
 
 int uacpi_init() {
     uacpi_status ret = uacpi_initialize(0);

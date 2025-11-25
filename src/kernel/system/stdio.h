@@ -4,12 +4,11 @@
 // #define PRINTF_MIRROR            // printf() will be mirrored to the E9 port
 #define BETTER_DEBUG // better debug info (with function names and line)
 
-#include <nanoprintf.h>
-#include <tsc/tsc.h>
-
 #include <stdint.h>
 
-#include "time.h"
+#include <nanoprintf.h>
+#include <time.h>
+#include <tsc/tsc.h>
 
 extern bool pit;
 
@@ -56,8 +55,7 @@ int printf(void (*putc_function)(const char *, int), const char *fmt, ...);
 
 // snprintf and such are copied from nanoprintf directly
 
-#define sprintf(buf, fmt, ...)                                                 \
-    npf_snprintf(buf, sizeof(buf), fmt, ##__VA_ARGS__)
+#define sprintf(buf, fmt, ...) npf_snprintf(buf, 0xFFFFFFFF, fmt, ##__VA_ARGS__)
 #define vsnprintf(buf, len, fmt, ...)                                          \
     npf_vsnprintf(buf, len, fmt, ##__VA_ARGS__)
 #define snprintf(buf, len, fmt, ...) npf_snprintf(buf, len, fmt, ##__VA_ARGS__)
@@ -101,8 +99,8 @@ int printf(void (*putc_function)(const char *, int), const char *fmt, ...);
 #define kprintf_ok(fmt, ...)                                                   \
     ({                                                                         \
         uint32_t prev_fg = fb_get_fg();                                        \
-        fb_set_fg(SUCCESS_FG);                                                 \
-        if (!(pit || tsc)) {                                                   \
+        fb_set_fg(0x00e826);                                                   \
+        if (!(pit)) {                                                          \
             kprintf("early: (%s:%d) " fmt, __FUNCTION__, __LINE__,             \
                     ##__VA_ARGS__);                                            \
         } else {                                                               \
@@ -117,7 +115,7 @@ int printf(void (*putc_function)(const char *, int), const char *fmt, ...);
     ({                                                                         \
         uint32_t prev_fg = fb_get_fg();                                        \
         fb_set_fg(INFO_FG);                                                    \
-        if (!(pit || tsc)) {                                                   \
+        if (!(pit)) {                                                          \
             kprintf("early: (%s:%d) " fmt, __FUNCTION__, __LINE__,             \
                     ##__VA_ARGS__);                                            \
         } else {                                                               \
@@ -132,7 +130,7 @@ int printf(void (*putc_function)(const char *, int), const char *fmt, ...);
     ({                                                                         \
         uint32_t prev_fg = fb_get_fg();                                        \
         fb_set_fg(WARNING_FG);                                                 \
-        if (!(pit || tsc)) {                                                   \
+        if (!(pit)) {                                                          \
             kprintf("early: (%s:%d) " fmt, __FUNCTION__, __LINE__,             \
                     ##__VA_ARGS__);                                            \
         } else {                                                               \
@@ -147,11 +145,11 @@ int printf(void (*putc_function)(const char *, int), const char *fmt, ...);
     ({                                                                         \
         uint32_t prev_fg = fb_get_fg();                                        \
         fb_set_fg(PANIC_FG);                                                   \
-        if (!(pit || tsc)) {                                                   \
+        if (!(pit)) {                                                          \
             kprintf("early: (%s:%d) " fmt " Halting...", __FUNCTION__,         \
                     __LINE__, ##__VA_ARGS__);                                  \
         } else {                                                               \
-            kprintf("[%llu.%03llu] (%s:%d) " fmt " Halting...",                \
+            kprintf("[%llu.%03llu] %s:%d) " fmt " Halting...",                 \
                     get_ticks() / 1000, get_ticks() % 1000, __FUNCTION__,      \
                     __LINE__, ##__VA_ARGS__);                                  \
         }                                                                      \
@@ -186,7 +184,7 @@ int printf(void (*putc_function)(const char *, int), const char *fmt, ...);
 
 #define debugf_debug(fmt, ...)                                                 \
     ({                                                                         \
-        if (!(pit || tsc)) {                                                   \
+        if (!(pit)) {                                                          \
             debugf(COLOR(ANSI_COLOR_GRAY, "early: (%s:%d) " fmt),              \
                    __FUNCTION__, __LINE__, ##__VA_ARGS__);                     \
         } else {                                                               \
@@ -198,7 +196,7 @@ int printf(void (*putc_function)(const char *, int), const char *fmt, ...);
 
 #define debugf_ok(fmt, ...)                                                    \
     ({                                                                         \
-        if (!(pit || tsc)) {                                                   \
+        if (!(pit)) {                                                          \
             debugf(COLOR(ANSI_COLOR_GREEN, "early: (%s:%d) " fmt),             \
                    __FUNCTION__, __LINE__, ##__VA_ARGS__);                     \
         } else {                                                               \
@@ -210,7 +208,7 @@ int printf(void (*putc_function)(const char *, int), const char *fmt, ...);
 
 #define debugf_warn(fmt, ...)                                                  \
     ({                                                                         \
-        if (!(pit || tsc)) {                                                   \
+        if (!(pit)) {                                                          \
             debugf(COLOR(ANSI_COLOR_ORANGE, "early: (%s:%d) " fmt),            \
                    __FUNCTION__, __LINE__, ##__VA_ARGS__);                     \
         } else {                                                               \
@@ -222,7 +220,7 @@ int printf(void (*putc_function)(const char *, int), const char *fmt, ...);
 
 #define debugf_panic(fmt, ...)                                                 \
     ({                                                                         \
-        if (!(pit || tsc)) {                                                   \
+        if (!(pit)) {                                                          \
             debugf(COLOR(ANSI_COLOR_RED, "early: (%s:%d) " fmt), __FUNCTION__, \
                    __LINE__, ##__VA_ARGS__);                                   \
         } else {                                                               \
@@ -230,30 +228,6 @@ int printf(void (*putc_function)(const char *, int), const char *fmt, ...);
                    get_ticks() / 1000, get_ticks() % 1000, __FUNCTION__,       \
                    __LINE__, ##__VA_ARGS__);                                   \
         }                                                                      \
-    })
-
-#define mprintf_info(fmt, ...)                                                 \
-    ({                                                                         \
-        kprintf_info(fmt, ##__VA_ARGS__);                                      \
-        debugf_debug(FMT, ##__VA_ARGS__);                                      \
-    })
-
-#define mprintf_ok(fmt, ...)                                                   \
-    ({                                                                         \
-        kprintf_ok(fmt, ##__VA_ARGS__);                                        \
-        debugf_ok(FMT, ##__VA_ARGS__);                                         \
-    })
-
-#define mprintf_warn(fmt, ...)                                                 \
-    ({                                                                         \
-        kprintf_warn(fmt, ##__VA_ARGS__);                                      \
-        debugf_warn(fmt, ##__VA_ARGS__);                                       \
-    })
-
-#define mprintf_panic(fmt, ...)                                                \
-    ({                                                                         \
-        kprintf_panic(fmt, ##__VA_ARGS__);                                     \
-        debugf_panic(fmt, ##__VA_ARGS__);                                      \
     })
 
 #endif

@@ -63,6 +63,8 @@ toolchain/x86_64-elf
 # External libraries will be updated and copied from their repos
 src/kernel/system/limine.*
 src/kernel/system/nanoprintf.*
+src/kernel/memory/heap/beap.*
+src/kernel/memory/heap/tlsf.*
 src/kernel/acpi/uacpi
 
 # final OS build files
@@ -78,9 +80,3 @@ compile_commands.json
 src/kernel/autoconf.h
 .config
 .config*
-
-# Kernel Module System
-*.km
-target/modules
-findher.ogg
-.directory

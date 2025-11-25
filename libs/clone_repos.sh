@@ -5,11 +5,10 @@ set -e
 LIBS_DIR=$1
 
 # all libs
-declare -a libs=("nanoprintf"
-                 "uacpi"
-                 "limine"
-                 "limine-protocol"
-                 )
+declare -a libs=("limine"
+             "nanoprintf"
+             "uacpi"
+             )
 
 # empty array for libs that have to be cloned
 declare -a libs_to_clone=()

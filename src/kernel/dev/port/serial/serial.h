@@ -1,12 +1,11 @@
-#ifndef SERIAL_H
-#define SERIAL_H 1
+#ifndef DEV_SERIAL_H
+#define DEV_SERIAL_H
 
+#include <../arch/x86_64/io.h>
 #include <dev/device.h>
-#include <io.h>
 #include <memory/heap/kheap.h>
-
 #include <stddef.h>
-#include <string.h>
+#include <util/string.h>
 
 #define COM1 0x3F8
 
@@ -22,4 +21,4 @@ char serial_read(int port);
 
 void dev_serial_init();
 
-#endif // SERIAL_H
+#endif // DEV_SERIAL_H

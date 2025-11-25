@@ -1,9 +1,11 @@
 #include "pic.h"
 
 #include <interrupts/irq.h>
+
+#include "stddef.h"
+
 #include <io.h>
 
-#include <stddef.h>
 #include <stdio.h>
 
 irq_handler pic_irq_handlers[16];

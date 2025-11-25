@@ -4,7 +4,6 @@
 
 #include <cpu.h>
 #include <interrupts/isr.h>
-
 #include <stdbool.h>
 
 extern bool fpu_enabled;

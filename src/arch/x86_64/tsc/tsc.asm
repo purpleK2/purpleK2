@@ -1,7 +1,6 @@
-format ELF64
-section '.text' executable align 16
+[bits 64]
 
-public _get_tsc
+global _get_tsc
 _get_tsc:
     rdtsc
     shl rdx, 32

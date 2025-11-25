@@ -1,10 +1,9 @@
-format ELF64
-section '.text' executable align 16
+[bits 64]
 
 ; void _outb(uint16_t port, uint8_t val)
 ; rdi = port
 ; rsi = val
-public _outb
+global _outb
 _outb:
 	mov dx, di
 	mov ax, si
@@ -16,7 +15,7 @@ _outb:
 	ret
 
 ; void _outw(uint16_t port, uint16_t val)
-public _outw
+global _outw
 _outw:
     mov dx, di
     mov ax, si
@@ -26,7 +25,7 @@ _outw:
     ret
 
 ; void _outd(uint16_t port, uint32_t val)
-public _outd
+global _outd
 _outd:
     mov dx, di
     mov ax, si
@@ -37,7 +36,7 @@ _outd:
 
 ; uint8_t _inb(uint16_t port)
 ; rdi = port
-public _inb
+global _inb
 _inb:
 	mov dx, di
 
@@ -50,7 +49,7 @@ _inb:
 	ret
 
 ; uint16_t _inw(uint16_t port)
-public _inw
+global _inw
 _inw:
     mov dx, di
     xor ax, ax
@@ -60,7 +59,7 @@ _inw:
     ret
 
 ; uint32_t _ind(uint16_t port)
-public _ind
+global _ind
 _ind:
     mov dx, di
     xor ax, ax
@@ -69,8 +68,8 @@ _ind:
 
     ret
 
-public _outl
-public _inl
+global _outl
+global _inl
 	
 	; Function: _outl
 	; Description: Writes a 32-bit value to the specified port.
@@ -100,7 +99,7 @@ _inl:
 	ret                  ; Return from the function
 
 ; void _io_wait(void)
-public _io_wait
+global _io_wait
 _io_wait:
 	push rdi
 	push rsi

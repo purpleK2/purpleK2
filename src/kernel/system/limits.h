@@ -1,0 +1,12 @@
+#ifndef LIMITS_H
+#define LIMITS_H
+
+#define LIMIT_SCHEUDLER_PROC_MAX 1024
+#define LIMIT_FD_PROC_MAX        1024
+
+#define PROC_STACK_PAGES 4
+#define PROC_STACK_SIZE  (1 * PFRAME_SIZE)
+
+#define PROC_TIME_SLICE 10
+
+#endif // LIMITS_H

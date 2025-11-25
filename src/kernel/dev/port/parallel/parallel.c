@@ -1,6 +1,5 @@
 #include "parallel.h"
-
-#include <dev/device.h>
+#include "dev/device.h"
 
 int lpt1_status() {
     uint8_t status = _inb(STATUS_PORT);
@@ -81,12 +80,11 @@ void dev_parallel_init() {
 
     device_t *lpt1 = kmalloc(sizeof(device_t));
     memcpy(lpt1->name, "lpt1", DEVICE_NAME_MAX);
-    lpt1->type          = DEVICE_TYPE_CHAR;
-    lpt1->read          = dev_lpt1_read;
-    lpt1->write         = dev_lpt1_write;
-    lpt1->ioctl         = dev_lpt1_ioctl;
-    lpt1->dev_node_path = "lpt1";
-    lpt1->data          = lpt1_info;
+    lpt1->type  = DEVICE_TYPE_CHAR;
+    lpt1->read  = dev_lpt1_read;
+    lpt1->write = dev_lpt1_write;
+    lpt1->ioctl = dev_lpt1_ioctl;
+    lpt1->data  = lpt1_info;
 
     register_device(lpt1);
 }

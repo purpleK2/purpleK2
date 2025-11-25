@@ -7,10 +7,9 @@ KERNEL_DIR=$1
 LIBS_DIR=$2
 
 # required libraries
-declare -a libs=("nanoprintf"
+declare -a libs=("limine"
+				 "nanoprintf"
                  "uacpi"
-                 "limine"
-                 "limine-protocol"
                  )
 
 stderr_echo() { 
@@ -77,8 +76,8 @@ do
 	check_submodule "$LIBS_FULL_DIR/$lib"
 done
 
-# copy limine.h
-copy_if_exists $LIBS_DIR/limine-protocol/include/limine.h $KERNEL_DIR/system/limine.h
+# copy limine
+copy_if_exists $LIBS_DIR/limine/limine.h $KERNEL_DIR/system/limine.h
 
 # copy npf
 copy_if_exists $LIBS_DIR/nanoprintf/nanoprintf.h $KERNEL_DIR/system/nanoprintf.h
