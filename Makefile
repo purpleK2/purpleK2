@@ -274,9 +274,21 @@ run: $(OS_CODENAME).iso
 		$(QEMU_FLAGS) \
 		-cdrom $<
 
+run-uefi: $(OS_CODENAME).iso edk2-ovmf
+	qemu-system-$(ARCH) \
+		$(QEMU_FLAGS) \
+		-bios edk2-ovmf/ovmf-code-$(ARCH).fd \
+		-cdrom $<
+
 run-hdd: $(OS_CODENAME).hdd
 	qemu-system-$(ARCH) \
 		$(QEMU_FLAGS) \
+		-hda $<
+
+run-hdd-uefi: $(OS_CODENAME).hdd edk2-ovmf
+	qemu-system-$(ARCH) \
+		$(QEMU_FLAGS) \
+		-bios edk2-ovmf/ovmf-code-$(ARCH).fd \
 		-hda $<
 
 run-wsl: $(OS_CODENAME).iso
@@ -285,11 +297,28 @@ run-wsl: $(OS_CODENAME).iso
 		-cdrom $< \
 		-accel whpx
 
+run-wsl-uefi: $(OS_CODENAME).iso edk2-ovmf
+	qemu-system-$(ARCH).exe \
+		$(QEMU_FLAGS) \
+		-cdrom $< \
+		-bios edk2-ovmf/ovmf-code-$(ARCH).fd \
+		-accel whpx
+
 run-wsl-hdd: $(OS_CODENAME).hdd
 	qemu-system-$(ARCH).exe \
 		$(QEMU_FLAGS) \
 		-hda $< \
 		-accel whpx
+
+run-wsl-hdd-uefi: $(OS_CODENAME).hdd edk2-ovmf
+	qemu-system-$(ARCH).exe \
+		$(QEMU_FLAGS) \
+		-hda $< \
+		-bios edk2-ovmf/ovmf-code-$(ARCH).fd \
+		-accel whpx
+
+edk2-ovmf:
+	./libs/get_deps.sh $(SRC_DIR)/kernel libs
 
 menuconfig:
 	kconfig-mconf $(KCONFIG_DEPS)
