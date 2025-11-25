@@ -12,7 +12,7 @@
 // features
 // create the ProcFS (fake) volume
 procfs_t *procfs_create() {
-    procfs_t *p = kmalloc(sizeof(sizeof(procfs_t)));
+    procfs_t *p = kmalloc(sizeof(procfs_t));
     memset(p, 0, sizeof(procfs_t));
 
     return p;
