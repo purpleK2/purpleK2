@@ -74,21 +74,27 @@ int register_disk_device(disk_device_t *disk) {
     char prefix[8];
     char final_name[32];
 
+    int minor = 0;
+
     switch (disk->namespace) {
     case DISK_NAMESPACE_PATA:
         snprintf(prefix, sizeof(prefix), "hd");
+        minor = 4;
         break;
-    case DISK_NAMESPACE_MODERN:remove_disk_from_list(disk);
-
+    case DISK_NAMESPACE_MODERN:
         snprintf(prefix, sizeof(prefix), "sd");
+        minor = 1;
         break;
     case DISK_NAMESPACE_NVME:
         snprintf(prefix, sizeof(prefix), "nd");
+        minor = 5;
         break;
     case DISK_NAMESPACE_FLOPPY:
         snprintf(prefix, sizeof(prefix), "fd");
+        minor = 3;
         break;
     case DISK_NAMESPACE_OPTICAL:
+        minor = 2;
         snprintf(prefix, sizeof(prefix), "opt");
         break;
     default:
@@ -117,8 +123,8 @@ int register_disk_device(disk_device_t *disk) {
     }
 
     snprintf(dev->name, DEVICE_NAME_MAX, "%s", final_name);
-    dev->major        = 2;
-    dev->minor        = 0;
+    dev->major        = 1;
+    dev->minor        = minor;
     dev->type         = DEVICE_TYPE_BLOCK;
     dev->read         = diskdev_read;
     dev->write        = diskdev_write;
