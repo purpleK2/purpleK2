@@ -25,3 +25,11 @@ Minor 2 is reserved for ATAPI (SCSI) optical drives. This includes CD-ROMs, CD-R
 ### 1:3: Floppy Drives
 
 Minor 3 is reserved for floppy drives. They get the prefix `fd`, so `fda`, `fdb`, etc.
+
+### 1:4: PATA Drives
+
+Minor 4 is reserved for PATA drives. They get the prefix `hd`, so `hda`, `hdb`, etc.
+
+### 1:5: NVMe Drives
+
+Minor 5 is reserved for NVMe drives (idk the prefix atp)

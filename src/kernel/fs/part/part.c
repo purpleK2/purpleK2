@@ -138,8 +138,8 @@ void register_partiton_dev(partition_t *part) {
 
     snprintf(dev->name, DEVICE_NAME_MAX, "%s", part->dev_path);
     dev->dev_node_path = part->dev_path;
-    dev->major = 2;
-    dev->minor = 1;
+    dev->major = 1;
+    dev->minor = 0;
     dev->type = DEVICE_TYPE_BLOCK;
 
     dev->read = partdev_read;
