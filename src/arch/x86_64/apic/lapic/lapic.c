@@ -58,8 +58,8 @@ void lapic_init() {
 
     lapic_base =
         PHYS_TO_VIRTUAL(lapic_msr_phys + limine_parsed_data.hhdm_offset);
-    map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), lapic_msr_phys,
-                       lapic_base, 0x1000, PMLE_KERNEL_READ_WRITE);
+    map_region((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), lapic_msr_phys,
+               lapic_base, 1, PMLE_KERNEL_READ_WRITE);
 
     pic_disable();
     // TODO: remap all PIC IRQs

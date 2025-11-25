@@ -107,8 +107,8 @@ void unmap_region(uint64_t *pml4_table, uint64_t virtual_start, uint64_t len);
 
 void map_phys_to_page(uint64_t *pml4_table, uint64_t physical, uint64_t virtual,
                       uint64_t flags);
-void map_region_to_page(uint64_t *pml4_table, uint64_t physical_start,
-                        uint64_t virtual_start, uint64_t len, uint64_t flags);
+void map_region(uint64_t *pml4_table, uint64_t physical_start,
+                uint64_t virtual_start, uint64_t len, uint64_t flags);
 
 void copy_range_to_pagemap(uint64_t *dst_pml4, uint64_t *src_pml4,
                            uint64_t virt_start, size_t len);

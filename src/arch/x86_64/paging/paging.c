@@ -238,17 +238,16 @@ void unmap_page(uint64_t *pml4_table, uint64_t virtual) {
 }
 
 // maps a page region to its physical range
-void map_region_to_page(uint64_t *pml4_table, uint64_t physical_start,
-                        uint64_t virtual_start, uint64_t len, uint64_t flags) {
-
-    uint64_t pages = ROUND_UP(len, PFRAME_SIZE) / PFRAME_SIZE;
+// @param len is in pages
+void map_region(uint64_t *pml4_table, uint64_t physical_start,
+                uint64_t virtual_start, uint64_t len, uint64_t flags) {
 #ifdef CONFIG_PAGING_DEBUG
     debugf_debug("Mapping address range (phys)%llx-%llx (virt)%llx-%llx\n",
-                 physical_start, physical_start + len, virtual_start,
-                 virtual_start + len);
+                 physical_start, physical_start + (len * PFRAME_SIZE),
+                 virtual_start, virtual_start + (len * PFRAME_SIZE));
 #endif
 
-    for (uint64_t i = 0; i < pages; i++) {
+    for (uint64_t i = 0; i < len; i++) {
         uint64_t phys = physical_start + (i * PFRAME_SIZE);
         uint64_t virt = virtual_start + (i * PFRAME_SIZE);
         map_phys_to_page(pml4_table, phys, virt, flags);
@@ -257,12 +256,11 @@ void map_region_to_page(uint64_t *pml4_table, uint64_t physical_start,
 
 void unmap_region(uint64_t *pml4_table, uint64_t virtual_start, uint64_t len) {
 
-    uint64_t pages = ROUND_UP(len, PFRAME_SIZE) / PFRAME_SIZE;
 #ifdef CONFIG_PAGING_DEBUG
     debugf_debug("Unmapping address range (virt)%llx-%llx\n", virtual_start,
-                 virtual_start + len);
+                 virtual_start + (len * PFRAME_SIZE));
 #endif
-    for (uint64_t i = 0; i < pages; i++) {
+    for (uint64_t i = 0; i < len; i++) {
         uint64_t virt = virtual_start + (i * PFRAME_SIZE);
         unmap_page(pml4_table, virt);
     }
@@ -278,8 +276,8 @@ void copy_range_to_pagemap(uint64_t *dst_pml4, uint64_t *src_pml4,
     uint64_t page_entry_flags = PG_FLAGS(
         get_page_entry((uint64_t *)PHYS_TO_VIRTUAL(src_pml4), virt_start));
 
-    map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(dst_pml4), phys_start,
-                       virt_start, len, page_entry_flags);
+    map_region((uint64_t *)PHYS_TO_VIRTUAL(dst_pml4), phys_start, virt_start,
+               len, page_entry_flags);
 }
 
 // for VMM
@@ -378,33 +376,37 @@ void paging_init(uint64_t *kernel_pml4) {
 
     uint64_t a_kernel_text_start = (uint64_t)&__kernel_text_start;
     uint64_t a_kernel_text_end   = (uint64_t)&__kernel_text_end;
-    uint64_t kernel_text_len     = a_kernel_text_end - a_kernel_text_start;
-    map_region_to_page(kernel_pml4, a_kernel_text_start - VIRT_BASE + PHYS_BASE,
-                       a_kernel_text_start, kernel_text_len,
-                       PMLE_KERNEL_READ_WRITE);
+    uint64_t kernel_text_len =
+        ROUND_UP(a_kernel_text_end - a_kernel_text_start, PFRAME_SIZE);
+    map_region(kernel_pml4, a_kernel_text_start - VIRT_BASE + PHYS_BASE,
+               a_kernel_text_start, (kernel_text_len / PFRAME_SIZE),
+               PMLE_KERNEL_READ_WRITE);
 
     uint64_t a_kernel_rodata_start = (uint64_t)&__kernel_rodata_start;
     uint64_t a_kernel_rodata_end   = (uint64_t)&__kernel_rodata_end;
-    uint64_t kernel_rodata_len = a_kernel_rodata_end - a_kernel_rodata_start;
-    map_region_to_page(kernel_pml4,
-                       a_kernel_rodata_start - VIRT_BASE + PHYS_BASE,
-                       a_kernel_rodata_start, kernel_rodata_len,
-                       PMLE_KERNEL_READ | PMLE_NOT_EXECUTABLE);
+    uint64_t kernel_rodata_len =
+        ROUND_UP(a_kernel_rodata_end - a_kernel_rodata_start, PFRAME_SIZE);
+    map_region(kernel_pml4, a_kernel_rodata_start - VIRT_BASE + PHYS_BASE,
+               a_kernel_rodata_start, (kernel_rodata_len / PFRAME_SIZE),
+               PMLE_KERNEL_READ | PMLE_NOT_EXECUTABLE);
 
     uint64_t a_kernel_data_start = (uint64_t)&__kernel_data_start;
     uint64_t a_kernel_data_end   = (uint64_t)&__kernel_data_end;
     uint64_t kernel_data_len     = a_kernel_data_end - a_kernel_data_start;
-    uint64_t kernel_other_len    = a_kernel_end - a_kernel_data_end;
-    map_region_to_page(kernel_pml4, a_kernel_data_start - VIRT_BASE + PHYS_BASE,
-                       a_kernel_data_start, kernel_data_len + kernel_other_len,
-                       PMLE_KERNEL_READ_WRITE | PMLE_NOT_EXECUTABLE);
+    uint64_t kernel_other_len =
+        ROUND_UP(a_kernel_end - a_kernel_data_end, PFRAME_SIZE);
+    map_region(kernel_pml4, a_kernel_data_start - VIRT_BASE + PHYS_BASE,
+               a_kernel_data_start,
+               ((kernel_data_len + kernel_other_len) / PFRAME_SIZE),
+               PMLE_KERNEL_READ_WRITE | PMLE_NOT_EXECUTABLE);
 
     uint64_t a_limine_reqs_start = (uint64_t)&__limine_reqs_start;
     uint64_t a_limine_reqs_end   = (uint64_t)&__limine_reqs_end;
-    uint64_t limine_reqs_len     = a_limine_reqs_end - a_limine_reqs_start;
-    map_region_to_page(kernel_pml4, a_limine_reqs_start - VIRT_BASE + PHYS_BASE,
-                       a_limine_reqs_start, limine_reqs_len,
-                       PMLE_KERNEL_READ_WRITE | PMLE_NOT_EXECUTABLE);
+    uint64_t limine_reqs_len =
+        ROUND_UP(a_limine_reqs_end - a_limine_reqs_start, PFRAME_SIZE);
+    map_region(kernel_pml4, a_limine_reqs_start - VIRT_BASE + PHYS_BASE,
+               a_limine_reqs_start, (limine_reqs_len / PFRAME_SIZE),
+               PMLE_KERNEL_READ_WRITE | PMLE_NOT_EXECUTABLE);
 
     // map the whole memory
     for (uint64_t i = 0; i < memmap_response->entry_count; i++) {
@@ -414,15 +416,17 @@ void paging_init(uint64_t *kernel_pml4) {
             continue;
 
         if (memmap_entry->type == LIMINE_MEMMAP_FRAMEBUFFER) {
-            map_region_to_page(kernel_pml4, memmap_entry->base,
-                               PHYS_TO_VIRTUAL(memmap_entry->base),
-                               memmap_entry->length, PMLE_FRAMEBUFFER_WC);
+            map_region(kernel_pml4, memmap_entry->base,
+                       PHYS_TO_VIRTUAL(memmap_entry->base),
+                       (memmap_entry->length / PFRAME_SIZE),
+                       PMLE_FRAMEBUFFER_WC);
             continue;
         }
 
-        map_region_to_page(kernel_pml4, memmap_entry->base,
-                           PHYS_TO_VIRTUAL(memmap_entry->base),
-                           memmap_entry->length, PMLE_KERNEL_READ_WRITE);
+        map_region(kernel_pml4, memmap_entry->base,
+                   PHYS_TO_VIRTUAL(memmap_entry->base),
+                   (memmap_entry->length / PFRAME_SIZE),
+                   PMLE_KERNEL_READ_WRITE);
     }
 
     debugf_debug("Our PML4 sits at %llp\n", kernel_pml4);
