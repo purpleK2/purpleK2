@@ -1,27 +1,22 @@
 #include "lapic.h"
 
 #include <cpu.h>
-
-#include <stdio.h>
-
 #include <interrupts/irq.h>
 #include <interrupts/isr.h>
-#include <pic/pic.h>
-
-#include <pit/pit.h>
-#include <time.h>
-#include <tsc/tsc.h>
-
-#include <scheduler/scheduler.h>
-
 #include <memory/pmm/pmm.h>
 #include <memory/vmm/vmm.h>
+#include <pic/pic.h>
+#include <pit/pit.h>
+#include <scheduler/scheduler.h>
+#include <tsc/tsc.h>
+
+#include <stdio.h>
+#include <time.h>
 
 uint32_t lapic_timer_ticks_per_ms = 0;
+bool lapic_status                 = false;
+uint64_t lapic_base               = 0;
 
-bool lapic_status = false;
-
-uint64_t lapic_base = 0;
 bool is_lapic_enabled() {
     return lapic_status;
 }
@@ -61,7 +56,8 @@ void lapic_init() {
     }
     debugf_debug("LAPIC base: %llx\n", lapic_msr_phys);
 
-    lapic_base = PHYS_TO_VIRTUAL(lapic_msr_phys + HHDM_OFFSET);
+    lapic_base =
+        PHYS_TO_VIRTUAL(lapic_msr_phys + limine_parsed_data.hhdm_offset);
     map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), lapic_msr_phys,
                        lapic_base, 0x1000, PMLE_KERNEL_READ_WRITE);
 
@@ -166,13 +162,9 @@ void lapic_timer_init(void) {
 }
 
 void lapic_timer_handler(void *ctx) {
-
+    UNUSED(ctx);
     if (get_ticks() >= MAX_LAPIC_TICKS)
         set_ticks(0);
 
     set_ticks(get_ticks() + 1);
-
-    scheduler_schedule(ctx);
-
-    lapic_send_eoi();
 }

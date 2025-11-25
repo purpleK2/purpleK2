@@ -1,10 +1,9 @@
 #include "pit.h"
 
 #include <io.h>
-#include <stdbool.h>
-
 #include <util/util.h>
 
+#include <stdbool.h>
 #include <time.h>
 
 void pit_sleep(uint32_t millis) {

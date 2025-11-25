@@ -3,7 +3,6 @@
 
 #include <limine.h>
 
-
 struct tlb_shootdown_event {
     uint64_t virtual;
     uint64_t length;
@@ -12,7 +11,7 @@ struct tlb_shootdown_event {
 extern struct tlb_shootdown_event **events;
 
 int smp_init();
-void mp_trampoline(struct limine_smp_info *cpu);
+void mp_trampoline(struct limine_mp_info *cpu);
 
 uint8_t get_cpu();
 

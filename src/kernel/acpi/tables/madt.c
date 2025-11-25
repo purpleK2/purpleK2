@@ -1,19 +1,13 @@
 #include "madt.h"
 
-#include <stddef.h>
-#include <stdio.h>
-
-#include <util/string.h>
-
+#include <cpu.h>
+#include <kernel.h>
+#include <memory/heap/kheap.h>
 #include <uacpi/acpi.h>
 #include <uacpi/tables.h>
 #include <uacpi/uacpi.h>
 
-#include <memory/heap/kheap.h>
-
-#include <kernel.h>
-
-#include <cpu.h>
+#include <stddef.h>
 
 void *madt_find_record(void *madt, int record_type) {
     void *addr = (madt + MADT_RECORD_OFFSET);

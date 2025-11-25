@@ -1,17 +1,14 @@
 #include "irq.h"
 
-#include <pic/pic.h>
-
-#include <interrupts/isr.h>
-
-#include <io.h>
-#include <stdio.h>
-
-#include <stddef.h>
-
 #include <apic/ioapic/ioapic.h>
 #include <apic/lapic/lapic.h>
 #include <cpu.h>
+#include <interrupts/isr.h>
+#include <io.h>
+#include <pic/pic.h>
+
+#include <stddef.h>
+#include <stdio.h>
 
 void irq_init() {
     pic_config(PIC_REMAP_OFFSET, PIC_REMAP_OFFSET + 8);
@@ -21,6 +18,14 @@ void irq_init() {
     }
 
     _enable_interrupts();
+}
+
+void irq_sendEOI(uint8_t irq) {
+    if (is_lapic_enabled()) {
+        lapic_send_eoi();
+    } else {
+        pic_sendEOI(irq);
+    }
 }
 
 // this function should be used after checking if the APIC is supported or not

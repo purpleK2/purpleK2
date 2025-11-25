@@ -1,80 +1,220 @@
+#include "vmm.h"
 
-#include <memory/vmm/vma.h>
-#include <memory/vmm/vmm.h>
+#include <autoconf.h>
+#include <cpu.h>
+#include <kernel.h>
+
+#include "vflags.h"
 #include <paging/paging.h>
-
-#include <stdint.h>
-#include <stdio.h>
 
 #include <spinlock.h>
 
-#include <util/string.h>
 #include <util/util.h>
 
-#include <kernel.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
-#include <autoconf.h>
+vmc_t *current_vmm_ctx;
 
-#include <cpu.h>
-
-vmm_context_t *current_vmm_ctx;
-
-vmm_context_t *get_current_ctx() {
+vmc_t *get_current_ctx() {
     return current_vmm_ctx;
 }
 
-void vmm_switch_ctx(vmm_context_t *new_ctx) {
+void vmm_switch_ctx(vmc_t *new_ctx) {
     current_vmm_ctx = new_ctx;
 }
 
 // imagine making a function to print stuff that you're going to barely use LMAO
-void vmo_dump(virtmem_object_t *vmo) {
-    debugf_debug("VMO %p\n", vmo);
+void vmo_dump(vmo_t *vmo) {
+    /*debugf_debug("VMO %p\n", vmo);
     debugf_debug("\tprev: %p\n", vmo->prev);
     debugf_debug("\tbase: %llx\n", vmo->base);
     debugf_debug("\tlen %zu\n", vmo->len);
     debugf_debug("\tflags: %llb\n", vmo->flags);
-    debugf_debug("\tnext: %p\n", vmo->next);
+    debugf_debug("\tnext: %p\n", vmo->next);*/
 }
 
-// @param length IT'S IN PAGESSSS
-virtmem_object_t *vmo_init(uint64_t base, size_t length, uint64_t flags) {
+static vmm_node_t *vmolist_root_node = NULL;
+static vmm_node_t *vmclist_root_node = NULL;
 
-    size_t vmosize_aligned = ROUND_UP(sizeof(virtmem_object_t), PFRAME_SIZE);
-    virtmem_object_t *vmo  = (virtmem_object_t *)PHYS_TO_VIRTUAL(
-        pmm_alloc_pages(vmosize_aligned / PFRAME_SIZE));
+// allocate a physical page
+vmm_node_t *vlist_node_alloc(size_t item_size) {
+    size_t itemsize_aligned = ROUND_UP(item_size, PFRAME_SIZE);
+
+    vmm_node_t *v = (vmm_node_t *)PHYS_TO_VIRTUAL(
+        pmm_alloc_pages(itemsize_aligned / PFRAME_SIZE));
+
+    v->len = itemsize_aligned;
+
+    return v;
+}
+
+// we don't waste a whole page for a single VMO/VMC structure
+void *vmmlist_alloc(vmm_node_t **root_node, size_t item_size) {
+    void *item = NULL;
+
+    if (!(*root_node)) {
+        (*root_node) = (vmm_node_t *)vlist_node_alloc(item_size);
+    }
+
+    vmm_node_t *v_cur;
+    vmm_node_t *v_prev;
+
+    // find a large enough block for a VMO
+    for (v_cur = (*root_node); v_cur->next != NULL; v_cur = v_cur->next) {
+        if (v_cur->len >= item_size) {
+            break;
+        }
+
+        if (!v_cur->next) {
+            v_cur->next = vlist_node_alloc(item_size);
+        }
+    }
+
+    item        = v_cur;
+    v_cur->len -= sizeof(vmm_node_t);
+
+    if (v_cur != (*root_node)) {
+        // find the block before the current node
+        for (v_prev = (*root_node); v_prev->next != v_cur;
+             v_prev = v_prev->next)
+            ;
+
+        // shift the node
+        v_prev->next += item_size;
+        memcpy(v_prev->next, v_cur, sizeof(vmm_node_t));
+        v_cur = v_prev->next;
+    } else {
+        // just shift the root node
+        (*root_node) = (void *)(*root_node) + item_size;
+        memcpy((*root_node), v_cur, sizeof(vmm_node_t));
+    }
+
+    return item;
+}
+
+void vmmlist_free(vmm_node_t **root_node, size_t item_size, void *tofree) {
+    // cases:
+    // it was the first VMO allocated
+    // it's somewhere in between two nodes
+    //      check if we can merge something
+    // it's at the end
+
+    // tbf we can just do a for loop
+    vmm_node_t *v_cur    = NULL;
+    vmm_node_t *v_tofree = tofree;
+
+    if (tofree < (*root_node)) {
+        v_cur = (*root_node);
+
+        if (((void *)v_tofree) + item_size == (*root_node)) {
+            v_tofree->len  = (*root_node)->len + item_size;
+            v_tofree->next = (*root_node)->next;
+        } else {
+            v_tofree->len  = item_size;
+            v_tofree->next = v_cur;
+        }
+
+        (*root_node) = v_tofree;
+        return;
+    }
+
+    for (v_cur = (*root_node); v_cur != NULL; v_cur = v_cur->next) {
+        vmm_node_t *v_next = v_cur->next;
+
+        if (v_next < tofree) {
+            continue;
+        }
+
+        // if tofree sits right after current node
+        if ((v_cur + (v_cur->len)) == tofree) {
+            v_cur->len += item_size;
+        } else if ((v_next - item_size) == tofree) {
+            // here, if it sits right before the next node
+            vmm_node_t *v_new = (v_next - item_size);
+            v_new->len        = v_next->len + item_size;
+            v_new->next       = v_next->next;
+            v_cur->next       = v_new;
+        } else {
+            // last case, just put it in the middle of the two xD
+            // this might also work at the end of the list (v_next is NULL)
+            v_tofree->len  = item_size;
+            v_tofree->next = v_next;
+            v_cur->next    = v_tofree;
+        }
+
+        break; // we don't need to go on with the loop
+    }
+
+    if (v_cur->len % PFRAME_SIZE != 0) {
+        return;
+    }
+
+    vmm_node_t *v_prev = NULL;
+
+    // if it's page-aligned (should be 0x1000 most of the time), we can free it
+    v_tofree = v_cur;
+    if (v_tofree == (*root_node)) {
+        (*root_node) = (*root_node)->next;
+    } else {
+        // get what comes before it
+        for (v_prev = (*root_node); v_prev->next != v_tofree;
+             v_prev = v_prev->next)
+            ;
+
+        v_prev->next = v_tofree->next;
+    }
+
+    pmm_free(v_tofree, v_tofree->len / PFRAME_SIZE);
+}
+
+// useful wrapper functions //
+
+vmc_t *vmc_alloc() {
+    return (vmc_t *)vmmlist_alloc(&vmclist_root_node, sizeof(vmc_t));
+}
+
+vmo_t *vmo_alloc() {
+    return (vmo_t *)vmmlist_alloc(&vmolist_root_node, sizeof(vmo_t));
+}
+
+void vmc_free(vmc_t *v) {
+    vmmlist_free(&vmclist_root_node, sizeof(vmc_t), v);
+}
+
+void vmo_free(vmo_t *v) {
+    vmmlist_free(&vmolist_root_node, sizeof(vmo_t), v);
+}
+
+// @param length IT'S IN PAGEEEEES
+vmo_t *vmo_init(uint64_t base, size_t length, uint64_t flags) {
+    vmo_t *vmo = vmo_alloc();
 
     vmo->base  = base;
     vmo->len   = length;
     vmo->flags = flags;
 
     vmo->next = NULL;
-    vmo->prev = NULL;
 
     return vmo;
 }
 
 // @note We will not care if `pml4` is 0x0 :^)
-vmm_context_t *vmm_ctx_init(uint64_t *pml4, uint64_t flags) {
+vmc_t *vmc_init(uint64_t *pml4_virt, uint64_t flags) {
+    vmc_t *ctx = vmc_alloc();
 
-    size_t vmcsize_aligned = ROUND_UP(sizeof(virtmem_object_t), PFRAME_SIZE);
-    vmm_context_t *ctx     = (vmm_context_t *)PHYS_TO_VIRTUAL(
-        pmm_alloc_pages(vmcsize_aligned / PFRAME_SIZE));
-
-    /*
-    For some reason UEFI gives out region 0x0-0x1000 as usable :/
-    if (pml4 == NULL) {
-        pml4 = (uint64_t *)PHYS_TO_VIRTUAL(pmm_alloc_page());
+    if (pml4_virt == NULL) {
+        pml4_virt = (uint64_t *)PHYS_TO_VIRTUAL(pmm_alloc_page());
     }
-    */
 
-    ctx->pml4_table = pml4;
+    ctx->pml4_table = (uint64_t *)VIRT_TO_PHYSICAL(pml4_virt);
     ctx->root_vmo   = vmo_init(0x1000, 1, flags);
 
     return ctx;
 }
 
-void vmm_ctx_destroy(vmm_context_t *ctx) {
+void vmc_destroy(vmc_t *ctx) {
 
     if (VIRT_TO_PHYSICAL(ctx->pml4_table) == (uint64_t)cpu_get_cr(3)) {
         kprintf_warn("Attempted to destroy a pagemap that's currently in use. "
@@ -83,21 +223,20 @@ void vmm_ctx_destroy(vmm_context_t *ctx) {
     }
 
     // Free all VMOs and their associated physical memory
-    for (virtmem_object_t *i = ctx->root_vmo; i != NULL;) {
-        virtmem_object_t *next = i->next;
+    for (vmo_t *v = ctx->root_vmo; v != NULL;) {
+        vmo_t *next = v->next;
 
         // Only free physical memory if the VMO is mapped
-        if (i->flags & VMO_PRESENT) {
-            uint64_t phys = pg_virtual_to_phys(ctx->pml4_table, i->base);
+        if (v->flags & VMO_PRESENT) {
+            uint64_t phys = pg_virtual_to_phys(ctx->pml4_table, v->base);
             if (phys) {
-                pmm_free((void *)PHYS_TO_VIRTUAL(phys), i->len);
+                pmm_free((void *)PHYS_TO_VIRTUAL(phys), v->len);
             }
         }
 
         // Free the VMO structure itself
-        pmm_free(i,
-                 ROUND_UP(sizeof(virtmem_object_t), PFRAME_SIZE) / PFRAME_SIZE);
-        i = next;
+        vmo_free(v);
+        v = next;
     }
 
     // Unmap all pages in the page tables
@@ -135,41 +274,14 @@ void vmm_ctx_destroy(vmm_context_t *ctx) {
 
     // Free the PML4 table and the context
     pmm_free(ctx->pml4_table, 1);
-    size_t vmcsize_aligned = ROUND_UP(sizeof(virtmem_object_t), PFRAME_SIZE);
-    pmm_free(ctx, vmcsize_aligned / PFRAME_SIZE);
+    vmc_free(ctx);
 
     ctx->pml4_table = NULL;
 }
 
-uint64_t vmo_to_page_flags(uint64_t vmo_flags) {
-    uint64_t pg_flags = 0x0;
-
-    if (vmo_flags & VMO_PRESENT)
-        pg_flags |= PMLE_PRESENT;
-    if (vmo_flags & VMO_RW)
-        pg_flags |= PMLE_WRITE;
-    if (vmo_flags & VMO_USER)
-        pg_flags |= PMLE_USER;
-
-    return pg_flags;
-}
-
-uint64_t page_to_vmo_flags(uint64_t pg_flags) {
-    uint64_t vmo_flags = 0x0;
-
-    if (pg_flags & PMLE_PRESENT)
-        vmo_flags |= VMO_PRESENT;
-    if (pg_flags & PMLE_WRITE)
-        vmo_flags |= VMO_RW;
-    if (pg_flags & PMLE_USER)
-        vmo_flags |= VMO_USER;
-
-    return vmo_flags;
-}
-
-// @param len after how many pages should we split the VMO
-virtmem_object_t *split_vmo_at(virtmem_object_t *src_vmo, size_t where) {
-    virtmem_object_t *new_vmo;
+// @param where after how many pages should we split the VMO
+vmo_t *split_vmo_at(vmo_t *src_vmo, size_t where) {
+    vmo_t *new_vmo;
 
     if (src_vmo->len - where <= 0) {
         return src_vmo; // we are not going to split it
@@ -183,18 +295,14 @@ virtmem_object_t *split_vmo_at(virtmem_object_t *src_vmo, size_t where) {
     [     [                        ]
     0	  0+len					   X
     */
-
-#ifdef CONFIG_VMM_DEBUG
-    debugf_debug("VMO %p has been split at (virt)%llx\n", src_vmo,
-                 src_vmo->base + offset);
-#endif
+    /*debugf_debug("VMO %p has been split at (virt)%llx\n", src_vmo,
+                 src_vmo->base + offset);*/
 
     src_vmo->len = where;
 
     if (src_vmo->next != NULL) {
         new_vmo->next = src_vmo->next;
         src_vmo->next = new_vmo;
-        new_vmo->prev = src_vmo;
     }
 
     /*
@@ -213,7 +321,8 @@ void pagemap_copy_to(uint64_t *non_kernel_pml4) {
     if ((uint64_t *)PHYS_TO_VIRTUAL(non_kernel_pml4) == k_pml4)
         return;
 
-    for (int i = 0; i < 512; i++) {
+    // copy the higher half :)
+    for (int i = 255; i < 512; i++) {
         // debugf("Copying %p[%d](%llx) to %p[%d]\n", k_pml4, i, k_pml4[i],
         //        non_kernel_pml4, i);
 
@@ -221,9 +330,9 @@ void pagemap_copy_to(uint64_t *non_kernel_pml4) {
     }
 }
 
-// Assumes the CTX has been initialized with vmm_ctx_init()
-void vmm_init(vmm_context_t *ctx) {
-    for (virtmem_object_t *i = ctx->root_vmo; i != NULL; i = i->next) {
+// Assumes the CTX has been initialized with vmc_init()
+void vmm_init(vmc_t *ctx) {
+    for (vmo_t *i = ctx->root_vmo; i != NULL; i = i->next) {
         // every VMO will have the same flags as the root one
         i->flags = ctx->root_vmo->flags;
 
@@ -231,4 +340,116 @@ void vmm_init(vmm_context_t *ctx) {
     }
 
     pagemap_copy_to(ctx->pml4_table);
+}
+
+void *valloc(vmc_t *ctx, size_t pages, uint8_t flags, void *phys) {
+    void *ptr = NULL;
+
+    vmo_t *cur_vmo = ctx->root_vmo;
+    vmo_t *new_vmo;
+
+    for (; cur_vmo != NULL; cur_vmo = cur_vmo->next) {
+        // debugf_debug("Checking for available memory\n");
+        vmo_dump(cur_vmo);
+
+        if ((cur_vmo->len >= pages) && (BIT_GET(cur_vmo->flags, 8) == 0)) {
+
+            // debugf_debug("Well, we've got enough memory :D\n");
+            break;
+        }
+
+        // debugf_debug("Current VMO is either too small or already "
+        //              "allocated. Skipping...\n");
+        if (!cur_vmo->next) {
+            uint64_t offset = (uint64_t)(cur_vmo->len * PFRAME_SIZE);
+            new_vmo         = vmo_init(cur_vmo->base + offset, pages,
+                                       flags & ~(VMO_ALLOCATED));
+            cur_vmo->next   = new_vmo;
+            // debugf_debug("VMO %p created successfully. Proceeding to next "
+            //              "iteration\n",
+            //             new_vmo);
+        }
+    }
+
+    if (cur_vmo == NULL) {
+        kprintf_panic("VMM ran out of memory and is not able to request it "
+                      "from the PMM.\n");
+        _hcf();
+    }
+
+    cur_vmo = split_vmo_at(cur_vmo, pages);
+    FLAG_SET(cur_vmo->flags, VMO_ALLOCATED);
+
+    ptr = (void *)(cur_vmo->base);
+
+    void *phys_al = NULL;
+    size_t offset = 0;
+    if (phys) {
+        phys_al = (void *)ROUND_DOWN((size_t)phys, PFRAME_SIZE);
+        offset  = (size_t)(phys_al - phys);
+    }
+
+    void *phys_to_map = phys_al ? phys_al : pmm_alloc_pages(pages);
+    map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(ctx->pml4_table),
+                       (uint64_t)phys_to_map, (uint64_t)ptr,
+                       (uint64_t)(pages * PFRAME_SIZE),
+                       vmo_to_page_flags(flags));
+
+    // debugf_debug("Returning pointer %p\n", ptr);
+
+    return (ptr + offset);
+}
+
+// @param free do you want to give back the physical address of `ptr` back to
+// the PMM? (this will zero out that region on next allocation)
+void vfree(vmc_t *ctx, void *ptr, bool free) {
+
+#ifdef CONFIG_VMM_DEBUG
+    debugf_debug("Deallocating pointer %p\n", ptr);
+#endif
+
+    ptr = (void *)ROUND_DOWN((uint64_t)ptr, PFRAME_SIZE);
+
+    vmo_t *cur_vmo = ctx->root_vmo;
+    for (; cur_vmo != NULL; cur_vmo = cur_vmo->next) {
+        vmo_dump(cur_vmo);
+        if ((uint64_t)ptr == cur_vmo->base) {
+            break;
+        }
+        // debugf_debug("Pointer and vmo->base don't match. Skipping\n");
+    }
+
+    if (cur_vmo == NULL) {
+        // debugf_debug(
+        //    "Tried to deallocate a non-existing pointer. Quitting...\n");
+        return;
+    }
+
+    FLAG_UNSET(cur_vmo->flags, VMO_ALLOCATED);
+
+    // find the physical address of the VMO
+    uint64_t phys = pg_virtual_to_phys(
+        (uint64_t *)PHYS_TO_VIRTUAL(ctx->pml4_table), cur_vmo->base);
+    if (free)
+        pmm_free((void *)phys, cur_vmo->len);
+    unmap_region((uint64_t *)PHYS_TO_VIRTUAL(ctx->pml4_table), cur_vmo->base,
+                 (cur_vmo->len * PFRAME_SIZE));
+
+    vmo_t *to_dealloc = cur_vmo;
+    // d_ is deallocated_
+    vmo_t *d_next     = to_dealloc->next;
+    vmo_t *d_prev     = NULL;
+
+    if (cur_vmo == ctx->root_vmo) {
+        ctx->root_vmo = ctx->root_vmo->next;
+    } else {
+        for (d_prev = ctx->root_vmo; d_prev->next != to_dealloc;
+             d_prev = d_prev->next)
+            ;
+
+        d_prev->next = d_next;
+    }
+
+    // debugf_debug("Region %llx destroyed\n", to_dealloc->base);
+    vmo_free(to_dealloc);
 }

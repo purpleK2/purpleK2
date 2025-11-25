@@ -1,13 +1,10 @@
-#include <smp/ipi.h>
-
-#include <memory/vmm/vmm.h>
-
-#include <stdio.h>
-
 #include <apic/lapic/lapic.h>
 #include <interrupts/isr.h>
+#include <memory/vmm/vmm.h>
 #include <scheduler/scheduler.h>
 #include <smp/smp.h>
+
+#include <stdio.h>
 
 void do_nothing_and_shut_up_im_talking_to_you_vector_254_yes_you_just_dont_spam_logs_ok_thanks(
     void *ctx) {
@@ -43,7 +40,6 @@ void ipi_handler_reschedule(void *ctx) {
     debugf_debug("Processor %lu rescheduled @ %.16llx\n", cpu,
                  ((registers_t *)ctx)->rip);
     lapic_send_eoi();
-    scheduler_schedule((registers_t *)ctx);
 }
 
 void ipi_handler_test(void *ctx) {

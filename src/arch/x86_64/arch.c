@@ -1,23 +1,19 @@
 #include "arch.h"
-#include "math/fpu.h"
-#include "math/sse.h"
 
-#include <stdio.h>
-
+#include <cpu.h>
 #include <gdt/gdt.h>
 #include <idt/idt.h>
 #include <interrupts/irq.h>
 #include <interrupts/isr.h>
-
+#include <math/fpu.h>
+#include <math/sse.h>
+#include <paging/paging.h>
 #include <pic/pic.h>
 #include <pit/pit.h>
 #include <tsc/tsc.h>
 
-#include <paging/paging.h>
-
+#include <stdio.h>
 #include <time.h>
-
-#include <cpu.h>
 
 #define PIT_TICKS 1000 / 1 // 1 ms
 
@@ -46,18 +42,18 @@ void arch_base_init() {
     init_sse();
     kprintf_ok("Initialized SSE1 + SSE2\n");
 
-    if (check_tsc()) {
-        tsc_init();
-        tsc = true;
-        kprintf_ok("Initialized TSC\n");
-    } else {
-    }
-
     irq_registerHandler(0, timer_tick);
 
     pit_init(PIT_TICKS);
     pit = true;
     kprintf_ok("Initialized PIT\n");
+
+    if (check_tsc()) {
+        tsc_init();
+        tsc = true;
+        pit = false;
+        kprintf_ok("Initialized TSC\n");
+    }
 }
 
 void sleep(unsigned long ms) {
@@ -94,10 +90,10 @@ uint64_t get_ms(uint64_t start) {
     if (pit) {
         now = get_ticks();
 
-        return (now - start) / 1000;
+        return (now - start);
     } else {
         now = _get_tsc();
 
-        return (now - start) / 1000000;
+        return ((now - start) * 1000) / tsc_frequency;
     }
 }

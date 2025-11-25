@@ -1,145 +1,117 @@
-#include "memory/heap/kheap.h"
-#include <kernel.h>
+#include "kernel.h"
+#include "pci/pci.h"
 
-#include <limine.h>
-
-#include <terminal/psf.h>
-#include <terminal/terminal.h>
-
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdio.h>
-
-#include <ahci/ahci.h>
+#include <autoconf.h>
 
 #include <arch.h>
 #include <cpu.h>
+#include <interrupts/isr.h>
+#include <io.h>
+#include <limine.h>
 
-#include <time.h>
-
-#include <memory/heap/kheap.h>
-#include <memory/pmm/pmm.h>
-#include <memory/vmm/vma.h>
-#include <memory/vmm/vmm.h>
-#include <paging/paging.h>
-
-#include <scheduler/scheduler.h>
-#include <smp/ipi.h>
-#include <smp/smp.h>
+#include <loader/module/module_loader.h>
 
 #include <acpi/acpi.h>
 
-#include <fs/fakefs/fakefs.h>
-#include <fs/ustar/ustar.h>
-#include <fs/vfs/devfs/devfs.h>
-#include <fs/vfs/vfs.h>
-
 #include <dev/device.h>
+#include <dev/display/fb/fbdev.h>
 #include <dev/fs/initrd.h>
-#include <dev/pcie/pcie.h>
 #include <dev/port/e9/e9.h>
 #include <dev/port/parallel/parallel.h>
 #include <dev/port/serial/serial.h>
 #include <dev/std/helper.h>
 
+#include <fs/cpio/newc.h>
+#include <fs/devfs/devfs.h>
+#include <fs/file_io.h>
+#include <fs/procfs/procfs.h>
+#include <fs/ramfs/ramfs.h>
+#include <fs/vfs/vfs.h>
+
+#include <memory/heap/kheap.h>
+#include <memory/pmm/pmm.h>
+#include <memory/vmm/vflags.h>
+#include <memory/vmm/vmm.h>
+#include <paging/paging.h>
+
+#include <pcie/pcie.h>
+
+#include <scheduler/scheduler.h>
+
+#include <smp/ipi.h>
+#include <smp/smp.h>
+
+#include <tables/hpet.h>
+
+#include <terminal/psf.h>
+#include <terminal/terminal.h>
+
+#include <tsc/tsc.h>
+
 #include <util/assert.h>
-#include <util/string.h>
+#include <util/macro.h>
 
-#include <autoconf.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
-#define INITRD_FILE "initrd.img"
+#define INITRD_FILE "initrd.cpio"
 #define INITRD_PATH "/" INITRD_FILE
 
-/*
-    Set the base revision to 2, this is recommended as this is the latest
-    base revision described by the Limine boot protocol specification.
-    See specification for further info.
+USED SECTION(".requests") static volatile uint64_t limine_base_revision[] =
+    LIMINE_BASE_REVISION(4);
 
-    (Note for Omar)
-    --- DON'T EVEN DARE TO PUT THIS ANYWHERE ELSE OTHER THAN HERE. ---
-*/
-__attribute__((used,
-               section(".requests"))) static volatile LIMINE_BASE_REVISION(3);
+USED SECTION(".requests") static volatile struct limine_framebuffer_request
+    framebuffer_request = {.id = LIMINE_FRAMEBUFFER_REQUEST_ID, .revision = 0};
 
-// The Limine requests can be placed anywhere, but it is important that
-// the compiler does not optimise them away, so, usually, they should
-// be made volatile or equivalent, _and_ they should be accessed at least
-// once or marked as used with the "used" attribute as done here.
-__attribute__((
-    used,
-    section(".requests"))) static volatile struct limine_framebuffer_request
-    framebuffer_request = {.id = LIMINE_FRAMEBUFFER_REQUEST, .revision = 0};
+USED SECTION(".requests") static volatile struct limine_memmap_request
+    memmap_request = {.id = LIMINE_MEMMAP_REQUEST_ID, .revision = 0};
 
-// https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md#memory-map-feature
-__attribute__((
-    used, section(".requests"))) static volatile struct limine_memmap_request
-    memmap_request = {.id = LIMINE_MEMMAP_REQUEST, .revision = 0};
+USED SECTION(".requests") static volatile struct limine_paging_mode_request
+    paging_mode_request = {.id = LIMINE_PAGING_MODE_REQUEST_ID, .revision = 0};
 
-// https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md#paging-mode-feature
-__attribute__((
-    used,
-    section(".requests"))) static volatile struct limine_paging_mode_request
-    paging_mode_request = {.id = LIMINE_PAGING_MODE_REQUEST, .revision = 0};
+USED SECTION(".requests") static volatile struct limine_hhdm_request
+    hhdm_request = {.id = LIMINE_HHDM_REQUEST_ID, .revision = 0};
 
-// https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md#hhdm-higher-half-direct-map-feature
-__attribute__((used,
-               section(".requests"))) static volatile struct limine_hhdm_request
-    hhdm_request = {.id = LIMINE_HHDM_REQUEST, .revision = 0};
-
-// https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md#kernel-address-feature
-__attribute__((
-    used,
-    section(".requests"))) static volatile struct limine_kernel_address_request
-    kernel_address_request = {.id       = LIMINE_KERNEL_ADDRESS_REQUEST,
+USED SECTION(
+    ".requests") static volatile struct limine_executable_address_request
+    kernel_address_request = {.id       = LIMINE_EXECUTABLE_ADDRESS_REQUEST_ID,
                               .revision = 0};
 
-// https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md#rsdp-feature
-__attribute__((used,
-               section(".requests"))) static volatile struct limine_rsdp_request
-    rsdp_request = {.id = LIMINE_RSDP_REQUEST, .revision = 0};
+USED SECTION(".requests") static volatile struct limine_rsdp_request
+    rsdp_request = {.id = LIMINE_RSDP_REQUEST_ID, .revision = 0};
 
-// https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md#module-feature
-__attribute__((
-    used, section(".requests"))) static volatile struct limine_module_request
-    module_request = {.id = LIMINE_MODULE_REQUEST, .revision = 0};
+USED SECTION(".requests") static volatile struct limine_module_request
+    module_request = {.id = LIMINE_MODULE_REQUEST_ID, .revision = 0};
 
-// https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md#firmware-type-feature
-__attribute__((
-    used,
-    section(".requests"))) static volatile struct limine_firmware_type_request
-    firmware_type_request = {.id = LIMINE_FIRMWARE_TYPE_REQUEST, .revision = 0};
+USED SECTION(".requests") static volatile struct limine_firmware_type_request
+    firmware_type_request = {.id       = LIMINE_FIRMWARE_TYPE_REQUEST_ID,
+                             .revision = 0};
 
-// next time warn me when you remove a request
-__attribute__((used,
-               section(".requests"))) static volatile struct limine_smp_request
-    smp_request = {.id = LIMINE_SMP_REQUEST, .revision = 0};
+USED SECTION(".requests") static volatile struct limine_mp_request
+    smp_request = {.id = LIMINE_MP_REQUEST_ID, .revision = 0};
 
-// Define the start and end markers for the Limine requests.
-// These can also be moved anywhere, to any .c file, as seen fit.
-__attribute__((used,
-               section(".requests_start_"
-                       "marker"))) static volatile LIMINE_REQUESTS_START_MARKER;
+USED SECTION(".requests") static volatile struct limine_executable_file_request
+    kernel_file_request = {.id       = LIMINE_EXECUTABLE_FILE_REQUEST_ID,
+                           .revision = 0};
 
-__attribute__((
-    used,
-    section(
-        ".requests_end_marker"))) static volatile LIMINE_REQUESTS_END_MARKER;
+USED SECTION(".requests_start_marker") static volatile uint64_t
+    limine_requests_start_marker[] = LIMINE_REQUESTS_START_MARKER;
 
-extern void _crash_test();
+USED SECTION(".requests_end_marker") static volatile uint64_t
+    limine_requests_end_marker[] = LIMINE_REQUESTS_END_MARKER;
 
 struct limine_framebuffer *framebuffer;
-
 struct limine_memmap_response *memmap_response;
 struct limine_memmap_entry *memmap_entry;
-
 struct limine_hhdm_response *hhdm_response;
-struct limine_kernel_address_response *kernel_address_response;
+struct limine_executable_address_response *kernel_address_response;
 struct limine_paging_mode_response *paging_mode_response;
-
 struct limine_rsdp_response *rsdp_response;
-
 struct limine_module_response *module_response;
+struct limine_file *kernel_file;
 
 struct bootloader_data limine_parsed_data;
 
@@ -147,13 +119,43 @@ struct bootloader_data *get_bootloader_data() {
     return &limine_parsed_data;
 }
 
-vmm_context_t *kernel_vmm_ctx;
+vmc_t *kernel_vmm_ctx;
+
+extern void __sched_test(void);
+
+// HBA_MEM *abar_mem = NULL;
+
+// HBA_MEM *mem;
+
+void a() {
+    for (;;) {
+        // debugf("A");
+    }
+}
+
+devfs_t *devfs = NULL;
+
+extern procfs_t *procfs;
+
+void pk_init() {
+    proc_create(a, 0, "Aprinter");
+
+    proc_create(__sched_test, 0, "Scheduler test");
+    debugf_ok("Starting __sched_test\n");
+
+    fileio_t *f = open("/proc/self/procinfo", 0);
+    char buf_test[200];
+    read(f, sizeof(buf_test), buf_test);
+
+    // yes you can
+    // procfs_print(procfs);
+}
 
 // kernel main function
 void kstart(void) {
     asm("cli");
     // Ensure the bootloader actually understands our base revision (see spec).
-    if (LIMINE_BASE_REVISION_SUPPORTED == false) {
+    if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false) {
         _hcf();
     }
 
@@ -173,42 +175,44 @@ void kstart(void) {
     set_screen_bg_fg(DEFAULT_BG, DEFAULT_FG); // black-ish, white-ish
     clearscreen();
 
-    kprintf("Welcome to purpleK2!\n");
-
-    debugf_debug("Kernel built on %s\n", __DATE__);
-
-#ifndef CONFIG_ENABLE_64_BIT
-    kprintf_panic("Kernel wasn't configured with 64-Bit support!\n");
-    _hcf(); // hcf also works on 32-Bit
-#endif
+    limine_parsed_data.kernel_file_data =
+        kernel_file_request.response->executable_file->address;
+    limine_parsed_data.kernel_file_size =
+        kernel_file_request.response->executable_file->size;
 
     arch_base_init();
 
     uint64_t system_startup_time;
     mark_time(&system_startup_time);
+    system_startup_time -=
+        1000; // add one second because of the TSC calibration
 
     char *FIRMWARE_TYPE;
 
     if (firmware_type_request.response != NULL) {
         uint64_t firmware_type = firmware_type_request.response->firmware_type;
-        if (firmware_type == LIMINE_FIRMWARE_TYPE_X86BIOS) {
+        switch (firmware_type) {
+        case LIMINE_FIRMWARE_TYPE_X86BIOS:
             FIRMWARE_TYPE = "X86BIOS";
-        } else if (firmware_type == LIMINE_FIRMWARE_TYPE_UEFI32) {
+            break;
+
+        case LIMINE_FIRMWARE_TYPE_EFI32:
             FIRMWARE_TYPE = "UEFI32";
-        } else if (firmware_type == LIMINE_FIRMWARE_TYPE_UEFI64) {
+            break;
+
+        case LIMINE_FIRMWARE_TYPE_EFI64:
             FIRMWARE_TYPE = "UEFI64";
+            break;
+
+        default:
+            FIRMWARE_TYPE = "No firmware type found!";
+            break;
         }
     } else {
         FIRMWARE_TYPE = "No firmware type found!";
-        debugf_debug("Firmware type: %s\n", FIRMWARE_TYPE);
     }
 
-    if (firmware_type_request.response != NULL) {
-        debugf_debug("Firmware type: %s\n", FIRMWARE_TYPE);
-    } else {
-        FIRMWARE_TYPE = "No firmware type found!";
-        debugf_debug("%s\n", FIRMWARE_TYPE);
-    }
+    debugf_debug("%s\n", FIRMWARE_TYPE);
 
     debugf_debug("Current video mode is: %dx%d address: %p\n\n",
                  framebuffer->width, framebuffer->height, framebuffer->address);
@@ -243,6 +247,11 @@ void kstart(void) {
         debugf_panic("No memory map received!\n");
         _hcf();
     }
+
+    kernel_file = kernel_file_request.response->executable_file;
+
+    limine_parsed_data.kernel_file_data = kernel_file->address;
+    limine_parsed_data.kernel_file_size = kernel_file->size;
 
     memmap_response = memmap_request.response;
 
@@ -316,22 +325,22 @@ void kstart(void) {
     uint64_t *kernel_pml4 = (uint64_t *)pmm_alloc_page();
     paging_init((uint64_t *)PHYS_TO_VIRTUAL(kernel_pml4));
 
-    kernel_vmm_ctx = vmm_ctx_init(kernel_pml4, VMO_KERNEL_RW);
+    kernel_vmm_ctx = vmc_init(kernel_pml4, VMO_KERNEL_RW);
     vmm_init(kernel_vmm_ctx);
     vmm_switch_ctx(kernel_vmm_ctx);
     kprintf_ok("Initialized VMM\n");
 
     kmalloc_init();
 
-    debugf("Malloc Test:\n");
+    debugf_debug("Malloc Test:\n");
     void *ptr1 = kmalloc(0xA0);
-    debugf("[1] kmalloc(0xA0) @ %p\n", ptr1);
+    debugf_debug("[1] kmalloc(0xA0) @ %p\n", ptr1);
     void *ptr2 = kmalloc(0xA3B0);
-    debugf("[2] kmalloc(0xA3B0) @ %p\n", ptr2);
+    debugf_debug("[2] kmalloc(0xA3B0) @ %p\n", ptr2);
     kfree(ptr1);
     kfree(ptr2);
     ptr1 = kmalloc(0xF00);
-    debugf("[3] kmalloc(0xF00) @ %p\n", ptr1);
+    debugf_debug("[3] kmalloc(0xF00) @ %p\n", ptr1);
     kfree(ptr1);
     kprintf_ok("kheap init done\n");
 
@@ -352,20 +361,15 @@ void kstart(void) {
             "Some errors occured during uACPI initialization. Halting...\n");
 
         _hcf();
-        for (;;) {
-            asm("hlt");
-        }
     }
 
-#ifdef CONFIG_ENABLE_APIC
 #if defined(__x86_64__)
 #include <apic/ioapic/ioapic.h>
 #include <apic/lapic/lapic.h>
-#include <interrupts/irq.h>
 
     if (check_apic()) {
         asm("cli");
-        debugf_debug("APIC device is supported\n");
+        debugf_debug("APIC is supported\n");
 
         lapic_init();
         ioapic_init();
@@ -376,48 +380,25 @@ void kstart(void) {
         debugf_debug("APIC is not supported. Going on with legacy PIC\n");
     }
 #endif
-#endif
 
-    {
-        char *cpu_name = kmalloc(49);
+    // hpet_init();
+    // kprintf_ok("HPET initialized\n");
 
-        unsigned int data[4];
-        memset(cpu_name, 0, 49);
+    char *cpu_name   = kmalloc(49);
+    char *cpu_vendor = kmalloc(13);
+    get_cpu_name(cpu_name);
+    get_cpu_vendor(cpu_vendor);
+    kprintf("CPU: %s %s @ %llu MHz\n", cpu_vendor, cpu_name,
+            tsc_frequency / 1000 / 1000);
+    kfree(cpu_vendor);
+    kfree(cpu_name);
 
-        for (int i = 0; i < 3; i++) {
-            __asm__("cpuid"
-                    : "=a"(data[0]), "=b"(data[1]), "=c"(data[2]), "=d"(data[3])
-                    : "a"(0x80000002 + i));
-            memcpy(cpu_name + i * 16, data, 16);
+    // hypervisor
+    if (check_hypervisor()) {
+        char hv[13];
+        if (get_hypervisor(hv) == 0) {
+            kprintf("Running on hypervisor: %s\n\n", hv);
         }
-
-        kprintf("CPU Name: %s\n", cpu_name);
-        kfree(cpu_name);
-    }
-
-    kprintf("CPU Vendor: %s\n", get_cpu_vendor());
-    char *hypervisor = kmalloc(49);
-
-    {
-        unsigned int data[4];
-        memset(hypervisor, 0, 49);
-
-        __asm__("cpuid"
-                : "=a"(data[0]), "=b"(data[1]), "=c"(data[2]), "=d"(data[3])
-                : "a"(0x40000000)); // Hypervisor info
-
-        if (data[0] == 0x40000000) {
-            // Hypervisor name is in EBX, ECX, and EDX
-            memcpy(hypervisor, &data[1], 4);
-            memcpy(hypervisor + 4, &data[2], 4);
-            memcpy(hypervisor + 8, &data[3], 4);
-            hypervisor[12] = '\0'; // Null-terminate the string
-        } else {
-            memcpy(hypervisor, "No Hypervisor", sizeof("No Hypervisor"));
-        }
-
-        kprintf("Hypervisor: %s\n\n", hypervisor);
-        kfree(hypervisor);
     }
 
     kprintf("Total Memory: 0x%llx (%lu MBytes)\n",
@@ -428,7 +409,13 @@ void kstart(void) {
             limine_parsed_data.memory_usable_total,
             limine_parsed_data.memory_usable_total / 0x100000);
 
-    kprintf("--- SYSTEM INFO END ---\n");
+    // first scheduler, then FS
+
+    limine_parsed_data.cpu_count = smp_request.response->cpu_count;
+    limine_parsed_data.cpus      = smp_request.response->cpus;
+
+    init_scheduler();
+    init_cpu_scheduler(pk_init);
 
     if (!module_request.response) {
         kprintf_warn("No modules loaded.\n");
@@ -436,7 +423,7 @@ void kstart(void) {
 
     module_response = module_request.response;
 
-    struct limine_file *initrd;
+    struct limine_file *initrd = NULL;
 
     for (uint64_t module = 0; module < module_response->module_count;
          module++) {
@@ -450,97 +437,82 @@ void kstart(void) {
     }
 
     if (!initrd) {
-        kprintf_panic("No initrd file found.");
+        kprintf_panic("No initrd.cpio file found.");
         _hcf();
     }
 
     kprintf_info("Initrd loaded at address %p\n", initrd->address);
 
-    ustar_fs_t *initramfs_disk = ramfs_init(initrd->address);
+    cpio_fs_t fs;
+    memset(&fs, 0, sizeof(cpio_fs_t));
 
-    ustar_file_tree_t *test = file_lookup(initramfs_disk, "test.txt");
-    kprintf("%*s", test->found_files[0]->size, test->found_files[0]->start);
+    int ret = cpio_fs_parse(&fs, initrd->address, initrd->size);
+    if (ret < 0) {
+        kprintf_panic("Failed to parse initrd.cpio file.");
+        _hcf();
+    }
+
+    // create the RAMFS
+    ramfs_t *cpio_ramfs = ramfs_create();
+    if (cpio_ramfs_init(&fs, cpio_ramfs) != 0) {
+        kprintf_warn("CPIO to RAMFS conversion failed!\n");
+    }
+
+    // create the VFS for CPIO
+    ramfs_vfs_init(cpio_ramfs, "/initrd");
+
+    fileio_t *test_file = open("/initrd/directory/another.txt", 0);
+    if (!test_file) {
+        kprintf_warn("Couldn't open file!\n");
+    }
+
+    ramfs_print(cpio_ramfs->root_node, 0);
+
+#ifdef CONFIG_DEVFS_ENABLE
+    devfs = devfs_create();
+    if (devfs_vfs_init(devfs, CONFIG_DEVFS_MOUNT_PATH) != EOK) {
+        kprintf_warn("Failed to initialize DEVFS!\n");
+    } else {
+        kprintf_ok("DEVFS initialized successfully!\n");
+    }
+
+    // devfs_print(devfs->root_node, 0);
+
+#endif
 
     register_std_devices();
-    dev_initrd_init(initramfs_disk);
+    dev_initrd_init(initrd->address);
     dev_e9_init();
     dev_serial_init();
     dev_parallel_init();
-
-    fs_vfs_t *rootfs = fakefs_create();
-    vfs_register(rootfs);
-    vfs_mount("/", rootfs, 0);
-
-    fs_node_t *root;
-    if (vfs_lookup("/", &root) == 0) {
-        root->vfs->ops->create(root->vfs, root, "/myfile.txt", VREG, 0);
-    }
-
-    if (vfs_create("/myfile.txt", VREG, 0) == 0) {
-        kprintf_ok("Created /myfile.txt\n");
-    } else {
-        kprintf_warn("Failed to create /myfile.txt\n");
-    }
-
-    fs_open_file_t *file = kcalloc(1, sizeof(fs_open_file_t));
-    if (vfs_open("/myfile.txt", 0, &file) == 0) {
-        const char *text = "Hello, fakefs!";
-        vfs_write(file, text, strlen(text));
-        vfs_seek(file, 0, 0); // SEEK_SET
-        char buf[128] = {0};
-        int n         = vfs_read(file, buf, sizeof(buf));
-        if (n > 0) {
-            kprintf("Read %d bytes: %s\n", n, buf);
-        }
-        vfs_close(file);
-    } else {
-        kprintf_warn("Failed to open /myfile.txt\n");
-    }
-
-#ifdef CONFIG_DEVFS_ENABLE
-    // devfs_init();
-
-    device_t *dev_e9       = get_device("e9");
-    device_t *dev_serial   = get_device("com1");
-    device_t *dev_parallel = get_device("lpt1");
-    device_t *dev_initrd   = get_device("initrd");
-    device_t *dev_null     = get_device("null");
-
-#ifdef CONFIG_DEVFS_ENABLE_E9
-    // devfs_add_dev(dev_e9);
-#endif
-
-#ifdef CONFIG_DEVFS_ENABLE_PORTIO
-    // devfs_add_dev(dev_serial);
-    // devfs_add_dev(dev_parallel);
-#endif
-
-    // devfs_add_dev(dev_initrd);
-
-#ifdef CONFIG_DEVFS_ENABLE_NULL
-    // devfs_add_dev(dev_null);
-#endif
-#endif
-
-    limine_parsed_data.cpu_count = smp_request.response->cpu_count;
-    limine_parsed_data.cpus      = smp_request.response->cpus;
-
-    scheduler_init();
+    dev_fb_init();
 
     // smp_init();
-
     // limine_parsed_data.smp_enabled = true;
 
-    // ustar_file_tree_t *pci_ids = file_lookup(initramfs_disk, "pci.ids");
+    cpio_file_t *pci_ids = cpio_fs_get_file(&fs, "pci.ids");
 
-    // pci_scan(pci_ids);
-    // pci_print_list();
+    pci_scan(pci_ids);
+    kprintf_ok("PCI devices parsing done\n");
+    // if (pcie_devices_init(pci_ids) != 0) {
+    //     kprintf_warn("Failed to parse PCIe devices!\n");
+    // } else {
+    //     kprintf_ok("PCIe devices parsing done\n");
+    // }
 
-    limine_parsed_data.boot_time = get_ms(system_startup_time);
+    mod_t *mbr = load_module("/initrd/modules/mbr.km");
+    start_module(mbr);
 
-    kprintf("System started: Time took: %d seconds %d ms.\n",
-            limine_parsed_data.boot_time / 1000,
-            limine_parsed_data.boot_time % 1000);
+    mod_t *ahci = load_module("/initrd/modules/ahci.km");
+    if (!ahci) {
+        debugf_warn("Couldn't find AHCI driver!\n");
+    }
+    start_module(ahci);
+
+    devfs_print(devfs->root_node, 0);
+
+    // boom
+    irq_registerHandler(0, scheduler_timer_tick);
 
     for (;;)
         ;

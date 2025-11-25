@@ -7,26 +7,32 @@ export PATH:=$(TOOLCHAIN_PREFIX)/bin:$(PATH)
 OS_CODENAME=kernel-v0
 
 LIBS_DIR=libs
-PATCHES_DIR=$(LIBS_DIR)/patches
+
 SRC_DIR=src
 ARCH_DIR=$(SRC_DIR)/arch/$(TARGET_BASE)
 KERNEL_SRC_DIR=$(SRC_DIR)/kernel
-BUILD_DIR=build
 ISO_DIR=iso
+
+BUILD_DIR=build
+
 OBJS_DIR=$(BUILD_DIR)/objs
 INITRD_DIR=target
-INITRD=initrd.img
+INITRD=initrd.cpio
 
 KCONFIG_CONFIG = .config
 KCONFIG_DEPS = Kconfig
 KCONFIG_AUTOCONF = $(KERNEL_SRC_DIR)/autoconf.h
 
-QEMU_FLAGS = 	-m 32M \
-			 	-debugcon stdio \
-				-M q35 \
-				-smp 2 \
-				-no-reboot \
-				-no-shutdown \
+MODULE_DIRS := $(shell find modules -mindepth 1 -maxdepth 4 -type d)
+MODULES := $(foreach d,$(MODULE_DIRS),$(wildcard $(d)/*.km))
+
+QEMU_FLAGS = -m 2G \
+    		 -debugcon stdio \
+    		 -M q35 \
+    		 -smp 2 \
+    		 -enable-kvm \
+    		 -netdev tap,id=net0,ifname=tap0,script=no,downscript=no \
+   			 -device rtl8139,netdev=net0,mac=52:54:00:12:34:56
 
 # Nuke built-in rules and variables.
 override MAKEFLAGS += -rR --no-print-directory
@@ -53,19 +59,31 @@ override DEFAULT_KLD := $(TARGET)-ld
 $(eval $(call DEFAULT_VAR,KLD,$(DEFAULT_KLD)))
 
 # User controllable C flags.
-override DEFAULT_KCFLAGS := -g -O0 -pipe
+override DEFAULT_KCFLAGS := \
+	-g \
+	-O0 \
+	-pipe \
+	-I $(SRC_DIR)/lib \
+	-I $(KERNEL_SRC_DIR) \
+	-I $(KERNEL_SRC_DIR)/system \
+	-I $(KERNEL_SRC_DIR)/acpi \
+	-I $(ARCH_DIR) \
+	-D UACPI_KERNEL_INITIALIZATION \
+	-D UACPI_FORMATTED_LOGGING \
+	-D CHAR_BIT=8
+
 $(eval $(call DEFAULT_VAR,KCFLAGS,$(DEFAULT_KCFLAGS)))
 
 # User controllable C preprocessor flags. We set none by default.
 override DEFAULT_KCPPFLAGS :=
 $(eval $(call DEFAULT_VAR,KCPPFLAGS,$(DEFAULT_KCPPFLAGS)))
 
-# User controllable nasm flags.
-override DEFAULT_KNASMFLAGS := -F dwarf -g
+# User controllable assembler flags.
+override DEFAULT_KNASMFLAGS :=
 $(eval $(call DEFAULT_VAR,KNASMFLAGS,$(DEFAULT_KNASMFLAGS)))
 
 # User controllable linker flags. We set none by default.
-override DEFAULT_KLDFLAGS :=
+override DEFAULT_KLDFLAGS := -Map=$(BUILD_DIR)/kernel.map
 $(eval $(call DEFAULT_VAR,KLDFLAGS,$(DEFAULT_KLDFLAGS)))
 
 # Internal C flags that should not be changed by the user.
@@ -74,10 +92,6 @@ override KCFLAGS += \
 	-Wextra \
 	-std=gnu11 \
 	-ffreestanding \
-	-I $(KERNEL_SRC_DIR) \
-	-I $(KERNEL_SRC_DIR)/system \
-	-I $(KERNEL_SRC_DIR)/acpi \
-	-I $(ARCH_DIR) \
 	-fno-stack-protector \
 	-fno-stack-check \
 	-fno-lto \
@@ -88,10 +102,7 @@ override KCFLAGS += \
 	-mno-80387 \
 	-mno-mmx \
 	-mno-red-zone \
-	-mcmodel=kernel \
-	-D UACPI_KERNEL_INITIALIZATION \
-	-D UACPI_FORMATTED_LOGGING \
-	-D CHAR_BIT=8 \
+	-mcmodel=kernel
 
 # Internal C preprocessor flags that should not be changed by the user.
 override KCPPFLAGS := \
@@ -105,13 +116,10 @@ override KLDFLAGS += \
 	-nostdlib \
 	-static \
 	-z max-page-size=0x1000 \
-	-T $(SRC_DIR)/linker.ld \
-	-Map=$(BUILD_DIR)/kernel.map
+	-T $(SRC_DIR)/linker.ld
 
-# Internal nasm flags that should not be changed by the user.
-override KNASMFLAGS += \
-	-Wall \
-	-f elf64
+# Internal assembler flags that should not be changed by the user.
+override KNASMFLAGS +=
 
 # Create required directories
 $(shell mkdir -p $(BUILD_DIR) $(OBJS_DIR) $(ISO_DIR))
@@ -125,14 +133,14 @@ override OBJ := $(addprefix $(OBJS_DIR)/,$(CFILES:.c=.c.o) $(ASFILES:.S=.S.o) $(
 override HEADER_DEPS := $(addprefix $(OBJS_DIR)/,$(CFILES:.c=.c.d) $(ASFILES:.S=.S.d))
 
 # Default target.
-.PHONY: all limine_build toolchain libs
+.PHONY: all limine_build toolchain libs modules
 
 all: $(OS_CODENAME).iso
 
 all-hdd: $(OS_CODENAME).hdd
 
 # Define the ISO image file as an explicit target with dependencies
-$(OS_CODENAME).iso: $(ISO_DIR)/$(KERNEL) $(ISO_DIR)/$(INITRD) $(ISO_DIR)/boot/limine/limine-bios-cd.bin $(ISO_DIR)/boot/limine/limine-uefi-cd.bin $(ISO_DIR)/EFI/BOOT/BOOTX64.EFI limine_build
+$(OS_CODENAME).iso: modules $(ISO_DIR)/$(KERNEL) $(ISO_DIR)/$(INITRD) $(ISO_DIR)/boot/limine.conf $(ISO_DIR)/boot/limine/limine-bios-cd.bin $(ISO_DIR)/boot/limine/limine-uefi-cd.bin $(ISO_DIR)/EFI/BOOT/BOOTX64.EFI $(ISO_DIR)/bg.png limine_build $(ISO_DIR)/boot/limine/limine-bios.sys
 	@# Create the bootable ISO.
 	xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin \
 		-no-emul-boot -boot-load-size 4 -boot-info-table \
@@ -144,7 +152,7 @@ $(OS_CODENAME).iso: $(ISO_DIR)/$(KERNEL) $(ISO_DIR)/$(INITRD) $(ISO_DIR)/boot/li
 	./$(LIBS_DIR)/limine/limine bios-install $@
 	@echo "--> ISO:	" $@
 
-$(OS_CODENAME).hdd: $(BUILD_DIR)/$(INITRD) $(BUILD_DIR)/$(KERNEL) limine_build
+$(OS_CODENAME).hdd: modules $(BUILD_DIR)/$(INITRD) $(BUILD_DIR)/$(KERNEL) limine_build
 	rm -f $@
 	dd if=/dev/zero bs=1M count=0 seek=64 of=$@
 	
@@ -159,6 +167,7 @@ $(OS_CODENAME).hdd: $(BUILD_DIR)/$(INITRD) $(BUILD_DIR)/$(KERNEL) limine_build
 	mcopy -i $@@@1M $(BUILD_DIR)/$(KERNEL) ::/
 	mcopy -i $@@@1M $(BUILD_DIR)/$(INITRD) ::/
 	mcopy -i $@@@1M $(SRC_DIR)/limine.conf ::/boot/limine
+	mcopy -i $@@@1M $(SRC_DIR)/bg.png ::/
 
 	mcopy -i $@@@1M $(LIBS_DIR)/limine/limine-bios.sys ::/boot/limine
 	mcopy -i $@@@1M $(LIBS_DIR)/limine/BOOTX64.EFI ::/EFI/BOOT
@@ -172,21 +181,32 @@ $(ISO_DIR)/$(KERNEL): $(BUILD_DIR)/$(KERNEL)
 $(ISO_DIR)/$(INITRD): $(BUILD_DIR)/$(INITRD)
 	cp -v $< $@
 
+$(ISO_DIR)/boot/limine.conf: $(SRC_DIR)/limine.conf
+	mkdir -p "$$(dirname $@)"
+	cp -v $< $@
+
 # Copy Limine bootloader files
 $(ISO_DIR)/boot/limine/limine-bios-cd.bin: $(LIBS_DIR)/limine/limine-bios-cd.bin
-	mkdir -p $(ISO_DIR)/boot/limine
-	cp -v $(SRC_DIR)/limine.conf $(LIBS_DIR)/limine/limine-bios.sys $< $(ISO_DIR)/boot/limine/
+	mkdir -p "$$(dirname $@)"
+	cp -v $< $@
 
 $(ISO_DIR)/boot/limine/limine-uefi-cd.bin: $(LIBS_DIR)/limine/limine-uefi-cd.bin
-	mkdir -p $(ISO_DIR)/boot/limine
-	cp -v $< $(ISO_DIR)/boot/limine/
+	mkdir -p "$$(dirname $@)"
+	cp -v $< $@
+
+$(ISO_DIR)/boot/limine/limine-bios.sys: $(LIBS_DIR)/limine/limine-bios.sys
+	mkdir -p "$$(dirname $@)"
+	cp -v $< $@
 
 $(ISO_DIR)/EFI/BOOT/BOOTX64.EFI: $(LIBS_DIR)/limine/BOOTX64.EFI
-	mkdir -p $(ISO_DIR)/EFI/BOOT
+	mkdir -p "$$(dirname $@)"
 	cp -v $< $@
 
 $(ISO_DIR)/EFI/BOOT/BOOTIA32.EFI: $(LIBS_DIR)/limine/BOOTIA32.EFI
-	mkdir -p $(ISO_DIR)/EFI/BOOT
+	mkdir -p "$$(dirname $@)"
+	cp -v $< $@
+
+$(ISO_DIR)/bg.png: $(SRC_DIR)/bg.png
 	cp -v $< $@
 
 # Setup bootloader files
@@ -198,16 +218,29 @@ $(LIBS_DIR)/limine/limine:
 	@# Build "limine" utility
 	make -C $(LIBS_DIR)/limine
 
+modules:
+	@mkdir -p target/modules
+	@for dir in $(MODULE_DIRS); do \
+		echo "--> Building module in $$dir"; \
+		$(MAKE) -C $$dir; \
+		for km in $$dir/*.km; do \
+			if [ -f $$km ]; then \
+				cp -v $$km target/modules/; \
+			fi; \
+		done; \
+	done
+
+	
 libs:
 	@./libs/clone_repos.sh libs/
 	@./libs/get_deps.sh src/kernel libs/
 	@$(MAKE) limine_build
 
 # Create initrd image
-# Create initrd image
-$(BUILD_DIR)/$(INITRD): $(shell find $(INITRD_DIR) -type f)
-	tar -cvf $@ --format=ustar $(INITRD_DIR)/*
-	@echo "--> Initrd:	" $@
+$(BUILD_DIR)/$(INITRD): modules
+		cd $(INITRD_DIR) && \
+		find . -type f | cpio -H newc -o > ../$(BUILD_DIR)/$(INITRD) && \
+		cd ..
 
 # Link rules for the final kernel executable.
 $(BUILD_DIR)/$(KERNEL): $(SRC_DIR)/linker.ld $(OBJ)
@@ -233,7 +266,7 @@ $(OBJS_DIR)/%.S.o: $(SRC_DIR)/%.S
 # Compilation rules for *.asm (nasm) files.
 $(OBJS_DIR)/%.asm.o: $(SRC_DIR)/%.asm
 	mkdir -p "$$(dirname $@)"
-	nasm $(KNASMFLAGS) $< -o $@
+	fasm $< $@
 	@echo "--> Assembled:	" $<
 
 run: $(OS_CODENAME).iso
@@ -261,14 +294,6 @@ run-wsl-hdd: $(OS_CODENAME).hdd
 menuconfig:
 	kconfig-mconf $(KCONFIG_DEPS)
 	python scripts/kconfig.py
-	
-savedefconfig:
-	kconfig-conf --savedefconfig=defconfig $(KCONFIG_DEPS)
-	python scripts/kconfig.py
-	
-defconfig:
-	kconfig-conf --defconfig=defconfig $(KCONFIG_DEPS)
-	python scripts/kconfig.py
 
 defconfig_release:
 	kconfig-conf --defconfig=build_configs/default_release $(KCONFIG_DEPS)
@@ -284,9 +309,11 @@ debug: $(OS_CODENAME).iso
 debug-hdd: $(OS_CODENAME).hdd
 	gdb -x debug_hdd.gdb $(BUILD_DIR)/$(KERNEL)
 
-# Remove object files and the final executable.
-.PHONY: clean
+# Remove object files.
+.PHONY: clean distclean
 
 clean:
-	rm -rf $(ISO_DIR)
-	rm -rf $(BUILD_DIR)
+	rm -rf $(OS_CODENAME).iso $(OS_CODENAME).hdd
+
+distclean:
+	rm -rf $(BUILD_DIR) $(ISO_DIR) *.iso *.hdd

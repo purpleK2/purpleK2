@@ -2,6 +2,7 @@
 #define PIT_H 1
 
 #include <interrupts/irq.h>
+
 #include <stdint.h>
 
 #define PIT_CH0_DATA 0x40

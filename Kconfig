@@ -1,17 +1,4 @@
-mainmenu "Project PurpleK2 Kernel"
-
-config ENABLE_64_BIT
-    bool "Enable x86_64 support"
-    default y
-    help
-      Enables x86_64 support in the kernel to support the AMD64 architecture
-
-config ENABLE_APIC
-    depends on ENABLE_64_BIT
-    bool "Enable the APIC"
-    default y
-    help
-      Enables x86_64's Advanced Programmable Interrupt Controller (APIC) support
+mainmenu "Project purpleK2 kernel"
 
 menu "Filesystems"
 
@@ -21,43 +8,16 @@ config DEVFS_ENABLE
     help
       Enable the pseudo filesystem for devices 
 
-menu "DevFS Options"
-
+menu "DevFS options"
 depends on DEVFS_ENABLE
 
 config DEVFS_MOUNT_PATH
-    string "DevFS Mount Path"
+    string "DevFS mount path"
     default "/dev"
     help
       Where to mount the DevFS pseudo filesystem
 
-comment "------------------------------"
-
-config DEVFS_ENABLE_NULL
-    bool "Enable the 'null' device in the DevFS"
-    default y
-    help
-      Enables the null device, on read it will return zeros (nulls)
-
-config DEVFS_ENABLE_RANDOM
-    bool "Enable the 'random' device in the DevFS"
-    default y
-    help
-      Enables the random device, on read it will return random bytes
-
-config DEVFS_ENABLE_PORTIO
-    bool "Enable the portio devices (e.g. 'com1')"
-    default y
-    help
-      Enables the portio devices like ('com1', 'lpt1')
-
-config DEVFS_ENABLE_E9
-    bool "Enable the E9 port for debugging on Hypervisors (like QEMU)"
-    default y
-    help
-      Enables the E9 hack port device for debugging on Hypervisors
-
-endmenu # DevFS Options
+endmenu # DevFS options
 
 endmenu # Filesystems
 
@@ -86,5 +46,17 @@ config SCHED_DEBUG
 	default n
 	help
 		Outputs detailed info about scheduler-related operations
+
+config PCI_DEBUG
+	bool "Enable PCI debugging"
+	default n
+	help
+		Outputs detailed info about PCI initialization and PCI devices operations
+
+config PCIE_DEBUG
+	bool "Enable PCIe debugging"
+	default n
+	help
+		Outputs detailed info about PCIe initialization and PCIe devices operations
 	
 endmenu # Advanced debugging

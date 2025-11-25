@@ -3,11 +3,12 @@
 void dev_e9_init() {
     device_t *dev = kmalloc(sizeof(device_t));
     memcpy(dev->name, "e9", DEVICE_NAME_MAX);
-    dev->type  = DEVICE_TYPE_CHAR;
-    dev->read  = dev_e9_read;
-    dev->write = dev_e9_write;
-    dev->ioctl = dev_e9_ioctl;
-    dev->data  = "e9-dbg";
+    dev->type          = DEVICE_TYPE_CHAR;
+    dev->read          = dev_e9_read;
+    dev->write         = dev_e9_write;
+    dev->ioctl         = dev_e9_ioctl;
+    dev->dev_node_path = "e9";
+    dev->data          = "e9-dbg";
     register_device(dev);
 }
 

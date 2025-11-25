@@ -3,11 +3,12 @@
 void dev_null_init() {
     device_t *dev = kmalloc(sizeof(device_t));
     memcpy(dev->name, "null", DEVICE_NAME_MAX);
-    dev->type  = DEVICE_TYPE_CHAR;
-    dev->read  = dev_null_read;
-    dev->write = dev_null_write;
-    dev->ioctl = dev_null_ioctl;
-    dev->data  = "null-dev;no-wrt";
+    dev->type          = DEVICE_TYPE_CHAR;
+    dev->read          = dev_null_read;
+    dev->write         = dev_null_write;
+    dev->ioctl         = dev_null_ioctl;
+    dev->dev_node_path = "null";
+    dev->data          = "null-dev;no-wrt";
     register_device(dev);
 }
 

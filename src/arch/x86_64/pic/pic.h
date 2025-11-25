@@ -1,10 +1,10 @@
 #ifndef PIC_H
 #define PIC_H 1
 
-#include <stdint.h>
-
 #include <interrupts/irq.h>
 #include <interrupts/isr.h>
+
+#include <stdint.h>
 
 #define PIC_REMAP_OFFSET 0x20
 

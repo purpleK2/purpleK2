@@ -1,9 +1,16 @@
 #include "spinlock.h"
-#include "stdio.h"
-#include "types.h"
+
+#include <stdio.h>
+#include <types.h>
 
 void spinlock_acquire(lock_t *lock) {
-    unsigned int timeout = 1000000;
+    while (atomic_flag_test_and_set(lock)) {
+        asm("pause");
+    }
+}
+
+void spinlock_force_acquire(lock_t *lock) {
+    unsigned int timeout = 100;
 
     while (atomic_flag_test_and_set(lock)) {
         if (--timeout == 0) {

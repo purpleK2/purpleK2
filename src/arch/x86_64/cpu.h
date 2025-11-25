@@ -1,11 +1,12 @@
 #ifndef CPU_H
 #define CPU_H 1
 
+#include <cpuid.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#include <cpuid.h>
+#include <util/macro.h>
 
 // Vendor strings from CPUs.
 #define CPUID_VENDOR_AMD "AuthenticAMD"
@@ -106,6 +107,39 @@
 #define CPUID_FEAT_EDX_IA64    1 << 30
 #define CPUID_FEAT_EDX_PBE     1 << 31
 
+typedef struct {
+    uint64_t ds;
+
+    uint64_t r15;
+    uint64_t r14;
+    uint64_t r13;
+    uint64_t r12;
+    uint64_t r11;
+    uint64_t r10;
+    uint64_t r9;
+    uint64_t r8;
+
+    uint64_t rbp;
+
+    uint64_t rdi;
+    uint64_t rsi;
+
+    uint64_t rdx;
+    uint64_t rcx;
+    uint64_t rbx;
+    uint64_t rax;
+
+    uint64_t interrupt;
+    uint64_t error;
+
+    uint64_t rip;
+    uint64_t cs;
+    uint64_t rflags;
+    uint64_t rsp;
+    uint64_t ss;
+
+} PACKED registers_t;
+
 // gets a value from a CRX register
 // by
 // https://github.com/Tix3Dev/apoptOS/blob/370fd34a6d3c87a9d1a16d1a2ec072bd1836ba6c/src/kernel/utility/utils.h#L26
@@ -126,12 +160,29 @@ bool check_fpu();
 bool check_sse2();
 bool check_fxsr();
 
-const char *get_cpu_vendor();
+typedef struct cpuid_ctx {
+    uint32_t leaf;
+
+    uint32_t eax;
+    uint32_t ebx;
+    uint32_t ecx;
+    uint32_t edx;
+} cpuid_ctx_t;
+
+int get_cpu_vendor(char *out);
+int get_cpu_name(char *out);
+
+// check if we're running on a hypervisor
+bool check_hypervisor();
+// get hypervisor name
+int get_hypervisor(char *out);
 
 // returns the value from the requested MSR
 extern uint64_t _cpu_get_msr(uint32_t msr);
 // sets a MSR to the given value
 extern void _cpu_set_msr(uint32_t msr, uint64_t value);
+
+extern int _cpu_cpuid(cpuid_ctx_t *ctx);
 
 // returns the value of RFLAGS register
 uint64_t _get_cpu_flags();
@@ -139,5 +190,7 @@ void _set_cpu_flags(uint64_t flags); // uhmmm apparently uACPI wants this :/
 
 void cpu_reg_write(uint32_t *reg, uint32_t value);
 uint32_t cpu_reg_read(uint32_t *reg);
+
+uint64_t get_current_cpu();
 
 #endif

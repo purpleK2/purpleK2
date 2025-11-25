@@ -1,29 +1,24 @@
-/*
-        Page fault "handler"
-
-        When a page fault exception is fired, the _hcf screen will print
-   information about the given error code.
-
-        (C) RepubblicaTech 2024
-*/
-
 #include "paging.h"
-#include "smp/ipi.h"
 
-#include <stdint.h>
-#include <stdio.h>
-
-#include <memory/pmm/pmm.h>
-
-#include <util/string.h>
-#include <util/util.h>
-
+#include <autoconf.h>
 #include <kernel.h>
 #include <limine.h>
 
 #include <cpu.h>
 
-#include <autoconf.h>
+#include <memory/pmm/pmm.h>
+#include <memory/vmm/vflags.h>
+#include <smp/ipi.h>
+
+#include <scheduler/scheduler.h>
+
+#include <interrupts/irq.h>
+
+#include <util/util.h>
+
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 /* http://wiki.osdev.org/Exceptions#Page_Fault
 
@@ -78,12 +73,20 @@ unrelated to ordinary paging.
         (C) RepubblicaTech 2024
 */
 void pf_handler(void *ctx) {
+    registers_t *regs      = ctx;
+    uint64_t pf_error_code = (uint64_t)regs->error;
+
+    if (PG_IF(pf_error_code)) {
+        debugf_warn("Process %s killed!\n", get_current_pcb()->name);
+        proc_exit();
+        yield(regs); // tell scheduler to select another process  427b1
+        return;
+    }
+
+    // 626e0
+
     stdio_panic_init();
     bsod_init();
-
-    registers_t *regs = ctx;
-
-    uint64_t pf_error_code = (uint64_t)regs->error;
 
     debugf(ANSI_COLOR_BLUE);
     mprintf("--- PANIC! ---\n");
@@ -168,6 +171,23 @@ uint64_t get_page_entry(uint64_t *pml4_table, uint64_t virtual) {
 // given the PML4 table and a virtual address, returns its physical address
 uint64_t pg_virtual_to_phys(uint64_t *pml4_table, uint64_t virtual) {
     return PG_GET_ADDR(get_page_entry(pml4_table, virtual));
+}
+
+bool is_mapped(uint64_t *pml4_table, uint64_t address) {
+    uint64_t pml4_index = PML4_INDEX(address);
+    uint64_t pdp_index  = PDP_INDEX(address);
+    uint64_t pdir_index = PDIR_INDEX(address);
+    uint64_t ptab_index = PTAB_INDEX(address);
+
+    uint64_t *pdp_table  = get_create_pmlt(pml4_table, pml4_index, 0b111);
+    uint64_t *pdir_table = get_create_pmlt(pdp_table, pdp_index, 0b111);
+    uint64_t *page_table = get_create_pmlt(pdir_table, pdir_index, 0b111);
+
+    if (page_table[ptab_index] & 0b1) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 // map a page frame to a physical address that gets mapped to a virtual one
@@ -262,6 +282,35 @@ void copy_range_to_pagemap(uint64_t *dst_pml4, uint64_t *src_pml4,
                        virt_start, len, page_entry_flags);
 }
 
+// for VMM
+uint64_t vmo_to_page_flags(uint64_t vmo_flags) {
+    uint64_t pg_flags = 0x0;
+
+    if (vmo_flags & VMO_PRESENT)
+        pg_flags |= PMLE_PRESENT;
+    if (vmo_flags & VMO_RW)
+        pg_flags |= PMLE_WRITE;
+    if (vmo_flags & VMO_USER)
+        pg_flags |= PMLE_USER;
+    if (vmo_flags & VMO_NX)
+        pg_flags |= PMLE_NOT_EXECUTABLE;
+
+    return pg_flags;
+}
+
+uint64_t page_to_vmo_flags(uint64_t pg_flags) {
+    uint64_t vmo_flags = 0x0;
+
+    if (pg_flags & PMLE_PRESENT)
+        vmo_flags |= VMO_PRESENT;
+    if (pg_flags & PMLE_WRITE)
+        vmo_flags |= VMO_RW;
+    if (pg_flags & PMLE_USER)
+        vmo_flags |= VMO_USER;
+
+    return vmo_flags;
+}
+
 // Paging initialization
 
 uint64_t *limine_pml4; // Limine's PML4 table
@@ -276,6 +325,25 @@ uint64_t *get_kernel_pml4() {
 
 extern struct limine_memmap_response *memmap_response;
 
+void pat_init(void) {
+    uint64_t custom_pat =
+        ((uint64_t)PAT_WRITEBACK) |          // Entry 0: WB
+        ((uint64_t)PAT_WRITE_THROUGH << 8) | // Entry 1: WT
+        ((uint64_t)PAT_UNCACHEABLE
+         << 16) | // Entry 2: UC (should be minus but fuck that)
+        ((uint64_t)PAT_UNCACHEABLE << 24) |   // Entry 3: UC
+        ((uint64_t)PAT_WRITEBACK << 32) |     // Entry 4: WB
+        ((uint64_t)PAT_WRITE_THROUGH << 40) | // Entry 5: WT
+        ((uint64_t)PAT_WRITE_COMBINING
+         << 48) | // Entry 6: WC <-- important for the framebuffer so it doesnt
+                  // have ass performance
+        ((uint64_t)PAT_UNCACHEABLE << 56); // Entry 7: UC
+
+    debugf_debug("Old PAT: 0x%.16llx\n", _cpu_get_msr(0x277));
+    _cpu_set_msr(0x277, custom_pat);
+    debugf_debug("New PAT: 0x%.16llx\n", _cpu_get_msr(0x277));
+}
+
 // this initializes kernel-level paging
 // `kernel_pml4` should already be `pmm_alloc()`'d
 void paging_init(uint64_t *kernel_pml4) {
@@ -286,13 +354,17 @@ void paging_init(uint64_t *kernel_pml4) {
     limine_pml4 = _get_pml4();
     debugf_debug("Limine's PML4 sits at %llp\n", limine_pml4);
 
+    /*  TBH it doesn't even make sense to apply a custom PAT if i don't have any
+    idea on why i should
+
     // set up a custom PAT
     debugf_debug("PAT MSR: %.16llx\n", _cpu_get_msr(0x277));
 
     uint64_t custom_pat = PAT_WRITEBACK | (PAT_WRITE_THROUGH << 8) |
-                          (PAT_WRITE_COMBINING << 16) | (PAT_UNCACHEABLE << 24);
+    (PAT_WRITE_COMBINING << 16) | (PAT_UNCACHEABLE << 24);
     _cpu_set_msr(0x277, custom_pat);
     debugf_debug("Custom PAT has been set up: %.16llx\n", _cpu_get_msr(0x277));
+    */
 
     /*
             24/12/2024
@@ -307,7 +379,6 @@ void paging_init(uint64_t *kernel_pml4) {
     uint64_t a_kernel_text_start = (uint64_t)&__kernel_text_start;
     uint64_t a_kernel_text_end   = (uint64_t)&__kernel_text_end;
     uint64_t kernel_text_len     = a_kernel_text_end - a_kernel_text_start;
-    kprintf_info("Mapping section .text\n");
     map_region_to_page(kernel_pml4, a_kernel_text_start - VIRT_BASE + PHYS_BASE,
                        a_kernel_text_start, kernel_text_len,
                        PMLE_KERNEL_READ_WRITE);
@@ -315,7 +386,6 @@ void paging_init(uint64_t *kernel_pml4) {
     uint64_t a_kernel_rodata_start = (uint64_t)&__kernel_rodata_start;
     uint64_t a_kernel_rodata_end   = (uint64_t)&__kernel_rodata_end;
     uint64_t kernel_rodata_len = a_kernel_rodata_end - a_kernel_rodata_start;
-    kprintf_info("Mapping section .rodata\n");
     map_region_to_page(kernel_pml4,
                        a_kernel_rodata_start - VIRT_BASE + PHYS_BASE,
                        a_kernel_rodata_start, kernel_rodata_len,
@@ -325,7 +395,6 @@ void paging_init(uint64_t *kernel_pml4) {
     uint64_t a_kernel_data_end   = (uint64_t)&__kernel_data_end;
     uint64_t kernel_data_len     = a_kernel_data_end - a_kernel_data_start;
     uint64_t kernel_other_len    = a_kernel_end - a_kernel_data_end;
-    kprintf_info("Mapping section .data\n");
     map_region_to_page(kernel_pml4, a_kernel_data_start - VIRT_BASE + PHYS_BASE,
                        a_kernel_data_start, kernel_data_len + kernel_other_len,
                        PMLE_KERNEL_READ_WRITE | PMLE_NOT_EXECUTABLE);
@@ -333,24 +402,28 @@ void paging_init(uint64_t *kernel_pml4) {
     uint64_t a_limine_reqs_start = (uint64_t)&__limine_reqs_start;
     uint64_t a_limine_reqs_end   = (uint64_t)&__limine_reqs_end;
     uint64_t limine_reqs_len     = a_limine_reqs_end - a_limine_reqs_start;
-    kprintf_info("Mapping section .requests\n");
     map_region_to_page(kernel_pml4, a_limine_reqs_start - VIRT_BASE + PHYS_BASE,
                        a_limine_reqs_start, limine_reqs_len,
                        PMLE_KERNEL_READ_WRITE | PMLE_NOT_EXECUTABLE);
 
     // map the whole memory
-    kprintf_info("Mapping all the memory\n");
     for (uint64_t i = 0; i < memmap_response->entry_count; i++) {
         struct limine_memmap_entry *memmap_entry = memmap_response->entries[i];
 
-        // we won't identity map
+        if (memmap_entry->type == LIMINE_MEMMAP_RESERVED)
+            continue;
+
+        if (memmap_entry->type == LIMINE_MEMMAP_FRAMEBUFFER) {
+            map_region_to_page(kernel_pml4, memmap_entry->base,
+                               PHYS_TO_VIRTUAL(memmap_entry->base),
+                               memmap_entry->length, PMLE_FRAMEBUFFER_WC);
+            continue;
+        }
 
         map_region_to_page(kernel_pml4, memmap_entry->base,
                            PHYS_TO_VIRTUAL(memmap_entry->base),
                            memmap_entry->length, PMLE_KERNEL_READ_WRITE);
     }
-
-    kprintf_info("All mappings done.\n");
 
     debugf_debug("Our PML4 sits at %llp\n", kernel_pml4);
     global_pml4 = (uint64_t *)VIRT_TO_PHYSICAL(kernel_pml4);

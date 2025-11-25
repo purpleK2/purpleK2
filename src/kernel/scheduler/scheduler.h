@@ -1,96 +1,131 @@
 #ifndef SCHEDULER_H
 #define SCHEDULER_H
 
-#include <fs/vfs/vfs.h>
-#include <interrupts/isr.h>
-#include <limits.h>
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
 #include <types.h>
 
-#define SCHED_PROC_USER            0x01
-#define SCHED_PROC_KERNEL_PAGE_MAP 0x02
-#define SCHED_PROC_KERNEL_STACK    0x04
+#include <ipc/signals.h>
+#include <memory/vmm/vmm.h>
 
-typedef enum proc_state {
-    PROC_STATE_READY,
-    PROC_STATE_RUNNING,
-    PROC_STATE_STOPPED
-} proc_state_t;
+#include <cpu.h>
+#include <interrupts/isr.h>
 
-typedef struct proc {
-    pid_t pid;
+#include <fs/file_io.h>
 
-    struct {
-        uid_t user;
-        gid_t group;
-    } whoami;
+#define SCHEDULER_PROCFS_PATH "/proc"
 
-    registers_t regs;
-    uint64_t *pml4;
+// **T**ime **S**lice, not that "ts"
+#define SCHEDULER_THREAD_TS 10
 
-    uint64_t time_slice;
-    int sched_flags;
+#define SCHEDULER_STACK_PAGES 2
+// keeping this just in case
+#define SCHEDULER_STACKSZ (PFRAME_SIZE * SCHEDULER_STACK_PAGES)
 
-    fd_t current_fd;
-    fs_open_file_t **fd_table;
+#define TF_MODE_USER (1 << 0)
+#define TF_BUSY      (1 << 1)
+#define TF_DETACHED  (1 << 2)
 
-    int errno;
-    proc_state_t state;
+#define TIME_SLICE_TICKS 10
 
-    uint8_t current_core;
-    uint8_t preferred_core;
-    struct proc *next;
-} proc_t;
+typedef enum pcb_state {
+    PROC_READY,
+    PROC_RUNNING,
+    PROC_WAIT_FOR_THREAD,
+    PROC_DEAD,
+} pcb_state_t;
 
-typedef struct core_scheduler {
-    uint8_t core_id;
-    proc_t *current_proc;
-    proc_t *idle_proc;
+typedef enum tcb_state {
+    THREAD_READY,   // good to go
+    THREAD_RUNNING, // should be only one per CPU
+    THREAD_WAITING, // I/O, syscall, ...
+    THREAD_DEAD,
+} tcb_state_t;
 
-    proc_t *run_queue_head;
-    proc_t *run_queue_tail;
-    size_t run_queue_size;
+typedef struct process pcb_t;
+typedef struct thread tcb_t;
 
-    uint64_t context_switches;
-    uint64_t last_schedule_time;
+typedef struct thread {
+    int tid;
+    struct process *parent;
 
-    uint32_t flags;
-    uint64_t default_time_slice;
+    size_t time_slice;
+
+    tcb_state_t state;
+    int flags;
+
+    registers_t *regs;
+    void *fpu; // 512 bytes memory region
 
     lock_t lock;
-} core_scheduler_t;
 
-typedef struct scheduler_manager {
-    core_scheduler_t **core_schedulers;
-    size_t core_count;
+    struct thread *next;
 
-    proc_t *process_list_head;
-    size_t process_count;
+    // TODO: thread-local storage
+} tcb_t;
 
-    pid_t next_pid;
+typedef struct process {
+    int pid;
+    char *name;
 
-    uint64_t load_balance_interval;
-    uint64_t last_load_balance;
+    struct process *parent;
+    int children_count; // diddy really likes this value >:)
+    struct process **children;
 
-    lock_t glob_lock;
-} scheduler_manager_t;
+    pcb_state_t state;
 
-extern scheduler_manager_t *scheduler_manager;
+    int thread_count;
+    tcb_t **threads;
+    tcb_t *main_thread;
 
-void scheduler_init();
-void scheduler_init_cpu(uint8_t core);
+    int fd_count;
+    fileio_t **fds;
+    fileio_t *cwd; // Current Working Directory (yes it's a file :3c)
 
-proc_t *scheduler_add(void (*entry_point)(), int flags);
-void scheduler_remove(proc_t *proc);
+    int cpu; // the cpu we're running on
 
-proc_t *get_current_process();
-void scheduler_switch_context(proc_t *proc, registers_t *current_regs);
+    vmc_t *vmm_ctx;
 
-void scheduler_schedule(void *ctx);
+    struct owner {
+        int gid;
+        int uid;
+    } owner;
 
-#define PROC_TIME_SLICE 10
+    void (*signal_handler)(int);
+} pcb_t;
 
-#endif
+typedef struct cpu_thread_queue {
+    size_t count;
+    tcb_t *head;
+} cpu_queue_t;
+
+/* from arch/[TARGET]/scheduler.asm */
+extern void context_load(registers_t *ctx);
+extern void fpu_save(void *ctx);
+extern void fpu_restore(void *ctx);
+extern __attribute__((noreturn)) void scheduler_idle();
+
+int pcb_destroy(int pid);
+int thread_destroy(int pid, int tid);
+int proc_exit();
+
+// inits the scheduler on every CPU
+// with an "init" process
+int init_scheduler();
+/*
+    the "init" function is a custom function
+    that the developer can assign it to:
+    a simple idle function, an initialization function (that will be called for
+    every CPU), whatever.
+*/
+
+int init_cpu_scheduler(void (*p)()); // inits the scheduler for a specific CPU
+                                     // with a custom process and a thread queue
+
+int proc_create(void (*entry)(), int flags, char *name);
+int thread_create(pcb_t *parent, void (*entry)(), int flags);
+int pcb_destroy(int pid);
+pcb_t *get_current_pcb();
+int thread_destroy(int pid, int tid);
+
+void yield(registers_t *regs);
+
+#endif // SCHEDULER_H

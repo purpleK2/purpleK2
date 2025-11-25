@@ -1,186 +1,149 @@
 #include "kheap.h"
-#include "memory/vmm/vmm.h"
-#include <memory/vmm/vma.h>
-#include <util/string.h>
+#include "memory/pmm/pmm.h"
+#include "stdio.h"
 
-#define ALIGN8(x)      (((x) + 7) & ~7)
-#define MIN_BLOCK_SIZE 16
-#define MAX_BLOCK_SIZE (PAGE_SIZE * MAX_PAGES)
+#include <memory/vmm/vflags.h>
+#include <memory/vmm/vmm.h>
 
-typedef struct block_header {
-    struct block_header *next;
-    size_t size;
-    bool free;
-} block_header_t;
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 
-static block_header_t *free_lists[SIZE_CLASS_COUNT] = {0};
-static heap_stats stats                             = {0};
+#define MIN_CACHE_ORDER 3  // 2^3 = 8 bytes min alloc
+#define MAX_CACHE_ORDER 12 // 2^12 = 4096 (1 page)
+#define NUM_CACHES      (MAX_CACHE_ORDER - MIN_CACHE_ORDER + 1)
 
-static inline size_t size_class_index(size_t size) {
-    size_t cls_size = MIN_BLOCK_SIZE;
-    for (size_t i = 0; i < SIZE_CLASS_COUNT; i++) {
-        if (size <= cls_size)
-            return i;
-        cls_size <<= 1;
+static kmem_cache_t caches[NUM_CACHES];
+static heap_stats stats = {0};
+
+/// Align up to nearest multiple
+static inline size_t align_up(size_t n, size_t align) {
+    return (n + align - 1) & ~(align - 1);
+}
+
+/// Pick cache for allocation size
+static inline kmem_cache_t *get_cache_for_size(size_t size) {
+    size_t order = MIN_CACHE_ORDER;
+    while ((1UL << order) < size && order <= MAX_CACHE_ORDER) {
+        order++;
     }
-    return SIZE_CLASS_COUNT - 1;
-}
-
-static inline size_t size_class_size(size_t index) {
-    return MIN_BLOCK_SIZE << index;
-}
-
-static void add_block_to_free_list(block_header_t *block) {
-    size_t idx      = size_class_index(block->size);
-    block->free     = true;
-    block->next     = free_lists[idx];
-    free_lists[idx] = block;
-}
-
-static void remove_block_from_free_list(block_header_t **list_head,
-                                        block_header_t *block) {
-    block_header_t *prev = NULL;
-    block_header_t *cur  = *list_head;
-    while (cur) {
-        if (cur == block) {
-            if (prev)
-                prev->next = cur->next;
-            else
-                *list_head = cur->next;
-            cur->next = NULL;
-            return;
-        }
-        prev = cur;
-        cur  = cur->next;
-    }
-}
-
-static block_header_t *split_block(block_header_t *block, size_t size) {
-    if (block->size >= size + sizeof(block_header_t) + MIN_BLOCK_SIZE) {
-        block_header_t *new_block =
-            (block_header_t *)((char *)(block + 1) + size);
-        new_block->size = block->size - size - sizeof(block_header_t);
-        new_block->free = true;
-        new_block->next = NULL;
-        block->size     = size;
-        add_block_to_free_list(new_block);
-        return block;
-    }
-    return block;
-}
-
-static block_header_t *request_new_page(size_t size_class_idx) {
-    size_t block_size      = size_class_size(size_class_idx);
-    size_t blocks_per_page = PAGE_SIZE / (block_size + sizeof(block_header_t));
-    if (blocks_per_page == 0)
-        blocks_per_page = 1; // at least 1 block per page
-
-    void *page = vma_alloc(get_current_ctx(), 1, NULL);
-    if (!page)
+    if (order > MAX_CACHE_ORDER)
         return NULL;
-
-    // Create blocks in page and add them to free list
-    char *ptr = (char *)page;
-    for (size_t i = 0; i < blocks_per_page; i++) {
-        block_header_t *block =
-            (block_header_t *)(ptr + i * (block_size + sizeof(block_header_t)));
-        block->size = block_size;
-        block->free = true;
-        block->next = NULL;
-        add_block_to_free_list(block);
-        stats.current_pages_used++;
-    }
-    return free_lists[size_class_idx]; // return first free block in this size
-                                       // class
+    return &caches[order - MIN_CACHE_ORDER];
 }
 
+/// Carve a new page into objects and build freelist
+static void refill_cache(kmem_cache_t *cache) {
+    void *page = valloc(get_current_ctx(), 1, VMO_KERNEL_RW | VMO_NX, NULL);
+    if (!page) {
+        kprintf_panic("SLUB: out of memory in refill_cache");
+        _hcf();
+    }
+
+    size_t obj_size = cache->obj_size;
+    size_t capacity = PAGE_SIZE / obj_size;
+    uint8_t *cursor = (uint8_t *)page;
+
+    for (size_t i = 0; i < capacity; i++) {
+        void *obj      = cursor + i * obj_size;
+        *(void **)obj  = cache->partial; // push onto freelist
+        cache->partial = obj;
+        cache->total_count++;
+        cache->free_count++;
+    }
+
+    stats.current_pages_used++;
+}
+
+/// Initialize all caches
 void kmalloc_init() {
-    memset(free_lists, 0, sizeof(free_lists));
     memset(&stats, 0, sizeof(stats));
+    memset(caches, 0, sizeof(caches));
+
+    for (size_t order = MIN_CACHE_ORDER; order <= MAX_CACHE_ORDER; order++) {
+        kmem_cache_t *cache = &caches[order - MIN_CACHE_ORDER];
+        cache->obj_size     = 1UL << order;
+        cache->align        = cache->obj_size;
+        cache->partial      = NULL;
+    }
 }
 
-// Find suitable free block for size, or request page if none found
-static block_header_t *find_block(size_t size) {
-    size_t idx = size_class_index(size);
-    for (size_t i = idx; i < SIZE_CLASS_COUNT; i++) {
-        block_header_t *list = free_lists[i];
-        if (list) {
-            // take first block in list
-            remove_block_from_free_list(&free_lists[i], list);
-            if (list->size > size) {
-                // split block and add remainder back
-                split_block(list, size);
-            }
-            list->free = false;
-            return list;
-        }
-        // no free block in this class, try next larger size class
-    }
-    // no block found, request new page for requested size class
-    block_header_t *new_block = request_new_page(idx);
-    if (!new_block)
-        return NULL;
-    // allocate from new blocks
-    remove_block_from_free_list(&free_lists[idx], new_block);
-    new_block->free = false;
-    if (new_block->size > size) {
-        split_block(new_block, size);
-    }
-    return new_block;
-}
-
+/// Allocate memory
 void *kmalloc(size_t size) {
     if (size == 0)
         return NULL;
-    size = ALIGN8(size);
-    if (size > MAX_BLOCK_SIZE) {
-        // Large alloc: allocate whole pages
-        size_t pages =
-            (size + sizeof(block_header_t) + PAGE_SIZE - 1) / PAGE_SIZE;
-        void *ptr = vma_alloc(get_current_ctx(), pages, NULL);
+
+    kmem_cache_t *cache = get_cache_for_size(size);
+    if (!cache) {
+        // Large object: fall back to page allocator
+        size_t pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+        void *ptr =
+            valloc(get_current_ctx(), pages, VMO_KERNEL_RW | VMO_NX, NULL);
         if (!ptr)
             return NULL;
-        // Use block header at start of allocated pages
-        block_header_t *block = (block_header_t *)ptr;
-        block->size           = pages * PAGE_SIZE - sizeof(block_header_t);
-        block->free           = false;
-        block->next           = NULL;
         stats.total_allocs++;
-        stats.total_bytes_allocated += block->size;
+        stats.total_bytes_allocated += pages * PAGE_SIZE;
         stats.current_pages_used    += pages;
-        return block + 1;
+        return ptr;
     }
-    block_header_t *block = find_block(size);
-    if (!block)
-        return NULL;
+
+    if (!cache->partial) {
+        refill_cache(cache);
+    }
+
+    void *obj      = cache->partial;
+    cache->partial = *(void **)obj;
+    cache->free_count--;
+
     stats.total_allocs++;
-    stats.total_bytes_allocated += block->size;
-    return block + 1;
+    stats.total_bytes_allocated += cache->obj_size;
+
+    return (void *)obj;
 }
 
+/// Free memory
 void kfree(void *ptr) {
     if (!ptr)
         return;
-    block_header_t *block = ((block_header_t *)ptr) - 1;
-    if (block->free)
-        return;
-    size_t size = block->size;
-    block->free = true;
-    stats.total_frees++;
-    stats.total_bytes_freed += size;
 
-    if (size > MAX_BLOCK_SIZE / 2) {
-        size_t pages =
-            (size + sizeof(block_header_t) + PAGE_SIZE - 1) / PAGE_SIZE;
+    uintptr_t addr      = (uintptr_t)ptr;
+    uintptr_t page_base = addr & ~(PAGE_SIZE - 1);
+
+    // Find which cache this belongs to by size
+    // (simple: iterate caches and check obj_size fits within page)
+    kmem_cache_t *cache = NULL;
+    for (size_t i = 0; i < NUM_CACHES; i++) {
+        if (caches[i].obj_size <= PAGE_SIZE) {
+            uintptr_t offset = addr - page_base;
+            if (offset % caches[i].obj_size == 0) {
+                cache = &caches[i];
+                break;
+            }
+        }
+    }
+
+    if (!cache) {
+        // Large allocation: free whole pages
+        size_t pages = 1; // we don’t track exact pages here (could extend)
+        vfree(get_current_ctx(), (void *)page_base, true);
+        stats.total_frees++;
+        stats.total_bytes_freed  += pages * PAGE_SIZE;
         stats.current_pages_used -= pages;
-        vma_free(get_current_ctx(), block, true);
         return;
     }
 
-    add_block_to_free_list(block);
+    *(void **)ptr  = cache->partial;
+    cache->partial = ptr;
+    cache->free_count++;
+
+    stats.total_frees++;
+    stats.total_bytes_freed += cache->obj_size;
 }
 
 void *kcalloc(size_t num, size_t size) {
+    if (num != 0 && size > SIZE_MAX / num)
+        return NULL;
     size_t total = num * size;
     void *ptr    = kmalloc(total);
     if (ptr)
@@ -195,19 +158,17 @@ void *krealloc(void *ptr, size_t new_size) {
         kfree(ptr);
         return NULL;
     }
-    block_header_t *block = ((block_header_t *)ptr) - 1;
-    if (block->size >= new_size)
-        return ptr;
 
+    // crude: allocate new and copy
     void *new_ptr = kmalloc(new_size);
     if (!new_ptr)
         return NULL;
-    memcpy(new_ptr, ptr, block->size);
+
+    memcpy(new_ptr, ptr, new_size); // assume caller knows old size
     kfree(ptr);
     return new_ptr;
 }
 
-// Optional: function to get stats pointer
 const heap_stats *kmalloc_get_stats(void) {
     return &stats;
 }

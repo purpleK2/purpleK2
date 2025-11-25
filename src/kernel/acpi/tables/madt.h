@@ -18,4 +18,4 @@
 
 void *madt_find_record(void *madt, int record_type);
 
-#endif
+#endif // MADT_H

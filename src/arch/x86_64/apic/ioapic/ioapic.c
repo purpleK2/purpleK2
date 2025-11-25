@@ -1,21 +1,17 @@
 #include "ioapic.h"
 
-#include <apic/lapic/lapic.h>
-
 #include <acpi/tables/madt.h>
 #include <acpi/uacpi/acpi.h>
 #include <acpi/uacpi/tables.h>
 #include <acpi/uacpi/uacpi.h>
-
+#include <apic/lapic/lapic.h>
+#include <interrupts/isr.h>
 #include <memory/heap/kheap.h>
 #include <memory/pmm/pmm.h>
 #include <paging/paging.h>
 
-#include <interrupts/isr.h>
-
 #include <stdint.h>
 #include <stdio.h>
-
 #include <time.h>
 
 uint64_t ioapic_base = 0;

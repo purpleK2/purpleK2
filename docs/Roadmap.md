@@ -3,90 +3,108 @@
 The current status and the future of this OS.
 A build (`.iso` file) will be released every time a Milestone is completed. The various milestones _might_ be updated over the course of time.
 
-## 1st Milestone
+## 3rd Milestone
 
-- [X] Bare bones (Limine and 64-bit kernel)
-
-- [X] `printf` implementation (+ E9 port "debugging")
-
-- [X] GDT
-- [X] Interrupt handling (IDT, ISRs, IRQs)
-- [X] PIC support
-- PIT Driver
-  - [X] Initialization
-  - [X] PIT-supported sleep
-- LAPIC/IOAPIC Initialization
-  - [X] IRQ redirection to I/O APIC
-  - [X] Interrupts work
-  - [X] LAPIC timer init
-
-- ACPI
-  - [X] Get RSDP/RSDT information
-  - [X] MADT (LAPIC initialization)
-  - [ ] HPET
-  - [ ] uACPI implementation
-
-- Memory
-  - [X] Get memory map
-  - [X] Memory management
-    - PMM
-      - [X] Allocating/freeing page frames
-    - VMM
-      - [X] Paging
-      - Mapping devices to memory
-        - [X] LAPIC
-        - [X] I/O APIC
-      - [X] Actual VMM stuff (allocating, freeing virtual memory etc.)  
-    - [X] Kernel heap (`kmalloc`, `kfree`)
-
-- [X] Scheduler
-
-- [Adaptive Driver Interface](https://github.com/project-adi)
-  - [ ] Implementation
-  - [ ] FS metalang
-
-- [ ] PCIe support
-- [ ] AHCI driver
-
-- File systems
-  - USTAR
-    - [X] Basic initrd.img initialization
-    - [X] File lookup
-  - Virtual File System
-    - [X] Design
-    - [X] Implementation
-  - RAMFS
-    - [ ] (un)loading files in safe-to-use memory
-
-  - [ ] ISO9660
-
-- Hard drive setup:
-  - [ ] FAT32 (boot partition)
-  - [ ] EXTx  (system partition)
-
-- [X] SMP
-
-- [ ] Microkernel environment ([Eleanore Semaphore](https://wiki.osdev.org/Eleanore_Semaphore))
-- [ ] Jump to userspace
+- GUI
+  - [ ] lots of sketches and ideas
 
 ## 2nd Milestone
+
+- More filesystem stuff
+  - [ ] ISO9660
+- Hard drive setup:
+
+  - [ ] FAT32 (boot partition)
+  - [ ] EXTx (system partition)
 
 - [ ] Syscalls
 - [ ] ELF loading
 - [ ] OS-specific toolchain
 - [ ] UNIX/POSIX compatibility layer
-    (if someone wants to port coreutils, bash, whatever)
+      (if someone wants to port `coreutils`, `bash`, whatever)
+
 - [ ] Basic shell
+
   - [ ] Configuration System (registry)
   - [ ] Enviroment Variables
   - [ ] Input and Ouput syscalls
+
 - [ ] Video modes
   - [ ] Set better screen resolutions other than limine's default
-  - [ ] (MAYBE) cool graphical stuff
+  - [ ] Some kind of graphics API
   - [ ] Oh yeah, DOOM because we have to :3
 
-## 3rd Milestone
+## 1st Milestone
 
-- GUI
-  - [ ] Obviously a lot of sketches and ideas
-        (aiming to something coming out of the 1980s)
+- [x] Bare bones (Limine and 64-bit kernel)
+
+- [x] `printf` implementation (+ E9 port "debugging")
+
+- [x] GDT
+- [x] Interrupt handling (IDT, ISRs, IRQs)
+- [x] PIC support
+
+- PIT Driver
+  - [x] Initialization
+  - [x] PIT-supported sleep
+- LAPIC/IOAPIC Initialization
+
+  - [x] IRQ redirection to I/O APIC
+  - [x] Interrupts work
+  - [x] LAPIC timer init
+
+- ACPI
+
+  - uACPI implementation
+    - [x] ACPI tables parsing
+    - [x] the cool SSDT stuff
+  - [x] Get RSDP/RSDT
+  - [x] MADT (LAPIC initialization)
+  - [x] HPET
+  - [x] MCFG (PCIe devices parsing)
+
+- Memory
+
+  - [x] Get memory map
+  - [x] Memory management
+    - PMM
+      - [x] Allocating/freeing page frames
+    - VMM
+      - [x] Paging
+      - [x] Actual VMM stuff (allocating, freeing virtual memory regions)
+    - [x] Kernel heap (`kmalloc`, `kfree`)
+
+- [x] Driver interface (this thing took a long time)
+
+- PCI/PCIe support
+
+  - [x] PCI(e) devices parsing
+  - [x] API for drivers
+
+- [x] AHCI driver
+      (we can then read from the disk 🔥)
+
+- File systems
+
+  - ~~USTAR~~ CPIO
+    - [x] Initial initrd creation
+    - [x] File lookup
+  - RAMFS
+    - [x] Base structures
+    - [x] File I/O (`open`, `read`, ...)
+  - Virtual File System
+    - [x] (Re)Design
+    - [x] Initialization
+    - [x] File I/O (`open`, `read`)
+  - DevFS
+    - [x] (Re)Design
+    - [x] (Re)Implementation
+  - ProcFS
+    - [X] Design
+    - [X] Implementation
+
+- [X] Scheduler
+  - [X] with threads and stuff
+- [ ] SMP
+
+- [ ] Jump to userspace

@@ -1,6 +1,8 @@
-#include <graphical/framebuffer.h>
+#include "framebuffer.h"
+
 #include <kernel.h>
 #include <limine.h>
+
 #include <stdint.h>
 
 void drawPixel(uint32_t x, uint32_t y, uint32_t r, uint32_t g, uint32_t b) {

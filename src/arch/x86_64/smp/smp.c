@@ -1,8 +1,4 @@
-#include <smp/smp.h>
-#include <tsc/tsc.h>
-
-#include <stdint.h>
-#include <stdio.h>
+#include "smp.h"
 
 #include <apic/lapic/lapic.h>
 #include <gdt/gdt.h>
@@ -14,12 +10,15 @@
 #include <paging/paging.h>
 #include <scheduler/scheduler.h>
 #include <smp/ipi.h>
-
+#include <tsc/tsc.h>
 #include <util/util.h>
+
+#include <stdint.h>
+#include <stdio.h>
 
 struct tlb_shootdown_event **events;
 
-extern vmm_context_t *kernel_vmm_ctx;
+extern vmc_t *kernel_vmm_ctx;
 
 int smp_init() {
 
@@ -38,7 +37,7 @@ int smp_init() {
 
     kprintf_info("SMP init: %d CPUs detected\n", bootloader_data->cpu_count);
     for (uint64_t i = 0; i < bootloader_data->cpu_count; i++) {
-        struct limine_smp_info *cpu = bootloader_data->cpus[i];
+        struct limine_mp_info *cpu = bootloader_data->cpus[i];
 
         if (cpu->processor_id == 0) {
             // dont init the bsp (limine shouldnt give it but just in case)
@@ -53,7 +52,9 @@ int smp_init() {
     return 0;
 }
 
-void mp_trampoline(struct limine_smp_info *cpu) {
+void mp_trampoline(struct limine_mp_info *cpu) {
+    UNUSED(cpu);
+
     asm("cli");
     gdt_init();
     idt_init();
@@ -78,5 +79,5 @@ void mp_trampoline(struct limine_smp_info *cpu) {
 }
 
 uint8_t get_cpu() {
-    return lapic_get_id();
+    return (uint8_t)(lapic_get_id());
 }
