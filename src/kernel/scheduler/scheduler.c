@@ -111,7 +111,7 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
         for (int i = 0; i < SCHEDULER_STACK_PAGES; i++) {
             uint64_t phys = VIRT_TO_PHYSICAL((uint64_t)thread->user_stack + 
                                             (i * PFRAME_SIZE));
-            map_region_to_page(
+            map_region(
                 (uint64_t *)PHYS_TO_VIRTUAL(parent->vmm_ctx->pml4_table),
                 phys,
                 user_stack_virt + (i * PFRAME_SIZE),
