@@ -42,7 +42,11 @@ void idt_init() {
     debugf_debug("\tlimit: %x\n", idtr.limit);
 
     for (uint16_t vector = 0; vector < IDT_MAX_DESCRIPTORS; vector++) {
-        idt_set_gate(vector, isr_stub_table[vector], GDT_CODE_SEGMENT, 0x8E);
+        if (vector == 0x80) {
+            idt_set_gate(vector, isr_stub_table[vector], GDT_CODE_SEGMENT, 0xEE);
+        } else {
+            idt_set_gate(vector, isr_stub_table[vector], GDT_CODE_SEGMENT, 0x8E);
+        }
         vectors[vector] = true;
     }
 

@@ -140,7 +140,7 @@ extern procfs_t *procfs;
 void pk_init() {
     proc_create(a, 0, "Aprinter");
 
-    proc_create(__sched_test, 0, "Scheduler test");
+    proc_create(__sched_test, TF_MODE_USER, "__sched_test");
     debugf_ok("Starting __sched_test\n");
 
     fileio_t *f = open("/proc/self/procinfo", 0);
@@ -500,14 +500,14 @@ void kstart(void) {
     //     kprintf_ok("PCIe devices parsing done\n");
     // }
 
-    mod_t *mbr = load_module("/initrd/modules/mbr.km");
+    /*mod_t *mbr = load_module("/initrd/modules/mbr.km");
     start_module(mbr);
 
     mod_t *ahci = load_module("/initrd/modules/ahci.km");
     if (!ahci) {
         debugf_warn("Couldn't find AHCI driver!\n");
     }
-    start_module(ahci);
+    start_module(ahci);*/
 
     devfs_print(devfs->root_node, 0);
 

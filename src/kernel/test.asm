@@ -3,7 +3,6 @@ format ELF64
 filename db "/dev/com1", 0
 what_to_write db "hello from process\n", 0
 
-
 section '.text' executable align 16
 
 public __sched_test

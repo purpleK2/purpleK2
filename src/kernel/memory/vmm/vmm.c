@@ -322,7 +322,7 @@ void pagemap_copy_to(uint64_t *non_kernel_pml4) {
         return;
 
     // copy the higher half :)
-    for (int i = 255; i < 512; i++) {
+    for (int i = 0; i < 512; i++) {
         // debugf("Copying %p[%d](%llx) to %p[%d]\n", k_pml4, i, k_pml4[i],
         //        non_kernel_pml4, i);
 

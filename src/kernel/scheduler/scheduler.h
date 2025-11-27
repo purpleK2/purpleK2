@@ -20,9 +20,11 @@
 // keeping this just in case
 #define SCHEDULER_STACKSZ (PFRAME_SIZE * SCHEDULER_STACK_PAGES)
 
-#define TF_MODE_USER (1 << 0)
-#define TF_BUSY      (1 << 1)
-#define TF_DETACHED  (1 << 2)
+#define TF_MODE_USER    (1 << 0)
+#define TF_MODE_KERNEL  (1 << 1)
+#define TF_BUSY         (1 << 2)
+#define TF_DETACHED     (1 << 3)
+#define TF_HAS_FPU      (1 << 4)
 
 #define TIME_SLICE_TICKS 10
 
@@ -54,6 +56,10 @@ typedef struct thread {
 
     registers_t *regs;
     void *fpu; // 512 bytes memory region
+
+    // for usermode
+    void *kernel_stack;
+    void *user_stack;
 
     lock_t lock;
 
@@ -124,8 +130,12 @@ int proc_create(void (*entry)(), int flags, char *name);
 int thread_create(pcb_t *parent, void (*entry)(), int flags);
 int pcb_destroy(int pid);
 pcb_t *get_current_pcb();
+tcb_t *get_current_tcb();
 int thread_destroy(int pid, int tid);
 
 void yield(registers_t *regs);
+
+void enter_usermode(void (*entry)(), void *user_stack);
+void syscall_return(registers_t *regs);
 
 #endif // SCHEDULER_H

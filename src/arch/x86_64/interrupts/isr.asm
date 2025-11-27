@@ -19,28 +19,26 @@ isr_common:
     push r13
     push r14
     push r15
-
+    
     mov rbp, ds
     push rbp
-
+    
     mov bx, 0x10
     mov ds, bx
     mov es, bx
     mov fs, bx
     mov gs, bx
-    mov ss, bx
-
+    
     mov rdi, rsp
     call isr_handler
-
+    
     pop rbp
     mov bx, bp
     mov ds, bx
     mov es, bx
     mov fs, bx
     mov gs, bx
-    mov ss, bx
-
+    
     pop r15
     pop r14
     pop r13
@@ -56,7 +54,7 @@ isr_common:
     pop rcx
     pop rbx
     pop rax
-
+    
     add rsp, 16
     iretq
 

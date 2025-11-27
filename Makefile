@@ -32,7 +32,8 @@ QEMU_FLAGS = -m 2G \
     		 -smp 2 \
     		 -enable-kvm \
     		 -netdev tap,id=net0,ifname=tap0,script=no,downscript=no \
-   			 -device rtl8139,netdev=net0,mac=52:54:00:12:34:56
+   			 -device rtl8139,netdev=net0,mac=52:54:00:12:34:56 \
+			 -no-reboot -no-shutdown -d cpu_reset,cpu -D qemu.log
 
 # Nuke built-in rules and variables.
 override MAKEFLAGS += -rR --no-print-directory

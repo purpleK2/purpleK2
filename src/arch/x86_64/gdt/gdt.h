@@ -63,4 +63,8 @@ typedef struct {
 
 void gdt_init();
 
+void tss_set_kernel_stack(uint64_t stack_ptr);
+uint64_t tss_get_kernel_stack(void);
+tss_t* get_tss(void);
+
 #endif

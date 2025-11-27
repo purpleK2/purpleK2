@@ -1,4 +1,6 @@
 #include "scheduler.h"
+#include "gdt/gdt.h"
+#include "memory/pmm/pmm.h"
 
 #include <cpu.h>
 #include <errors.h>
@@ -38,13 +40,13 @@ int init_scheduler() {
 
 static tcb_t *pick_next_thread(int cpu) {
     tcb_t *thread = thread_queues[cpu].head;
-
+    
     for (; thread != NULL; thread = thread->next) {
         if (thread->state == THREAD_READY) {
             return thread;
         }
     }
-
+    
     return NULL;
 }
 
@@ -55,71 +57,116 @@ static uint64_t global_pid = 0;
 int proc_create(void (*entry)(), int flags, char *name) {
     pcb_t *proc = kmalloc(sizeof(pcb_t));
     memset(proc, 0, sizeof(pcb_t));
-    proc->pid   = __sync_fetch_and_add(&global_pid, 1);
+    proc->pid = __sync_fetch_and_add(&global_pid, 1);
     proc->state = PROC_READY;
-
+    
     if (name) {
         proc->name = strdup(name);
     }
-
-    proc->fds      = NULL;
+    
+    proc->fds = NULL;
     proc->fd_count = 0;
-
-    int vflags    = (flags & TF_MODE_USER ? VMO_USER_RW : VMO_KERNEL_RW);
+    
+    // Enhanced VMM context creation with proper permissions
+    int vflags = (flags & TF_MODE_USER ? VMO_USER_RW : VMO_KERNEL_RW);
     proc->vmm_ctx = vmc_init(NULL, vflags);
-    proc->cwd     = NULL;
+    vmm_init(proc->vmm_ctx);
+    proc->cwd = NULL;
+    
     thread_create(proc, entry, flags);
-
-    procfs_pcb_t *procfs_proc =
-        procfs_proc_create(proc); // automatically creates the threads inside
+    
+    procfs_pcb_t *procfs_proc = procfs_proc_create(proc); // automatically creates the threads inside
     procfs_proc_append(procfs, procfs_proc);
-
-    debugf_debug("Created new process with entry %p PID=%d\n", entry,
-                 proc->pid);
-
+    
+    debugf_debug("Created process PID=%d flags=0x%x mode=%s\n", 
+                 proc->pid, flags, 
+                 (flags & TF_MODE_USER) ? "USER" : "KERNEL");
+    
     return proc->pid;
 }
 
 int thread_create(pcb_t *parent, void (*entry)(), int flags) {
     tcb_t *thread = kmalloc(sizeof(tcb_t));
     memset(thread, 0, sizeof(tcb_t));
-    thread->tid    = __sync_fetch_and_add(&parent->thread_count, 1);
-    thread->flags  = flags;
-    thread->state  = THREAD_READY;
+    thread->tid = __sync_fetch_and_add(&parent->thread_count, 1);
+    thread->flags = flags;
+    thread->state = THREAD_READY;
     thread->parent = parent;
-
     thread->time_slice = SCHEDULER_THREAD_TS;
-
-    void *stack =
-        (void *)PHYS_TO_VIRTUAL(pmm_alloc_pages(SCHEDULER_STACK_PAGES));
-
-    // so the struct sits on the top of the stack
+    
+    thread->fpu = (void *)PHYS_TO_VIRTUAL(pmm_alloc_page());
+    memset(thread->fpu, 0, 512);
+    
     registers_t *ctx = kmalloc(sizeof(registers_t));
     memset(ctx, 0, sizeof(registers_t));
-
-    ctx->rip     = (uint64_t)entry;
-    ctx->cs      = (flags & TF_MODE_USER) ? 0x1B : 0x08;
-    ctx->ss      = (flags & TF_MODE_USER) ? 0x23 : 0x10;
-    ctx->ds      = (flags & TF_MODE_USER) ? 0x23 : 0x10;
-    ctx->rflags  = 0x202;
-    ctx->rsp     = (uint64_t)(stack + SCHEDULER_STACKSZ);
+    
+    if (flags & TF_MODE_USER) {
+        
+        thread->kernel_stack = (void *)PHYS_TO_VIRTUAL(
+            pmm_alloc_pages(SCHEDULER_STACK_PAGES));
+        thread->user_stack = (void *)PHYS_TO_VIRTUAL(
+            pmm_alloc_pages(SCHEDULER_STACK_PAGES));
+        
+        uint64_t user_stack_virt = 0x7FFFFFFFF000;
+        for (int i = 0; i < SCHEDULER_STACK_PAGES; i++) {
+            uint64_t phys = VIRT_TO_PHYSICAL((uint64_t)thread->user_stack + 
+                                            (i * PFRAME_SIZE));
+            map_region_to_page(
+                (uint64_t *)PHYS_TO_VIRTUAL(parent->vmm_ctx->pml4_table),
+                phys,
+                user_stack_virt + (i * PFRAME_SIZE),
+                PFRAME_SIZE,
+                PMLE_USER_READ_WRITE
+            );
+        }
+        
+        ctx->rip = (uint64_t)entry;
+        ctx->cs = 0x1B | 3;
+        ctx->ss = 0x23 | 3;
+        ctx->ds = 0x23 | 3;
+        ctx->rflags = 0x202;
+        ctx->rbp = 0;
+        ctx->rsp = user_stack_virt + SCHEDULER_STACKSZ - 16;
+        
+        debugf_debug("Created usermode thread TID=%d entry=%p ustack=%p kstack=%p\n",
+                     thread->tid, entry, (void*)ctx->rsp, thread->kernel_stack);
+    } else {
+        thread->kernel_stack = (void *)PHYS_TO_VIRTUAL(
+            pmm_alloc_pages(SCHEDULER_STACK_PAGES));
+        thread->user_stack = NULL;
+        
+        ctx->rip = (uint64_t)entry;
+        ctx->cs = 0x08;
+        ctx->ss = 0x10;
+        ctx->ds = 0x10;
+        ctx->rflags = 0x202;
+        ctx->rsp = (uint64_t)(thread->kernel_stack + SCHEDULER_STACKSZ - 8);
+        
+        debugf_debug("Created kernel thread TID=%d entry=%p kstack=%p\n",
+                     thread->tid, entry, (void*)ctx->rsp);
+    }
+    
     thread->regs = ctx;
-    thread->fpu  = (void *)PHYS_TO_VIRTUAL(pmm_alloc_page());
-
-    int cpu                 = get_cpu();
-    thread->next            = thread_queues[cpu].head;
+    
+    int cpu = get_cpu();
+    thread->next = thread_queues[cpu].head;
     thread_queues[cpu].head = thread;
     thread_queues[cpu].count++;
-
-    parent->threads =
-        krealloc(parent->threads, sizeof(tcb_t *) * parent->thread_count);
+    
+    parent->threads = krealloc(parent->threads, 
+                               sizeof(tcb_t *) * parent->thread_count);
     parent->threads[thread->tid] = thread;
-
+    
     if (!current_threads[cpu]) {
         current_threads[cpu] = thread;
     }
-
+    
     return thread->tid;
+}
+
+tcb_t *get_current_tcb() {
+    int cpu = get_cpu();
+    return current_threads[cpu];
 }
 
 pcb_t *pcb_lookup(int pid) {
@@ -190,18 +237,18 @@ int pcb_destroy(int pid) {
 }
 
 void thread_push_to_queue(tcb_t *to_push) {
-    int cpu   = get_cpu();
+    int cpu = get_cpu();
     tcb_t **p = &thread_queues[cpu].head;
-
+    
     while (*p && *p != to_push) {
         p = &(*p)->next;
     }
     if (*p == NULL) {
         return;
     }
-    *p            = to_push->next;
+    *p = to_push->next;
     to_push->next = NULL;
-
+    
     tcb_t **q = &thread_queues[cpu].head;
     while (*q) {
         q = &(*q)->next;
@@ -209,19 +256,20 @@ void thread_push_to_queue(tcb_t *to_push) {
     *q = to_push;
 }
 
-void thread_remove_from_queue(tcb_t *to_remove) {
-    int cpu   = get_cpu();
-    tcb_t **p = &thread_queues[cpu].head;
 
+void thread_remove_from_queue(tcb_t *to_remove) {
+    int cpu = get_cpu();
+    tcb_t **p = &thread_queues[cpu].head;
+    
     while (*p && *p != to_remove) {
         p = &(*p)->next;
     }
-
+    
     if (*p == NULL) {
         return;
     }
-
-    *p              = to_remove->next;
+    
+    *p = to_remove->next;
     to_remove->next = NULL;
 }
 
@@ -255,33 +303,38 @@ int proc_exit() {
 }
 
 void yield(registers_t *regs) {
-    int cpu        = get_cpu();
+    int cpu = get_cpu();
     tcb_t *current = current_threads[cpu];
     tcb_t *next;
-
+    
+    if (!current) {
+        next = pick_next_thread(cpu);
+        goto switch_to;
+    }
+    
     switch (current->state) {
     case THREAD_READY:
         next = current;
         break;
-
+        
     case THREAD_RUNNING:
         if (--current->time_slice > 0) {
             return;
         }
-
+        
         fpu_save(current->fpu);
-        // RIP context_save (08/2025-11/2025)
-        // TODO: find some way to save registers if regs == NULL
-        memcpy(current->regs, regs, sizeof(registers_t));
-
-        current->state      = THREAD_READY;
+        
+        if (regs) {
+            memcpy(current->regs, regs, sizeof(registers_t));
+        }
+        
+        current->state = THREAD_READY;
         current->time_slice = SCHEDULER_THREAD_TS;
-
+        
         thread_push_to_queue(current);
-
         next = pick_next_thread(cpu);
         break;
-
+        
     case THREAD_WAITING:
     case THREAD_DEAD:
         thread_remove_from_queue(current);
@@ -289,23 +342,33 @@ void yield(registers_t *regs) {
         break;
     }
 
+switch_to:
     if (!next) {
-        mprintf_warn(
-            "No more processes left to run. If you want, you can "
-            "reboot your compooter, or, you can keep your computer on to "
-            "unlock a very high electrical bill :kekw:\n");
-        scheduler_idle(); // good luck getting out of here >^D
+        mprintf_warn("No more processes. System idle.\n");
+        scheduler_idle();
     }
-
+    
     current_threads[cpu] = next;
-    next->state          = THREAD_RUNNING;
-
-    fpu_restore(next->fpu);
-    // it instantly returns to the RIP in here
-    if (!regs) {
-        // we won't return from here
-        context_load(next->regs);
+    next->state = THREAD_RUNNING;
+    
+    if (next->parent && next->parent->vmm_ctx) {
+        uint64_t pml4_phys = VIRT_TO_PHYSICAL((uint64_t)next->parent->vmm_ctx->pml4_table);
+        asm volatile("mov %0, %%cr3" :: "r"(pml4_phys) : "memory");
     }
-    // or else... just do it the gentle way
-    memcpy(regs, next->regs, sizeof(registers_t));
+
+    if (next && (next->flags & TF_MODE_USER)) {
+        uint64_t kernel_stack_top = (uint64_t)next->kernel_stack + SCHEDULER_STACKSZ;
+        tss_set_kernel_stack(kernel_stack_top);
+        
+        debugf_debug("Switching to usermode thread TID=%d, kernel_stack=%p\n",
+                     next->tid, (void*)kernel_stack_top);
+    }
+    
+    fpu_restore(next->fpu);
+    
+    if (!regs) {
+        context_load(next->regs);
+    } else {
+        memcpy(regs, next->regs, sizeof(registers_t));
+    }
 }
