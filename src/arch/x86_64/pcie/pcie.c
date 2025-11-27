@@ -418,9 +418,8 @@ pcie_status pcie_check_buses(struct acpi_mcfg_allocation *ecam,
 
                 // we should map the base address
                 // according to the spec, each device is 4K long
-                map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()),
-                                   addr, PHYS_TO_VIRTUAL(addr), 0x1000,
-                                   PMLE_KERNEL_READ_WRITE);
+                map_region((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), addr,
+                           PHYS_TO_VIRTUAL(addr), 1, PMLE_KERNEL_READ_WRITE);
 
                 switch (pcie_add_device((void *)PHYS_TO_VIRTUAL(addr), pci_ids,
                                         ecam->end_bus - ecam->start_bus)) {
@@ -432,7 +431,7 @@ pcie_status pcie_check_buses(struct acpi_mcfg_allocation *ecam,
                     //              "[%.02hhx:%.02hhx.%.01hhx]\n",
                     //              0, device, function);
                     unmap_region((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()),
-                                 PHYS_TO_VIRTUAL(addr), 0x1000);
+                                 PHYS_TO_VIRTUAL(addr), 1);
                     continue;
 
                 default:

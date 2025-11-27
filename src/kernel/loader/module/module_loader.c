@@ -344,10 +344,10 @@ mod_t *load_module(const char *file_path) {
                          mod_addr_counter,
                          mod_addr_counter + page_count * 0x1000);
 
-            map_region_to_page(
+            map_region(
                 (uint64_t *)(uintptr_t)PHYS_TO_VIRTUAL(get_kernel_pml4()),
-                (uint64_t)(uintptr_t)addr_phys, mod_addr_counter,
-                page_count * PAGE_SIZE, PMLE_KERNEL_READ_WRITE);
+                (uint64_t)(uintptr_t)addr_phys, mod_addr_counter, page_count,
+                PMLE_KERNEL_READ_WRITE);
 
             for (size_t page_idx = 0; page_idx < page_count; page_idx++) {
                 _invalidate(mod_addr_counter + (page_idx * PAGE_SIZE));

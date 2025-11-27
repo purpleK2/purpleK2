@@ -97,9 +97,9 @@ void ioapic_init() {
 
     ioapic_base = PHYS_TO_VIRTUAL(madt_record_ioapic->address);
 
-    map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(get_kernel_pml4()),
-                       madt_record_ioapic->address, ioapic_base, 0x1000,
-                       PMLE_KERNEL_READ_WRITE);
+    map_region((uint64_t *)PHYS_TO_VIRTUAL(get_kernel_pml4()),
+               madt_record_ioapic->address, ioapic_base, 1,
+               PMLE_KERNEL_READ_WRITE);
 
     uint8_t ioapic_max_redir_entry = (ioapic_reg_read(0x01) >> 16) & 0xFF;
     debugf_debug("Redirection entries: %hhu\n", ioapic_max_redir_entry + 1);

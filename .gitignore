@@ -84,3 +84,6 @@ src/kernel/autoconf.h
 target/modules
 findher.ogg
 .directory
+
+# UEFI firmware files build
+edk2-ovmf

@@ -390,10 +390,9 @@ void *valloc(vmc_t *ctx, size_t pages, uint8_t flags, void *phys) {
     }
 
     void *phys_to_map = phys_al ? phys_al : pmm_alloc_pages(pages);
-    map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(ctx->pml4_table),
-                       (uint64_t)phys_to_map, (uint64_t)ptr,
-                       (uint64_t)(pages * PFRAME_SIZE),
-                       vmo_to_page_flags(flags));
+    map_region((uint64_t *)PHYS_TO_VIRTUAL(ctx->pml4_table),
+               (uint64_t)phys_to_map, (uint64_t)ptr, (uint64_t)pages,
+               vmo_to_page_flags(flags));
 
     // debugf_debug("Returning pointer %p\n", ptr);
 
@@ -433,7 +432,7 @@ void vfree(vmc_t *ctx, void *ptr, bool free) {
     if (free)
         pmm_free((void *)phys, cur_vmo->len);
     unmap_region((uint64_t *)PHYS_TO_VIRTUAL(ctx->pml4_table), cur_vmo->base,
-                 (cur_vmo->len * PFRAME_SIZE));
+                 cur_vmo->len);
 
     vmo_t *to_dealloc = cur_vmo;
     // d_ is deallocated_

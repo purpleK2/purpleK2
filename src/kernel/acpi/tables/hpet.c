@@ -35,9 +35,8 @@ int hpet_init(void) {
 
     // map the address
     uint64_t hpet_base = hpet->address.address;
-    map_region_to_page((uint64_t *)PHYS_TO_VIRTUAL(get_kernel_pml4()),
-                       hpet_base, PHYS_TO_VIRTUAL(hpet_base), 0x1000,
-                       PMLE_KERNEL_READ_WRITE);
+    map_region((uint64_t *)PHYS_TO_VIRTUAL(get_kernel_pml4()), hpet_base,
+               PHYS_TO_VIRTUAL(hpet_base), 1, PMLE_KERNEL_READ_WRITE);
     hpet_base_glob = hpet_base; // save the base address globally
 
     // enable the HPET

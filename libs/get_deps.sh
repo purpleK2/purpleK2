@@ -93,3 +93,7 @@ for uacpi_c in "$UACPI_BASE_PATH/source/"*; do
         copy_if_exists $uacpi_c $KERNEL_DIR/acpi/uacpi
     fi
 done
+
+
+# straight up copied from limine c template :3c
+curl -L https://github.com/osdev0/edk2-ovmf-nightly/releases/latest/download/edk2-ovmf.tar.gz | gunzip | tar -xf -
