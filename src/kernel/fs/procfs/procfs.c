@@ -57,11 +57,13 @@ void procfs_info_add(procfs_info_t *info, char *buf, size_t offset,
     char *d = info->data; // data
 
     if (!d) {
-        d = kmalloc(ROUND_UP((size + offset) + 1, PROCFS_FILESZ)); // for '\0'
+        info->size = ROUND_UP((size + offset) + 1, PROCFS_FILESZ);
+        d          = kmalloc(info->size); // for '\0'
     }
 
     if (info->size < (offset + size)) {
-        d = krealloc(d, ROUND_UP(offset + size, PROCFS_FILESZ));
+        info->size = ROUND_UP(offset + size, PROCFS_FILESZ);
+        d          = krealloc(d, info->size);
     }
 
     memcpy(&d[offset], buf, size);
