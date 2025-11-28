@@ -296,7 +296,7 @@ void kstart(void) {
     debugf_debug("Higher Half Direct Map offset: %llx\n",
                  limine_parsed_data.hhdm_offset);
 
-    pmm_init();
+    pmm_init(memmap_response);
     kprintf_ok("Initialized PMM\n");
 
     if (paging_mode_request.response == NULL) {

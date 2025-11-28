@@ -21,16 +21,15 @@
 
 lock_t PMM_LOCK = ATOMIC_FLAG_INIT;
 
-int usable_entry_count;
-
-extern struct limine_memmap_response *memmap_response;
 extern void _hcf();
 
-freelist_node *pmm_headnode;
+flnode_t *pmm_headnode = NULL;
+int usable_entry_count = 0;
 
-void pmm_init() {
-    // array of nodes (used only on initialization)
-    freelist_node *fl_nodes[limine_parsed_data.usable_entry_count];
+void pmm_init(LIMINE_PTR(struct limine_memmap_response *) memmap_response) {
+    if (!memmap_response) {
+        kprintf_panic("No memmap response given!\n");
+    }
 
     usable_entry_count = 0;
     for (uint64_t i = 0; i < memmap_response->entry_count; i++) {
@@ -39,42 +38,18 @@ void pmm_init() {
         if (memmap_entry->type != LIMINE_MEMMAP_USABLE)
             continue;
 
+        flnode_t *fl_node = pmm_node_create(memmap_entry);
+
+        fl_append(&pmm_headnode, fl_node);
+
         usable_entry_count++;
-    }
-    // create a freelist entry that points to the start of each usable address
-    // and link them
-    // @note temp is a temporary counter for the fl_nodes array
-    for (uint64_t i = 0, temp = 0; i < memmap_response->entry_count; i++) {
-        struct limine_memmap_entry *memmap_entry = memmap_response->entries[i];
-
-        if (memmap_entry->type != LIMINE_MEMMAP_USABLE)
-            continue;
-
-        freelist_node *fl_node =
-            (freelist_node *)PHYS_TO_VIRTUAL(memmap_entry->base);
-        fl_node->length = memmap_entry->length;
-
-        if (temp == 0)
-            pmm_headnode = fl_node;
-
-        fl_nodes[temp] = fl_node;
-
-        temp++;
-    }
-
-    for (int i = 0; i < usable_entry_count; i++) {
-        if (i < usable_entry_count - 1) {
-            fl_nodes[i]->next = fl_nodes[i + 1];
-        } else {
-            fl_nodes[i]->next = NULL;
-        }
     }
 
     kprintf_info("Found %d usable regions\n", usable_entry_count);
 
     // prints all nodes
-    for (freelist_node *fl_node = pmm_headnode; fl_node != NULL;
-         fl_node                = fl_node->next) {
+    for (flnode_t *fl_node = pmm_headnode; fl_node != NULL;
+         fl_node           = fl_node->next) {
         debugf_debug("ENTRY n. %p\n", fl_node);
         debugf_debug("\tlength: %llx\n", fl_node->length);
         debugf_debug("\tnext: %p\n", fl_node->next);
@@ -91,10 +66,10 @@ int get_freelist_entry_count() {
 
         @returns head of nodes
 */
-freelist_node *fl_update_nodes() {
+flnode_t *fl_update_nodes() {
     usable_entry_count = 0;
-    for (freelist_node *i = pmm_headnode; i != NULL;
-         i                = i->next, usable_entry_count++)
+    for (flnode_t *i = pmm_headnode; i != NULL;
+         i           = i->next, usable_entry_count++)
         ;
 
     return pmm_headnode;
@@ -112,7 +87,7 @@ void *pmm_alloc_page() {
 #endif
 
     void *ptr = NULL;
-    freelist_node *cur_node;
+    flnode_t *cur_node;
     for (cur_node = pmm_headnode; cur_node != NULL; cur_node = cur_node->next) {
 #ifdef CONFIG_PMM_DEBUG
         debugf_debug("Looking for available memory at address %p\n", cur_node);
@@ -144,10 +119,10 @@ void *pmm_alloc_page() {
         pmm_headnode = pmm_headnode->next;
     } else {
         // shift the node
-        freelist_node *new_node = (ptr + PFRAME_SIZE);
-        new_node->length        = (cur_node->length - PFRAME_SIZE);
-        new_node->next          = cur_node->next;
-        pmm_headnode            = new_node;
+        flnode_t *new_node = (ptr + PFRAME_SIZE);
+        new_node->length   = (cur_node->length - PFRAME_SIZE);
+        new_node->next     = cur_node->next;
+        pmm_headnode       = new_node;
     }
 
     fl_update_nodes();
@@ -186,11 +161,11 @@ void pmm_free(void *ptr, size_t pages) {
                  ptr + (pages * PFRAME_SIZE));
 #endif
 
-    freelist_node *deallocated = (freelist_node *)PHYS_TO_VIRTUAL(ptr);
+    flnode_t *deallocated = (flnode_t *)PHYS_TO_VIRTUAL(ptr);
 
     // you can check vmm.c for an explanation of the same behaviour
-    for (freelist_node *f = pmm_headnode; f != NULL; f = f->next) {
-        freelist_node *next = f->next;
+    for (flnode_t *f = pmm_headnode; f != NULL; f = f->next) {
+        flnode_t *next = f->next;
 
         if (next < deallocated) {
             continue;
@@ -199,10 +174,10 @@ void pmm_free(void *ptr, size_t pages) {
         if ((f + (f->length)) == deallocated) {
             f->length += (PFRAME_SIZE * pages);
         } else if ((f - (PFRAME_SIZE * pages)) == deallocated) {
-            freelist_node *new = next - (PFRAME_SIZE * pages);
-            new->length        = next->length + (PFRAME_SIZE * pages);
-            new->next          = next->next;
-            f->next            = new;
+            flnode_t *new = next - (PFRAME_SIZE * pages);
+            new->length   = next->length + (PFRAME_SIZE * pages);
+            new->next     = next->next;
+            f->next       = new;
         } else {
             deallocated->length = (PFRAME_SIZE * pages);
             deallocated->next   = next;
@@ -211,6 +186,8 @@ void pmm_free(void *ptr, size_t pages) {
 
         break;
     }
+
+    fl_update_nodes();
 
     spinlock_release(&PMM_LOCK);
 }

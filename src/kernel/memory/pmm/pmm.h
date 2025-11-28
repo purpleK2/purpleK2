@@ -19,7 +19,7 @@ extern struct bootloader_data limine_parsed_data;
          ? ((uint64_t)(ADDR))                                                  \
          : ((uint64_t)(ADDR)) - limine_parsed_data.hhdm_offset)
 
-void pmm_init();
+void pmm_init(LIMINE_PTR(struct limine_memmap_response *) memmap_response);
 
 void *pmm_alloc_page();
 void *pmm_alloc_pages(size_t pages);
