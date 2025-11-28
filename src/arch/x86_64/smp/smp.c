@@ -18,7 +18,7 @@
 
 struct tlb_shootdown_event **events;
 
-extern vmc_t *kernel_vmm_ctx;
+extern vmc_t *kernel_vmc;
 
 int smp_init() {
 
@@ -60,7 +60,7 @@ void mp_trampoline(struct limine_mp_info *cpu) {
     idt_init();
     isr_init();
 
-    vmm_switch_ctx(kernel_vmm_ctx);
+    vmc_switch(kernel_vmc);
 
     lapic_init();
 

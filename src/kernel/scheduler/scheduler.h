@@ -20,11 +20,11 @@
 // keeping this just in case
 #define SCHEDULER_STACKSZ (PFRAME_SIZE * SCHEDULER_STACK_PAGES)
 
-#define TF_MODE_USER    (1 << 0)
-#define TF_MODE_KERNEL  (1 << 1)
-#define TF_BUSY         (1 << 2)
-#define TF_DETACHED     (1 << 3)
-#define TF_HAS_FPU      (1 << 4)
+#define TF_MODE_USER   (1 << 0)
+#define TF_MODE_KERNEL (1 << 1)
+#define TF_BUSY        (1 << 2)
+#define TF_DETACHED    (1 << 3)
+#define TF_HAS_FPU     (1 << 4)
 
 #define TIME_SLICE_TICKS 10
 
@@ -88,7 +88,7 @@ typedef struct process {
 
     int cpu; // the cpu we're running on
 
-    vmc_t *vmm_ctx;
+    vmc_t *vmc;
 
     struct owner {
         int gid;

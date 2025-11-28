@@ -30,8 +30,17 @@ typedef struct vmm_linkedlist {
     struct vmm_linkedlist *next;
 } vmm_node_t;
 
-vmc_t *get_current_ctx();
-void vmm_switch_ctx(vmc_t *new_ctx);
+vmc_t *get_current_vmc();
+void vmc_switch(vmc_t *new_ctx);
+
+vmc_t *get_global_vmc();
+void set_global_vmc(vmc_t *glob);
+
+vmc_t *vmc_alloc();
+void vmc_free(vmc_t *v);
+
+vmo_t *vmo_alloc();
+void vmo_free(vmo_t *v);
 
 vmo_t *vmo_init(uint64_t base, size_t length, uint64_t flags);
 void vmo_dump(vmo_t *vmo);
@@ -43,8 +52,11 @@ void vmc_destroy(vmc_t *ctx);
 void pagemap_copy_to(uint64_t *non_kernel_pml4);
 
 void vmm_init(vmc_t *ctx);
+void process_vmm_init(vmc_t **proc_vmcr, uint64_t flags);
 
 void *valloc(vmc_t *ctx, size_t pages, uint8_t flags, void *phys);
 void vfree(vmc_t *ctx, void *ptr, bool free);
+
+void global_vmc_init(vmc_t *kernel_vmc);
 
 #endif

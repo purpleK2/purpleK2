@@ -50,7 +50,7 @@ void *uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
     size_t actual_len = len + offset; // this is BYTES!!!
     size_t pages      = ROUND_UP(actual_len, PFRAME_SIZE) / PFRAME_SIZE;
 
-    void *virt = valloc(get_current_ctx(), pages, VMO_KERNEL_RW | VMO_NX,
+    void *virt = valloc(get_current_vmc(), pages, VMO_KERNEL_RW | VMO_NX,
                         (void *)aligned);
 
     // re-align the pointer to original addr offset
@@ -64,7 +64,7 @@ void uacpi_kernel_unmap(void *addr, uacpi_size len) {
     uint64_t aligned = ROUND_DOWN((uint64_t)addr, PFRAME_SIZE);
     UNUSED(len);
 
-    vfree(get_current_ctx(), (void *)aligned, false);
+    vfree(get_current_vmc(), (void *)aligned, false);
 }
 
 #ifndef UACPI_FORMATTED_LOGGING
@@ -476,7 +476,6 @@ void uacpi_kernel_stall(uacpi_u8 usec) {
         ;
 }
 
-// TODO: timer-agnostic sleep
 void uacpi_kernel_sleep(uacpi_u64 msec) {
     sleep(msec);
 }

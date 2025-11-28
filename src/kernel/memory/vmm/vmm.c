@@ -15,14 +15,23 @@
 #include <stdio.h>
 #include <string.h>
 
-vmc_t *current_vmm_ctx;
+vmc_t *current_vmc = NULL;
+vmc_t *global_vmc  = NULL;
 
-vmc_t *get_current_ctx() {
-    return current_vmm_ctx;
+vmc_t *get_current_vmc() {
+    return current_vmc;
 }
 
-void vmm_switch_ctx(vmc_t *new_ctx) {
-    current_vmm_ctx = new_ctx;
+void vmc_switch(vmc_t *new) {
+    current_vmc = new;
+}
+
+void set_global_vmc(vmc_t *glob) {
+    global_vmc = glob;
+}
+
+vmc_t *get_global_vmc() {
+    return global_vmc;
 }
 
 // imagine making a function to print stuff that you're going to barely use LMAO
@@ -314,7 +323,7 @@ void pagemap_copy_to(uint64_t *non_kernel_pml4) {
         return;
 
     // TODO: copy only the higher half (which means also fixing lots of stuff)
-    for (int i = 0; i < 512; i++) {
+    for (int i = 255; i < 512; i++) {
         // debugf("Copying %p[%d](%llx) to %p[%d]\n", k_pml4, i, k_pml4[i],
         //        non_kernel_pml4, i);
 
@@ -332,6 +341,34 @@ void vmm_init(vmc_t *ctx) {
     }
 
     pagemap_copy_to(ctx->pml4_table);
+}
+
+// to be used by scheduler
+void process_vmm_init(vmc_t **proc_vmcr, uint64_t flags) {
+    if (!proc_vmcr) {
+        return;
+    }
+
+    if (!(*proc_vmcr)) {
+        *proc_vmcr = vmc_init(NULL, flags);
+    }
+
+    vmc_t *proc_vmc = *proc_vmcr;
+    if (proc_vmc->root_vmo) {
+        vmo_free(proc_vmc->root_vmo);
+    }
+
+    vmo_t **proc_vmor = &proc_vmc->root_vmo;
+
+    for (vmo_t *v = global_vmc->root_vmo; v != NULL; v = v->next) {
+        *proc_vmor = vmo_alloc();
+        memcpy(*proc_vmor, v, sizeof(vmo_t));
+
+        proc_vmor = &(*proc_vmor)->next;
+    }
+
+    proc_vmc->pml4_table = (uint64_t *)PHYS_TO_VIRTUAL(pmm_alloc_page());
+    memcpy(proc_vmc->pml4_table, global_vmc->pml4_table, PFRAME_SIZE);
 }
 
 void *valloc(vmc_t *ctx, size_t pages, uint8_t flags, void *phys) {
@@ -443,4 +480,31 @@ void vfree(vmc_t *ctx, void *ptr, bool free) {
 
     // debugf_debug("Region %llx destroyed\n", to_dealloc->base);
     vmo_free(to_dealloc);
+}
+
+void global_vmc_init(vmc_t *kernel_vmc) {
+    if (!kernel_vmc) {
+        return;
+    }
+
+    if (!global_vmc) {
+        global_vmc = vmc_alloc();
+    }
+
+    uint64_t *new_pml4 = (uint64_t *)PHYS_TO_VIRTUAL(pmm_alloc_page());
+    uint64_t *src_pml4 = (uint64_t *)PHYS_TO_VIRTUAL(kernel_vmc->pml4_table);
+    memcpy(new_pml4, src_pml4, PFRAME_SIZE);
+
+    vmo_t **globvmo_cur = &global_vmc->root_vmo;
+
+    for (vmo_t *v = kernel_vmc->root_vmo; v != NULL; v = v->next) {
+        *globvmo_cur = vmo_alloc();
+        memcpy(*globvmo_cur, v, sizeof(vmo_t));
+
+        globvmo_cur = &(*globvmo_cur)->next;
+    }
+
+    global_vmc->pml4_table = new_pml4;
+
+    set_global_vmc(global_vmc);
 }

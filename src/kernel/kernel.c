@@ -119,7 +119,7 @@ struct bootloader_data *get_bootloader_data() {
     return &limine_parsed_data;
 }
 
-vmc_t *kernel_vmm_ctx;
+vmc_t *kernel_vmc;
 
 extern void __sched_test(void);
 
@@ -143,12 +143,13 @@ void pk_init() {
     proc_create(__sched_test, TF_MODE_USER, "__sched_test");
     debugf_ok("Starting __sched_test\n");
 
+    kprintf("Yo we are in a process!\n");
+
     fileio_t *f = open("/proc/self/procinfo", 0);
     char buf_test[200];
     read(f, sizeof(buf_test), buf_test);
-
     // yes you can
-    // procfs_print(procfs);
+    procfs_print(procfs);
 }
 
 // kernel main function
@@ -325,9 +326,9 @@ void kstart(void) {
     uint64_t *kernel_pml4 = (uint64_t *)pmm_alloc_page();
     paging_init((uint64_t *)PHYS_TO_VIRTUAL(kernel_pml4));
 
-    kernel_vmm_ctx = vmc_init(kernel_pml4, VMO_KERNEL_RW);
-    vmm_init(kernel_vmm_ctx);
-    vmm_switch_ctx(kernel_vmm_ctx);
+    kernel_vmc = vmc_init(kernel_pml4, VMO_KERNEL_RW);
+    vmm_init(kernel_vmc);
+    vmc_switch(kernel_vmc);
     kprintf_ok("Initialized VMM\n");
 
     kmalloc_init();
@@ -413,9 +414,6 @@ void kstart(void) {
 
     limine_parsed_data.cpu_count = smp_request.response->cpu_count;
     limine_parsed_data.cpus      = smp_request.response->cpus;
-
-    init_scheduler();
-    init_cpu_scheduler(pk_init);
 
     if (!module_request.response) {
         kprintf_warn("No modules loaded.\n");
@@ -510,6 +508,17 @@ void kstart(void) {
     start_module(ahci);*/
 
     devfs_print(devfs->root_node, 0);
+
+    /*
+        IDEA:
+        create a template VMC for all the processes
+        for stuff like scheduler structs, heap structures
+    */
+
+    global_vmc_init(kernel_vmc);
+
+    init_scheduler();
+    init_cpu_scheduler(pk_init);
 
     // boom
     irq_registerHandler(0, scheduler_timer_tick);
