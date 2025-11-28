@@ -50,9 +50,13 @@ void pmm_init(LIMINE_PTR(struct limine_memmap_response *) memmap_response) {
     // prints all nodes
     for (flnode_t *fl_node = pmm_headnode; fl_node != NULL;
          fl_node           = fl_node->next) {
-        debugf_debug("ENTRY n. %p\n", fl_node);
+        debugf_debug("ENTRY @ %p\n", fl_node);
         debugf_debug("\tlength: %llx\n", fl_node->length);
-        debugf_debug("\tnext: %p\n", fl_node->next);
+        if (fl_node->next) {
+            debugf_debug("\tnext: %p\n", fl_node->next);
+        } else {
+            debugf_debug("\tEND\n");
+        }
     }
 }
 
