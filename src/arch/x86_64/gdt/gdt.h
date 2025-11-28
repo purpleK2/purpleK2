@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <util/macro.h>
 
+#define KERNEL_STACK_SIZE 4096 * 8
+
 #define GDT_CODE_SEGMENT      0x08
 #define GDT_DATA_SEGMENT      0x10
 #define GDT_USER_CODE_SEGMENT 0x18
@@ -65,6 +67,6 @@ void gdt_init();
 
 void tss_set_kernel_stack(uint64_t stack_ptr);
 uint64_t tss_get_kernel_stack(void);
-tss_t* get_tss(void);
+tss_t *get_tss(void);
 
 #endif
