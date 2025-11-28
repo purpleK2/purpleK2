@@ -59,7 +59,7 @@ void *vmmlist_alloc(vmm_node_t **root_node, size_t item_size) {
     }
 
     vmm_node_t *v_cur;
-    vmm_node_t *v_prev;
+    vmm_node_t *v_prev = NULL;
 
     // find a large enough block for a VMO
     for (v_cur = (*root_node); v_cur->next != NULL; v_cur = v_cur->next) {
@@ -70,17 +70,14 @@ void *vmmlist_alloc(vmm_node_t **root_node, size_t item_size) {
         if (!v_cur->next) {
             v_cur->next = vlist_node_alloc(item_size);
         }
+
+        v_prev = v_cur; // 200 iq move
     }
 
     item        = v_cur;
-    v_cur->len -= sizeof(vmm_node_t);
+    v_cur->len -= item_size;
 
     if (v_cur != (*root_node)) {
-        // find the block before the current node
-        for (v_prev = (*root_node); v_prev->next != v_cur;
-             v_prev = v_prev->next)
-            ;
-
         // shift the node
         v_prev->next += item_size;
         memcpy(v_prev->next, v_cur, sizeof(vmm_node_t));
@@ -103,6 +100,7 @@ void vmmlist_free(vmm_node_t **root_node, size_t item_size, void *tofree) {
 
     // tbf we can just do a for loop
     vmm_node_t *v_cur    = NULL;
+    vmm_node_t *v_prev   = NULL;
     vmm_node_t *v_tofree = tofree;
 
     if (tofree < (*root_node)) {
@@ -124,6 +122,7 @@ void vmmlist_free(vmm_node_t **root_node, size_t item_size, void *tofree) {
         vmm_node_t *v_next = v_cur->next;
 
         if (v_next < tofree) {
+            v_prev = v_cur;
             continue;
         }
 
@@ -151,18 +150,11 @@ void vmmlist_free(vmm_node_t **root_node, size_t item_size, void *tofree) {
         return;
     }
 
-    vmm_node_t *v_prev = NULL;
-
     // if it's page-aligned (should be 0x1000 most of the time), we can free it
     v_tofree = v_cur;
     if (v_tofree == (*root_node)) {
         (*root_node) = (*root_node)->next;
     } else {
-        // get what comes before it
-        for (v_prev = (*root_node); v_prev->next != v_tofree;
-             v_prev = v_prev->next)
-            ;
-
         v_prev->next = v_tofree->next;
     }
 
