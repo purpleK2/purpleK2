@@ -353,7 +353,7 @@ switch_to:
     
     if (next->parent && next->parent->vmm_ctx) {
         uint64_t pml4_phys = VIRT_TO_PHYSICAL((uint64_t)next->parent->vmm_ctx->pml4_table);
-        asm volatile("mov %0, %%cr3" :: "r"(pml4_phys) : "memory");
+        _load_pml4((uint64_t *)pml4_phys);
     }
 
     if (next && (next->flags & TF_MODE_USER)) {

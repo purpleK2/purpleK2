@@ -31,7 +31,7 @@ void ipi_handler_tlb_flush(void *ctx) {
     debugf_debug("Processor %lu flushed TLB @ %llx\n", cpu,
                  ((registers_t *)ctx)->rip);
 
-    asm("mov %0, %%cr3" : : "r"(get_current_ctx()->pml4_table));
+    _load_pml4(get_current_vmc()->pml4_table);
     lapic_send_eoi();
 }
 
