@@ -42,7 +42,7 @@ static void refill_cache(kmem_cache_t *cache) {
     }
 
     size_t obj_size = cache->obj_size;
-    size_t capacity = PAGE_SIZE / obj_size;
+    size_t capacity = PFRAME_SIZE / obj_size;
     uint8_t *cursor = (uint8_t *)page;
 
     for (size_t i = 0; i < capacity; i++) {
@@ -77,13 +77,13 @@ void *kmalloc(size_t size) {
     kmem_cache_t *cache = get_cache_for_size(size);
     if (!cache) {
         // Large object: fall back to page allocator
-        size_t pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+        size_t pages = (size + PFRAME_SIZE - 1) / PFRAME_SIZE;
         void *ptr =
             valloc(get_current_vmc(), pages, VMO_KERNEL_RW | VMO_NX, NULL);
         if (!ptr)
             return NULL;
         stats.total_allocs++;
-        stats.total_bytes_allocated += pages * PAGE_SIZE;
+        stats.total_bytes_allocated += pages * PFRAME_SIZE;
         stats.current_pages_used    += pages;
         return ptr;
     }
@@ -108,13 +108,13 @@ void kfree(void *ptr) {
         return;
 
     uintptr_t addr      = (uintptr_t)ptr;
-    uintptr_t page_base = addr & ~(PAGE_SIZE - 1);
+    uintptr_t page_base = addr & ~(PFRAME_SIZE - 1);
 
     // Find which cache this belongs to by size
     // (simple: iterate caches and check obj_size fits within page)
     kmem_cache_t *cache = NULL;
     for (size_t i = 0; i < NUM_CACHES; i++) {
-        if (caches[i].obj_size <= PAGE_SIZE) {
+        if (caches[i].obj_size <= PFRAME_SIZE) {
             uintptr_t offset = addr - page_base;
             if (offset % caches[i].obj_size == 0) {
                 cache = &caches[i];
@@ -128,7 +128,7 @@ void kfree(void *ptr) {
         size_t pages = 1; // we don’t track exact pages here (could extend)
         vfree(get_current_vmc(), (void *)page_base, true);
         stats.total_frees++;
-        stats.total_bytes_freed  += pages * PAGE_SIZE;
+        stats.total_bytes_freed  += pages * PFRAME_SIZE;
         stats.current_pages_used -= pages;
         return;
     }

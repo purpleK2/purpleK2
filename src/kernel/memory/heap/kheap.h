@@ -5,8 +5,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define PAGE_SIZE 4096
-
 void kmalloc_init(void);
 
 void *kmalloc(size_t size);

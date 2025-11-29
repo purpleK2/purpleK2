@@ -224,9 +224,9 @@ static void cleanup_module_allocation(uintptr_t start_addr,
                                       uintptr_t current_addr) {
     // Free allocated pages if loading fails
     if (start_addr && current_addr > start_addr) {
-        size_t total_pages = (current_addr - start_addr) / PAGE_SIZE;
+        size_t total_pages = (current_addr - start_addr) / PFRAME_SIZE;
         for (size_t i = 0; i < total_pages; i++) {
-            uint64_t virt_addr = start_addr + (i * PAGE_SIZE);
+            uint64_t virt_addr = start_addr + (i * PFRAME_SIZE);
             // Get physical address from page table and free it
             // This would need to be implemented based on your paging system
             unmap_page(
@@ -258,7 +258,7 @@ mod_t *load_module(const char *file_path) {
     if (next_module_base == 0) {
         uint64_t kernel_end = (uint64_t)(uintptr_t)&__kernel_end;
 
-        next_module_base = ALIGN_UP((kernel_end), PAGE_SIZE);
+        next_module_base = ALIGN_UP((kernel_end), PFRAME_SIZE);
         debugf_debug("Base of the first module is 0x%016llx\n",
                      next_module_base);
         if (next_module_base == 0) {
@@ -326,7 +326,7 @@ mod_t *load_module(const char *file_path) {
 
             // Calculate number of pages needed for this section
             size_t page_count =
-                ALIGN_UP(section->sh_size, PAGE_SIZE) / PAGE_SIZE;
+                ALIGN_UP(section->sh_size, PFRAME_SIZE) / PFRAME_SIZE;
             void *addr_phys = pmm_alloc_pages(page_count);
 
             if (!addr_phys) {
@@ -350,17 +350,17 @@ mod_t *load_module(const char *file_path) {
                 PMLE_KERNEL_READ_WRITE);
 
             for (size_t page_idx = 0; page_idx < page_count; page_idx++) {
-                _invalidate(mod_addr_counter + (page_idx * PAGE_SIZE));
+                _invalidate(mod_addr_counter + (page_idx * PFRAME_SIZE));
             }
 
             // Set section address and copy data
             section->sh_addr = mod_addr_counter;
 
             // SAFETY CHECK: Ensure we don't write beyond the mapped region
-            if (section->sh_size > page_count * PAGE_SIZE) {
+            if (section->sh_size > page_count * PFRAME_SIZE) {
                 debugf_warn(
                     "Section size 0x%llx exceeds mapped region 0x%llx\n",
-                    section->sh_size, page_count * PAGE_SIZE);
+                    section->sh_size, page_count * PFRAME_SIZE);
                 cleanup_module_allocation(this_mod_start, mod_addr_counter);
                 kfree(buffer);
                 close(file);
@@ -376,7 +376,7 @@ mod_t *load_module(const char *file_path) {
             }
 
             // Advance to next section, maintaining page alignment
-            mod_addr_counter += page_count * PAGE_SIZE;
+            mod_addr_counter += page_count * PFRAME_SIZE;
         } else {
             section->sh_addr = (uintptr_t)ehdr + section->sh_offset;
         }
@@ -461,9 +461,10 @@ mod_t *load_module(const char *file_path) {
     mod->exit_point   = (void (*)(void))exit_point;
     mod->modinfo      = (modinfo_t *)mod_info;
     mod->ehdr         = buffer;
-    mod->end_address = (void *)(uintptr_t)ALIGN_UP(mod_addr_counter, PAGE_SIZE);
+    mod->end_address =
+        (void *)(uintptr_t)ALIGN_UP(mod_addr_counter, PFRAME_SIZE);
 
-    next_module_base = ALIGN_UP(mod_addr_counter, PAGE_SIZE);
+    next_module_base = ALIGN_UP(mod_addr_counter, PFRAME_SIZE);
 
     debugf_debug(
         "Module %s (name: %s) loaded successfully: base=0x%llx, entry=0x%llx, "
