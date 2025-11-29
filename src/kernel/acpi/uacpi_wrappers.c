@@ -187,8 +187,13 @@ void uacpi_kernel_vlog(uacpi_log_level log_level, const uacpi_char *fmt,
 // "Hey bro we need to init UACPI with this init level"
 // and you initialize the proper components for that init level
 uacpi_status uacpi_kernel_initialize(uacpi_init_level current_init_lvl) {
-    if (current_init_lvl != UACPI_INIT_LEVEL_EARLY)
+    switch (current_init_lvl) {
+    case UACPI_INIT_LEVEL_EARLY:
+        break;
+
+    default:
         return UACPI_STATUS_DENIED;
+    }
 
     return UACPI_STATUS_OK;
 }
