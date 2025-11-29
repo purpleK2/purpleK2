@@ -22,7 +22,4 @@ __sched_test:
     mov rdi, 0
     int 0x80
 
-    jmp .loop
-
-.loop:
-    jmp .loop
+	ret
