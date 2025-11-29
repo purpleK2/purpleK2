@@ -483,6 +483,9 @@ void uacpi_kernel_sleep(uacpi_u64 msec) {
 uacpi_handle uacpi_kernel_create_mutex(void) {
     lock_t *atomic = kmalloc(sizeof(lock_t));
 
+    lock_t ugh = ATOMIC_FLAG_INIT;
+    *atomic    = ugh;
+
     return atomic;
 }
 
@@ -515,7 +518,7 @@ uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle spinlock,
     switch (timeout) {
     case 0x0:
         if (!atomic_flag_test_and_set(spinlock))
-            return UACPI_STATUS_DENIED;
+            return UACPI_STATUS_TIMEOUT;
 
         break;
 
@@ -536,7 +539,7 @@ uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle spinlock,
         break;
     }
     case 0xFFFF:
-        // spinlock_acquire(spinlock);
+        spinlock_acquire(spinlock);
         break;
 
     default:
@@ -547,7 +550,7 @@ uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle spinlock,
 }
 
 void uacpi_kernel_release_mutex(uacpi_handle spinlock) {
-    // spinlock_release(spinlock);
+    spinlock_release(spinlock);
 }
 
 uacpi_bool uacpi_kernel_wait_for_event(uacpi_handle semaphore,
