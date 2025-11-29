@@ -127,19 +127,11 @@ extern void __sched_test(void);
 
 // HBA_MEM *mem;
 
-void a() {
-    for (;;) {
-        // debugf("A");
-    }
-}
-
 devfs_t *devfs = NULL;
 
 extern procfs_t *procfs;
 
 void pk_init() {
-    proc_create(a, 0, "Aprinter");
-
     proc_create(__sched_test, TF_MODE_USER, "__sched_test");
     debugf_ok("Starting __sched_test\n");
 
