@@ -22,4 +22,7 @@ __sched_test:
     mov rdi, 0
     int 0x80
 
-    ret ; just in case
+    jmp .loop
+
+.loop:
+    jmp .loop

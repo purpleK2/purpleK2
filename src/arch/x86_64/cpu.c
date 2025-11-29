@@ -137,3 +137,9 @@ int get_cpu_name(char *out) {
 uint64_t get_current_cpu() {
     return lapic_get_id();
 }
+
+bool is_address_canonical(uint64_t addr) {
+    int64_t s = (int64_t)(addr << 16) >> 16;
+    (void)s;
+    return ((addr >> 47) == 0) || ((addr >> 47) == ((1ULL << 17) - 1));
+}

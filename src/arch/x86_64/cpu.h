@@ -193,4 +193,6 @@ uint32_t cpu_reg_read(uint32_t *reg);
 
 uint64_t get_current_cpu();
 
+bool is_address_canonical(uint64_t addr);
+
 #endif
