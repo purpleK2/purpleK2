@@ -14,6 +14,7 @@ void sys_exit(int status) {
     UNUSED(status);
 
     proc_exit();
+    yield(NULL);
 }
 
 int sys_open(char *path, int mode) {

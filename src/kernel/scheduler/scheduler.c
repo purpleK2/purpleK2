@@ -108,12 +108,12 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
         thread->user_stack =
             (void *)PHYS_TO_VIRTUAL(pmm_alloc_pages(SCHEDULER_STACK_PAGES));
 
-        uint64_t user_stack_top = 0x00007FFFFFFFF000ULL + 0x1000;
+        uint64_t user_stack_top  = 0x00007FFFFFFFF000ULL + 0x1000;
         uint64_t user_stack_base = user_stack_top - SCHEDULER_STACKSZ;
 
         map_region((uint64_t *)PHYS_TO_VIRTUAL(parent->vmc->pml4_table),
-           (uint64_t)thread->user_stack, user_stack_base,
-           SCHEDULER_STACK_PAGES, PMLE_USER_READ_WRITE);
+                   (uint64_t)thread->user_stack, user_stack_base,
+                   SCHEDULER_STACK_PAGES, PMLE_USER_READ_WRITE);
 
         ctx->rip    = (uint64_t)entry;
         ctx->cs     = 0x1B | 3;
@@ -121,7 +121,7 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
         ctx->ds     = 0x23 | 3;
         ctx->rflags = 0x202;
         ctx->rbp    = 0;
-        ctx->rsp = user_stack_top - 16;
+        ctx->rsp    = user_stack_top - 16;
 
         if (!is_address_canonical(ctx->rsp)) {
             debugf_warn("Cannot create usermode thread TID=%d: stack address "
@@ -308,6 +308,9 @@ int proc_exit() {
     tcb_t *current = current_threads[cpu];
 
     int ret = pcb_destroy(current->parent->pid);
+
+    debugf("Process %d killed!\n", current->parent->pid);
+
     return ret;
 }
 
@@ -346,8 +349,9 @@ void yield(registers_t *regs) {
     case THREAD_WAITING:
     case THREAD_DEAD:
         thread_remove_from_queue(current);
-        debugf_debug("Cleaned up thread TID=%d, PID=%d\n", current->tid, current->parent->pid);
-        if(current->parent->state == PROC_DEAD) {
+        debugf_debug("Cleaned up thread TID=%d, PID=%d\n", current->tid,
+                     current->parent->pid);
+        if (current->parent->state == PROC_DEAD) {
             pmm_free((void *)VIRT_TO_PHYSICAL(current->kernel_stack),
                      SCHEDULER_STACK_PAGES);
             if (current->user_stack) {
