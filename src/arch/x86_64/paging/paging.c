@@ -240,27 +240,28 @@ void unmap_page(uint64_t *pml4_table, uint64_t virtual) {
 // maps a page region to its physical range
 // @param len is in pages
 void map_region(uint64_t *pml4_table, uint64_t physical_start,
-                uint64_t virtual_start, uint64_t len, uint64_t flags) {
+                uint64_t virtual_start, uint64_t pages, uint64_t flags) {
 #ifdef CONFIG_PAGING_DEBUG
     debugf_debug("Mapping address range (phys)%llx-%llx (virt)%llx-%llx\n",
                  physical_start, physical_start + (len * PFRAME_SIZE),
                  virtual_start, virtual_start + (len * PFRAME_SIZE));
 #endif
 
-    for (uint64_t i = 0; i < len; i++) {
+    for (uint64_t i = 0; i < pages; i++) {
         uint64_t phys = physical_start + (i * PFRAME_SIZE);
         uint64_t virt = virtual_start + (i * PFRAME_SIZE);
         map_phys_to_page(pml4_table, phys, virt, flags);
     }
 }
 
-void unmap_region(uint64_t *pml4_table, uint64_t virtual_start, uint64_t len) {
+void unmap_region(uint64_t *pml4_table, uint64_t virtual_start,
+                  uint64_t pages) {
 
 #ifdef CONFIG_PAGING_DEBUG
     debugf_debug("Unmapping address range (virt)%llx-%llx\n", virtual_start,
                  virtual_start + (len * PFRAME_SIZE));
 #endif
-    for (uint64_t i = 0; i < len; i++) {
+    for (uint64_t i = 0; i < pages; i++) {
         uint64_t virt = virtual_start + (i * PFRAME_SIZE);
         unmap_page(pml4_table, virt);
     }

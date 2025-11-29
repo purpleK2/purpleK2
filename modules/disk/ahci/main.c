@@ -90,7 +90,7 @@ void module_entry() {
     pci_device_t *sata = ahci_detect_controller();
 
     map_region((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), sata->bar[5],
-               PHYS_TO_VIRTUAL(sata->bar[5]), 0x20000, AHCI_MMIO_FLAGS);
+               PHYS_TO_VIRTUAL(sata->bar[5]), 0x20, AHCI_MMIO_FLAGS);
 
     abar = (HBA_MEM *)PHYS_TO_VIRTUAL(sata->bar[5]);
 

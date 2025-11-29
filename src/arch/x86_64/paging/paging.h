@@ -103,15 +103,15 @@ uint64_t *get_create_pmlt(uint64_t *pml_table, uint64_t pmlt_index,
                           uint64_t flags);
 
 void unmap_page(uint64_t *pml4_table, uint64_t virtual);
-void unmap_region(uint64_t *pml4_table, uint64_t virtual_start, uint64_t len);
+void unmap_region(uint64_t *pml4_table, uint64_t virtual_start, uint64_t pages);
 
 void map_phys_to_page(uint64_t *pml4_table, uint64_t physical, uint64_t virtual,
                       uint64_t flags);
 void map_region(uint64_t *pml4_table, uint64_t physical_start,
-                uint64_t virtual_start, uint64_t len, uint64_t flags);
+                uint64_t virtual_start, uint64_t pages, uint64_t flags);
 
 void copy_range_to_pagemap(uint64_t *dst_pml4, uint64_t *src_pml4,
-                           uint64_t virt_start, size_t len);
+                           uint64_t virt_start, size_t pages);
 
 uint64_t vmo_to_page_flags(uint64_t vmo_flags);
 uint64_t page_to_vmo_flags(uint64_t pg_flags);
