@@ -18,6 +18,8 @@
 #define PIC_READ_IRR 0x0a // OCW3 irq ready next CMD read
 #define PIC_READ_ISR 0x0b // OCW3 irq service next CMD read
 
+#define CASCADE_IRQ 2
+
 // Initialization Control Word 1
 // -----------------------------
 //  0   IC4     if set, the PIC expects to receive ICW4 during initialization

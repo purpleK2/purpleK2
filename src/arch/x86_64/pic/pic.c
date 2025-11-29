@@ -38,8 +38,8 @@ void pic_config(int offset1, int offset2) {
     _outb(PIC2_DATA, offset2); // ICW2: Slave PIC vector offset
     _io_wait();
 
-    _outb(PIC1_DATA, 0x04); // ICW3: tell Master PIC that there is a slave PIC
-                            // at IRQ2 (0000 0100)
+    _outb(PIC1_DATA, 1 << CASCADE_IRQ); // ICW3: tell Master PIC that there is a
+                                        // slave PIC at IRQ2 (0000 0100)
     _io_wait();
     _outb(PIC2_DATA,
           0x02); // ICW3: tell Slave PIC its cascade identity (0000 0010)
@@ -52,10 +52,9 @@ void pic_config(int offset1, int offset2) {
     _outb(PIC2_DATA, PIC_ICW4_8086);
     _io_wait();
 
+    // unmask both PICs
     _outb(PIC1_DATA, 0);
-    _io_wait();
     _outb(PIC2_DATA, 0);
-    _io_wait();
 }
 
 void irq_mask(uint8_t irq_line) {
