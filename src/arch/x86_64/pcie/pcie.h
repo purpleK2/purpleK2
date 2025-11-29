@@ -6,18 +6,27 @@
 
 #include <errors.h>
 
-#include <fs/cpio/newc.h>
-
 #define PCIE_HEADT0_BARS 6
 #define PCIE_HEADT1_BARS 2
 
 #define PCIE_MAX_VENDOR_NAME 128
 #define PCIE_MAX_DEVICE_NAME 128
 
+#define PCIE_ILLEGAL_VENDOR 0xFFFF
+
+// 4096 bytes for per-PCIe device Configuration Space
+#define PCIE_CFGSPACE_PAGES 1
+
+#define PCI_IDS_PATH "/initrd/pci.ids"
+
+#define PCIE_OFFSET(b, d, f) ((b << 20) | (d << 15) | (f << 12))
+#define PCIE_BAR_ADDR(b)     (b & ~(0b1111))
+
 typedef enum {
     PCIE_STATUS_OK       = EOK,
     PCIE_STATUS_ENOCFG   = -ENOCFG,
-    PCIE_STATUS_ENULLPTR = -ENULLPTR,
+    PCIE_STATUS_NULLPTR  = -ENULLPTR,
+    PCIE_STATUS_ILLEGAL  = -9,
     PCIE_STATUS_EUNKNOWN = -EUNFB,
     PCIE_STATUS_EINVALID = -EINVAL,
     PCIE_STATUS_MULTIFUN = 1,
@@ -32,9 +41,6 @@ typedef enum {
     PCIE_BAR_MM32 = 0,
     PCIE_BAR_MM64 = 2,
 } pcie_bar_flags;
-
-#define PCIE_OFFSET(b, d, f) ((b << 20) | (d << 15) | (f << 12))
-#define PCIE_BAR_ADDR(b)     (b & ~(0x7))
 
 typedef enum {
     PCIE_HEADER_T0 = 0,
@@ -130,22 +136,15 @@ typedef struct pcie_device {
     char *vendor_str;
     char *device_str;
 
-    uint32_t *bars; // number of BARs depend on the PCIe header type;
+    // Header type-specific attributes
+
+    uint32_t *bars;
 
     uint8_t irq_line, irq_pin;
 
     struct pcie_device *next;
 } pcie_device_t;
 
-pcie_device_t *get_pcie_dev_head();
-
-pcie_status pcie_devices_init(cpio_file_t *pci_ids);
-
-pcie_status dump_pcie_dev_info(pcie_device_t *pcie);
-
-pcie_status pcie_add_device(void *pcie_addr, cpio_file_t *pci_ids,
-                            uint8_t bus_range);
-pcie_status pcie_find_device(uint16_t vendor_id, uint16_t device_id,
-                             pcie_device_t *out);
+pcie_status pcie_init();
 
 #endif

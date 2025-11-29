@@ -492,11 +492,11 @@ void kstart(void) {
 
     pci_scan(pci_ids);
     kprintf_ok("PCI devices parsing done\n");
-    // if (pcie_devices_init(pci_ids) != 0) {
-    //     kprintf_warn("Failed to parse PCIe devices!\n");
-    // } else {
-    //     kprintf_ok("PCIe devices parsing done\n");
-    // }
+    if (pcie_init() != PCIE_STATUS_OK) {
+        kprintf_warn("Failed to parse PCIe devices!\n");
+    } else {
+        kprintf_ok("PCIe devices parsing done\n");
+    }
 
     /*mod_t *mbr = load_module("/initrd/modules/mbr.km");
     start_module(mbr);
