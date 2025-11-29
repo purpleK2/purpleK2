@@ -117,7 +117,8 @@
         "tga.h": "c",
         "procfs.h": "c",
         "parallel.h": "c",
-        "file_io.h": "c"
+        "file_io.h": "c",
+        "tables.h": "c"
     },
     "dotnet.defaultSolution": "disable",
     "cmake.configureOnOpen": false,
