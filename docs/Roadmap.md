@@ -79,10 +79,10 @@ A build (`.iso` file) will be released every time a Milestone is completed. The 
 - PCI/PCIe support
 
   - [x] PCI(e) devices parsing
-  - [x] API for drivers
+  - [ ] API for drivers
 
 - [x] AHCI driver
-      (we can then read from the disk 🔥)
+      (we can read from the disk 🔥)
 
 - File systems
 
