@@ -205,15 +205,6 @@ void uacpi_kernel_deinitialize(void) {
 
 uacpi_status uacpi_kernel_pci_device_open(uacpi_pci_address address,
                                           uacpi_handle *out_handle) {
-    uint64_t pci_address = PCI_ADDR(address.segment, address.bus,
-                                    address.device, address.function);
-
-    if (pci_address == 0)
-        return UACPI_STATUS_DENIED;
-
-    ((uint64_t **)out_handle)[0] = (uint64_t *)PHYS_TO_VIRTUAL(pci_address);
-
-    return UACPI_STATUS_OK;
 }
 
 void uacpi_kernel_pci_device_close(uacpi_handle handle) {
@@ -222,117 +213,32 @@ void uacpi_kernel_pci_device_close(uacpi_handle handle) {
     handle = NULL;
 }
 
-uacpi_status uacpi_kernel_pci_read_impl(uacpi_handle addr,
-                                        uacpi_handle value_out,
-                                        uacpi_size bytes) {
-    switch (bytes) {
-    case 1:
-        ((uint8_t *)value_out)[0] = ((uint8_t *)PHYS_TO_VIRTUAL(addr))[0];
-        break;
-
-    case 2:
-        ((uint16_t *)value_out)[0] = ((uint16_t *)PHYS_TO_VIRTUAL(addr))[0];
-        ;
-        break;
-    case 4:
-        ((uint32_t *)value_out)[0] = ((uint32_t *)PHYS_TO_VIRTUAL(addr))[0];
-        break;
-    default:
-        return UACPI_STATUS_INVALID_ARGUMENT;
-    }
-
-    return UACPI_STATUS_OK;
-}
-
 uacpi_status uacpi_kernel_pci_read8(uacpi_handle device, uacpi_size offset,
                                     uacpi_u8 *value) {
-    uacpi_pci_address *pci_dev = (uacpi_pci_address *)PHYS_TO_VIRTUAL(device);
-
-    void *pci_addr = (void *)((((pci_dev->bus << 8) + (pci_dev->device << 3) +
-                                pci_dev->function)
-                               << 12) +
-                              offset);
-
-    return uacpi_kernel_pci_read_impl(pci_addr, value, 1);
+    return UACPI_STATUS_UNIMPLEMENTED;
 }
 uacpi_status uacpi_kernel_pci_read16(uacpi_handle device, uacpi_size offset,
                                      uacpi_u16 *value) {
-    uacpi_pci_address *pci_dev = (uacpi_pci_address *)PHYS_TO_VIRTUAL(device);
-
-    void *pci_addr = (void *)((((pci_dev->bus << 8) + (pci_dev->device << 3) +
-                                pci_dev->function)
-                               << 12) +
-                              offset);
-
-    return uacpi_kernel_pci_read_impl(pci_addr, value, 2);
+    return UACPI_STATUS_UNIMPLEMENTED;
 }
 uacpi_status uacpi_kernel_pci_read32(uacpi_handle device, uacpi_size offset,
                                      uacpi_u32 *value) {
-    uacpi_pci_address *pci_dev = (uacpi_pci_address *)PHYS_TO_VIRTUAL(device);
-
-    void *pci_addr = (void *)((((pci_dev->bus << 8) + (pci_dev->device << 3) +
-                                pci_dev->function)
-                               << 12) +
-                              offset);
-
-    return uacpi_kernel_pci_read_impl(pci_addr, value, 4);
-}
-
-uacpi_status uacpi_kernel_pci_write_impl(uacpi_handle addr, uacpi_size value,
-                                         uacpi_size bytes) {
-    switch (bytes) {
-    case 1:
-        ((uint8_t *)PHYS_TO_VIRTUAL(addr))[0] = (uint8_t)value;
-        break;
-
-    case 2:
-        ((uint16_t *)PHYS_TO_VIRTUAL(addr))[0] = (uint16_t)value;
-        ;
-        break;
-    case 4:
-        ((uint16_t *)PHYS_TO_VIRTUAL(addr))[0] = (uint16_t)value;
-        break;
-    default:
-        return UACPI_STATUS_INVALID_ARGUMENT;
-    }
-
-    return UACPI_STATUS_OK;
+    return UACPI_STATUS_UNIMPLEMENTED;
 }
 
 uacpi_status uacpi_kernel_pci_write8(uacpi_handle device, uacpi_size offset,
                                      uacpi_u8 value) {
-    uacpi_pci_address *pci_dev = (uacpi_pci_address *)PHYS_TO_VIRTUAL(device);
-
-    void *pci_addr = (void *)((((pci_dev->bus << 8) + (pci_dev->device << 3) +
-                                pci_dev->function)
-                               << 12) +
-                              offset);
-
-    return uacpi_kernel_pci_write_impl(pci_addr, (uacpi_size)value, 1);
+    return UACPI_STATUS_UNIMPLEMENTED;
 }
 
 uacpi_status uacpi_kernel_pci_write16(uacpi_handle device, uacpi_size offset,
                                       uacpi_u16 value) {
-    uacpi_pci_address *pci_dev = (uacpi_pci_address *)PHYS_TO_VIRTUAL(device);
-
-    void *pci_addr = (void *)((((pci_dev->bus << 8) + (pci_dev->device << 3) +
-                                pci_dev->function)
-                               << 12) +
-                              offset);
-
-    return uacpi_kernel_pci_write_impl(pci_addr, (uacpi_size)value, 2);
+    return UACPI_STATUS_UNIMPLEMENTED;
 }
 
 uacpi_status uacpi_kernel_pci_write32(uacpi_handle device, uacpi_size offset,
                                       uacpi_u32 value) {
-    uacpi_pci_address *pci_dev = (uacpi_pci_address *)PHYS_TO_VIRTUAL(device);
-
-    void *pci_addr = (void *)((((pci_dev->bus << 8) + (pci_dev->device << 3) +
-                                pci_dev->function)
-                               << 12) +
-                              offset);
-
-    return uacpi_kernel_pci_write_impl(pci_addr, (uacpi_size)value, 2);
+    return UACPI_STATUS_UNIMPLEMENTED;
 }
 
 typedef struct {
@@ -560,34 +466,42 @@ void uacpi_kernel_release_mutex(uacpi_handle spinlock) {
 
 uacpi_bool uacpi_kernel_wait_for_event(uacpi_handle semaphore,
                                        uacpi_u16 timeout) {
+
+    semaphore_t sem = *(semaphore_t *)semaphore;
+
     switch (timeout) {
     case 0xFFFF:
-        while (timeout > 0) {
-            asm("pause");
-        }
-        break;
-
-    case 0x0001 ... 0xFFFE:
-        while (--timeout > 0) {
-            asm("pause");
+        while (0 == 0) {
+            if (sem > 0) {
+                sem                       -= 1;
+                *(semaphore_t *)semaphore  = sem;
+                return UACPI_TRUE;
+            }
+            sleep(1);
         }
         break;
 
     default:
+        while (--timeout > 0) {
+            if (sem > 0) {
+                sem                       -= 1;
+                *(semaphore_t *)semaphore  = sem;
+                return UACPI_TRUE;
+            }
+            sleep(1);
+        }
         break;
     }
 
-    atomic_flag_test_and_set_explicit(&((semaphore_t *)semaphore)->lock, true);
-
-    return UACPI_TRUE;
+    return UACPI_FALSE;
 }
 
 void uacpi_kernel_signal_event(uacpi_handle semaphore) {
-    atomic_flag_test_and_set_explicit(&((semaphore_t *)semaphore)->lock, true);
+    *(semaphore_t *)semaphore += 1;
 }
 
 void uacpi_kernel_reset_event(uacpi_handle semaphore) {
-    atomic_flag_test_and_set_explicit(&((semaphore_t *)semaphore)->lock, false);
+    *(semaphore_t *)semaphore = 0;
 }
 
 uacpi_status
@@ -647,13 +561,13 @@ void uacpi_kernel_free_spinlock(uacpi_handle atomic) {
 }
 
 uacpi_cpu_flags uacpi_kernel_lock_spinlock(uacpi_handle lock) {
-
     uacpi_cpu_flags flags_before = (uacpi_cpu_flags)_get_cpu_flags();
 
     spinlock_acquire(lock);
 
     return flags_before;
 }
+
 void uacpi_kernel_unlock_spinlock(uacpi_handle lock,
                                   uacpi_cpu_flags flags_to_set) {
     spinlock_release(lock);
