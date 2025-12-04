@@ -133,7 +133,7 @@ devfs_t *devfs = NULL;
 extern procfs_t *procfs;
 
 void pk_init() {
-    proc_create(__sched_test, TF_MODE_USER, "__sched_test");
+    proc_create(__sched_test, TF_MODE_KERNEL, "__sched_test");
     debugf_ok("Starting __sched_test\n");
 
     kprintf("Yo we are in a process!\n");
