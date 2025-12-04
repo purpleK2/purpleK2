@@ -147,7 +147,7 @@ void pk_init() {
 
 // kernel main function
 void kstart(void) {
-    asm("cli");
+    _disable_interrupts();
     // Ensure the bootloader actually understands our base revision (see spec).
     if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false) {
         _hcf();
@@ -514,6 +514,7 @@ void kstart(void) {
 
     // boom
     irq_registerHandler(0, scheduler_timer_tick);
+    kprintf_ok("Scheduler initialized\n");
     _enable_interrupts();
 
     for (;;)
