@@ -9,14 +9,12 @@
 uint64_t tsc_frequency = 0;
 
 void tsc_sleep(uint64_t microseconds) {
-    asm volatile("cli");
     uint64_t start = _get_tsc();
 
     uint64_t cycles_to_wait = (tsc_frequency / 1000000) * microseconds;
 
     while ((_get_tsc() - start) < cycles_to_wait)
         ;
-    asm volatile("sti");
 }
 
 uint64_t get_cpu_freq_msr() {

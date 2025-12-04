@@ -55,7 +55,6 @@ int smp_init() {
 void mp_trampoline(struct limine_mp_info *cpu) {
     UNUSED(cpu);
 
-    asm("cli");
     gdt_init();
     idt_init();
     isr_init();
@@ -67,8 +66,6 @@ void mp_trampoline(struct limine_mp_info *cpu) {
     register_ipi();
 
     tsc_init();
-
-    asm("sti");
 
     lapic_timer_init();
 
