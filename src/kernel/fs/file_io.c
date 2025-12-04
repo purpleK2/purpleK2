@@ -7,10 +7,8 @@
 
 #include <memory/heap/kheap.h>
 
-#include <string.h>
-
 #include <stdio.h>
-
+#include <string.h>
 #include <util/macro.h>
 
 int f2vflags(int fio_flags) {
@@ -35,7 +33,7 @@ fileio_t *fio_create() {
     return fio;
 }
 
-fileio_t *open(char *path, int flags) {
+fileio_t *open(const char *path, int flags) {
     UNUSED(flags);
 
     fileio_t *f = NULL;
@@ -61,16 +59,15 @@ fileio_t *open(char *path, int flags) {
 
 size_t read(fileio_t *file, size_t size, void *out) {
     if (!file) {
-        return -ENULLPTR;
+        return 0;
     }
 
     if (file->flags & PIPE_READ_END) {
         pipe_read(file, out, &size);
         return size;
     } else if (file->flags & PIPE_WRITE_END) {
-        return -EBADF;
+        return 0;
     }
-
 
     if (!(file->flags & SPECIAL_FILE_TYPE_DEVICE)) {
         if (file->offset >= file->size) {
@@ -84,8 +81,7 @@ size_t read(fileio_t *file, size_t size, void *out) {
 
     int ret = vfs_read(((vnode_t *)file->private), size, file->offset, out);
     if (ret != 0) {
-        debugf_warn("o, vfs_read failed with error: %d\n", ret);
-        return -EIO;
+        return 0;
     }
 
     file->offset += size;
