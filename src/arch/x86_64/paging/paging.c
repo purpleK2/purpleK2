@@ -83,8 +83,6 @@ void pf_handler(void *ctx) {
         return;
     }
 
-    // 626e0
-
     stdio_panic_init();
     bsod_init();
 
@@ -203,9 +201,12 @@ void map_phys_to_page(uint64_t *pml4_table, uint64_t physical, uint64_t virtual,
     uint64_t pdir_index = PDIR_INDEX(virtual);
     uint64_t ptab_index = PTAB_INDEX(virtual);
 
-    uint64_t *pdp_table  = get_create_pmlt(pml4_table, pml4_index, 0b111);
-    uint64_t *pdir_table = get_create_pmlt(pdp_table, pdp_index, 0b111);
-    uint64_t *page_table = get_create_pmlt(pdir_table, pdir_index, 0b111);
+    uint64_t *pdp_table =
+        get_create_pmlt(pml4_table, pml4_index, (flags & 0b111));
+    uint64_t *pdir_table =
+        get_create_pmlt(pdp_table, pdp_index, (flags & ~(PMLE_PAT)));
+    uint64_t *page_table =
+        get_create_pmlt(pdir_table, pdir_index, (flags & ~(PMLE_PAT)));
 
     page_table[ptab_index] = PG_GET_ADDR(physical) | flags;
     // debugf_debug("Page table %llp entry %llu mapped to (virt)%llx
@@ -353,6 +354,8 @@ void paging_init(uint64_t *kernel_pml4) {
     limine_pml4 = _get_pml4();
     debugf_debug("Limine's PML4 sits at %llp\n", limine_pml4);
 
+    pat_init();
+
     /*  TBH it doesn't even make sense to apply a custom PAT if i don't have any
     idea on why i should
 
@@ -381,7 +384,7 @@ void paging_init(uint64_t *kernel_pml4) {
         ROUND_UP(a_kernel_text_end - a_kernel_text_start, PFRAME_SIZE);
     map_region(kernel_pml4, a_kernel_text_start - VIRT_BASE + PHYS_BASE,
                a_kernel_text_start, (kernel_text_len / PFRAME_SIZE),
-               PMLE_KERNEL_READ_WRITE | PMLE_USER);
+               PMLE_KERNEL_READ_WRITE);
 
     uint64_t a_kernel_rodata_start = (uint64_t)&__kernel_rodata_start;
     uint64_t a_kernel_rodata_end   = (uint64_t)&__kernel_rodata_end;
@@ -389,7 +392,7 @@ void paging_init(uint64_t *kernel_pml4) {
         ROUND_UP(a_kernel_rodata_end - a_kernel_rodata_start, PFRAME_SIZE);
     map_region(kernel_pml4, a_kernel_rodata_start - VIRT_BASE + PHYS_BASE,
                a_kernel_rodata_start, (kernel_rodata_len / PFRAME_SIZE),
-               PMLE_KERNEL_READ | PMLE_NOT_EXECUTABLE | PMLE_USER);
+               PMLE_KERNEL_READ | PMLE_NOT_EXECUTABLE);
 
     uint64_t a_kernel_data_start = (uint64_t)&__kernel_data_start;
     uint64_t a_kernel_data_end   = (uint64_t)&__kernel_data_end;
@@ -399,7 +402,7 @@ void paging_init(uint64_t *kernel_pml4) {
     map_region(kernel_pml4, a_kernel_data_start - VIRT_BASE + PHYS_BASE,
                a_kernel_data_start,
                ((kernel_data_len + kernel_other_len) / PFRAME_SIZE),
-               PMLE_KERNEL_READ_WRITE | PMLE_NOT_EXECUTABLE | PMLE_USER);
+               PMLE_KERNEL_READ_WRITE | PMLE_NOT_EXECUTABLE);
 
     uint64_t a_limine_reqs_start = (uint64_t)&__limine_reqs_start;
     uint64_t a_limine_reqs_end   = (uint64_t)&__limine_reqs_end;
@@ -407,7 +410,7 @@ void paging_init(uint64_t *kernel_pml4) {
         ROUND_UP(a_limine_reqs_end - a_limine_reqs_start, PFRAME_SIZE);
     map_region(kernel_pml4, a_limine_reqs_start - VIRT_BASE + PHYS_BASE,
                a_limine_reqs_start, (limine_reqs_len / PFRAME_SIZE),
-               PMLE_KERNEL_READ_WRITE | PMLE_NOT_EXECUTABLE | PMLE_USER);
+               PMLE_KERNEL_READ_WRITE | PMLE_NOT_EXECUTABLE);
 
     // map the whole memory
     for (uint64_t i = 0; i < memmap_response->entry_count; i++) {
@@ -426,8 +429,7 @@ void paging_init(uint64_t *kernel_pml4) {
 
         map_region(kernel_pml4, memmap_entry->base,
                    PHYS_TO_VIRTUAL(memmap_entry->base),
-                   (memmap_entry->length / PFRAME_SIZE),
-                   PMLE_KERNEL_READ_WRITE | PMLE_USER);
+                   (memmap_entry->length / PFRAME_SIZE), PMLE_USER_READ_WRITE);
     }
 
     debugf_debug("Our PML4 sits at %llp\n", kernel_pml4);
