@@ -202,6 +202,7 @@ vmo_t *vmo_init(uint64_t base, size_t length, uint64_t flags) {
 }
 
 // @note We will not care if `pml4` is 0x0 :^)
+// @param pml4_virt VIRTUAL address
 vmc_t *vmc_init(uint64_t *pml4_virt, uint64_t flags) {
     vmc_t *ctx = vmc_alloc();
 
