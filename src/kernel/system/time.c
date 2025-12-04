@@ -23,6 +23,5 @@ void timer_tick(void *ctx) {
 void scheduler_timer_tick(void *ctx) {
     timer_tick(ctx);
 
-    irq_sendEOI(((registers_t *)ctx)->interrupt);
     yield(ctx);
 }
