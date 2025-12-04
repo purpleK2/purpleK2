@@ -363,21 +363,19 @@ void kstart(void) {
 #include <apic/lapic/lapic.h>
 
     if (check_apic()) {
-        asm("cli");
         debugf_debug("APIC is supported\n");
 
         lapic_init();
         ioapic_init();
 
         kprintf_ok("LAPIC + IOAPIC init done\n");
-        asm("sti");
     } else {
         debugf_debug("APIC is not supported. Going on with legacy PIC\n");
     }
-#endif
 
     // hpet_init();
     // kprintf_ok("HPET initialized\n");
+#endif
 
     char *cpu_name   = kmalloc(49);
     char *cpu_vendor = kmalloc(13);
