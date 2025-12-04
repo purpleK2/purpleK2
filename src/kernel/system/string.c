@@ -274,17 +274,13 @@ char *strtok_r(char *str, const char *delim, char **saveptr) {
 }
 
 void strcpy(char dest[], const char source[]) {
-    int i = 0;
-    while (1) {
+    int i      = 0;
+    size_t len = strlen(source);
+    for (; i < len; i++) {
         dest[i] = source[i];
-
-        if (dest[i] == '\0') {
-            // dest[i] = '\0'; what?
-            break;
-        }
-
-        i++;
     }
+
+    dest[len] = '\0'; // terminator
 }
 
 uint64_t strtoull(const char *str, const char **endptr, int base) {
