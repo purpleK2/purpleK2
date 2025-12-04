@@ -67,6 +67,9 @@ void irq_unmask(uint8_t irq_line);
 
 void pic_disable(void);
 
+void mask_pic();
+void unmask_pic();
+
 uint16_t pic_get_irr(void);
 uint16_t pic_get_isr(void);
 

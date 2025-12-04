@@ -34,7 +34,9 @@ uint64_t get_cpu_freq_msr() {
 }
 
 void tsc_init() {
+    _enable_interrupts();
     tsc_frequency = get_cpu_freq_msr();
+    _disable_interrupts();
 
     debugf_debug("Successfully initialized TSC with CPU Frequency %llu Hz\n",
                  tsc_frequency);

@@ -8,26 +8,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-typedef struct {
-    uint16_t base_low;  // The lower 16 bits of the ISR's address
-    uint16_t kernel_cs; // The GDT segment selector that the CPU will load into
-                        // CS before calling the ISR
-    uint8_t ist; // The IST in the TSS that the CPU will load into RSP; set to
-                 // zero for now
-    uint8_t attributes; // Type and attributes; see the IDT page
-    uint16_t base_mid;  // The higher 16 bits of the lower 32 bits of the ISR's
-                        // address
-    uint32_t base_high; // The higher 32 bits of the ISR's address
-    uint32_t reserved;  // Set to zero
-} PACKED idt_entry_t;
-
-typedef struct {
-    uint16_t limit;
-    idt_entry_t *base;
-} PACKED idtr_t;
-
-__attribute__((
-    aligned(0x10))) static idt_entry_t idt_entries[IDT_MAX_DESCRIPTORS];
+ALIGNED(0x10) static idt_entry_t idt_entries[IDT_MAX_DESCRIPTORS];
 
 static idtr_t idtr;
 
@@ -35,7 +16,7 @@ static bool vectors[IDT_MAX_DESCRIPTORS];
 
 void idt_init() {
     idtr.base  = (idt_entry_t *)&idt_entries[0];
-    idtr.limit = (uint16_t)sizeof(idt_entry_t) * IDT_MAX_DESCRIPTORS - 1;
+    idtr.limit = ((uint16_t)sizeof(idt_entry_t) * IDT_MAX_DESCRIPTORS) - 1;
 
     debugf_debug("IDTR:\n");
     debugf_debug("\tbase: %p\n", idtr.base);
@@ -43,9 +24,12 @@ void idt_init() {
 
     for (uint16_t vector = 0; vector < IDT_MAX_DESCRIPTORS; vector++) {
         if (vector == 0x80) {
-            idt_set_gate(vector, isr_stub_table[vector], GDT_CODE_SEGMENT, 0xEE);
+            idt_set_gate(vector, isr_stub_table[vector], GDT_CODE_SEGMENT,
+                         IDT_FLAG_RING3 | IDT_FLAG_PRESENT |
+                             IDT_FLAG_GATE_32BIT_INT);
         } else {
-            idt_set_gate(vector, isr_stub_table[vector], GDT_CODE_SEGMENT, 0x8E);
+            idt_set_gate(vector, isr_stub_table[vector], GDT_CODE_SEGMENT,
+                         IDT_FLAG_PRESENT | IDT_FLAG_GATE_32BIT_INT);
         }
         vectors[vector] = true;
     }
@@ -54,7 +38,11 @@ void idt_init() {
     debugf_debug("Loading IDTR\n");
 
     __asm__ volatile("lidt %0" : : "m"(idtr)); // load the new IDT
-    __asm__ volatile("sti");                   // set the interrupt flag
+    /*
+        I'm trusting yeint on this
+    */
+
+    // __asm__ volatile("sti");                   // set the interrupt flag
 }
 
 void idt_set_gate(uint8_t index, void *base, uint16_t selector, uint8_t flags) {

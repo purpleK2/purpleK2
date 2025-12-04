@@ -21,10 +21,10 @@ arguments:
         offset2 - same for slave PIC: offset2..offset2+7
 */
 void pic_config(int offset1, int offset2) {
-    // uint8_t a1, a2;
+    uint8_t a1, a2;
 
-    // a1 = inb(PIC1_DATA);                                        // save masks
-    // a2 = inb(PIC2_DATA);
+    a1 = _inb(PIC1_DATA); // save masks
+    a2 = _inb(PIC2_DATA);
 
     _outb(PIC1_COMMAND,
           PIC_ICW1_INITIALIZE | PIC_ICW1_ICW4); // starts the initialization
@@ -52,6 +52,17 @@ void pic_config(int offset1, int offset2) {
     _outb(PIC2_DATA, PIC_ICW4_8086);
     _io_wait();
 
+    // unmask both PICs
+    _outb(PIC1_DATA, 0);
+    _outb(PIC2_DATA, 0);
+}
+
+void mask_pic() {
+    _outb(PIC1_DATA, 0xff);
+    _outb(PIC2_DATA, 0xff);
+}
+
+void unmask_pic() {
     // unmask both PICs
     _outb(PIC1_DATA, 0);
     _outb(PIC2_DATA, 0);

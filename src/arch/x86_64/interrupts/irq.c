@@ -11,13 +11,12 @@
 #include <stdio.h>
 
 void irq_init() {
-    pic_config(PIC_REMAP_OFFSET, PIC_REMAP_OFFSET + 8);
-
     for (int i = 0; i < 16; i++) {
         isr_registerHandler(PIC_REMAP_OFFSET + i, pic_irq_handler);
     }
 
-    _enable_interrupts();
+    // trusting yeint on this pt.2
+    // _enable_interrupts();
 }
 
 void irq_sendEOI(uint8_t irq) {

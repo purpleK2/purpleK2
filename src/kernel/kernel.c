@@ -515,6 +515,7 @@ void kstart(void) {
 
     // boom
     irq_registerHandler(0, scheduler_timer_tick);
+    _enable_interrupts();
 
     for (;;)
         ;

@@ -35,7 +35,9 @@ void arch_base_init() {
     // _crash_test();
 
     irq_init();
-    kprintf_ok("Initialized PIC and IRQs\n");
+    kprintf_ok("Initialized IRQs\n");
+    pic_config(PIC_REMAP_OFFSET, PIC_REMAP_OFFSET + 8);
+    kprintf_ok("Enabled PIC\n");
 
     init_fpu();
     kprintf_ok("Initialized FPU\n");
