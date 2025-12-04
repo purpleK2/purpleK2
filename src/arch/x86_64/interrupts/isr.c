@@ -74,9 +74,7 @@ void isr_syscall(void *ctx) {
     regs->rax = ret;
 }
 
-
-static void isr_debug(void *ctx)
-{
+static void isr_debug(void *ctx) {
     registers_t *regs = ctx;
     debugf_warn("Debug exception at RIP=0x%llx\n", regs->rip);
 
@@ -202,8 +200,6 @@ void panic_common(void *ctx) {
     asm("cli");
     _hcf();
 }
-
-
 
 void isr_handler(void *ctx) {
     registers_t *regs = ctx;
