@@ -38,10 +38,8 @@ void idt_init() {
     debugf_debug("Loading IDTR\n");
 
     __asm__ volatile("lidt %0" : : "m"(idtr)); // load the new IDT
-    /*
-        I'm trusting yeint on this
-    */
 
+    // I'm trusting yeint on this
     // __asm__ volatile("sti");                   // set the interrupt flag
 }
 
