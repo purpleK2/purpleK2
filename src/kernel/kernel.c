@@ -57,8 +57,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#define INITRD_FILE "initrd.cpio"
-#define INITRD_PATH "/" INITRD_FILE
+#define INITRD_FILE  "initrd.cpio"
+#define INITRD_PATH  "/" INITRD_FILE
+#define INITRD_MOUNT "/initrd"
 
 USED SECTION(".requests") static volatile uint64_t limine_base_revision[] =
     LIMINE_BASE_REVISION(4);
@@ -449,9 +450,9 @@ void kstart(void) {
     }
 
     // create the VFS for CPIO
-    ramfs_vfs_init(cpio_ramfs, "/initrd");
+    ramfs_vfs_init(cpio_ramfs, INITRD_MOUNT);
 
-    fileio_t *test_file = open("/initrd/directory/another.txt", 0);
+    fileio_t *test_file = open(INITRD_MOUNT "/directory/another.txt", 0);
     if (!test_file) {
         kprintf_warn("Couldn't open file!\n");
     }
@@ -480,15 +481,15 @@ void kstart(void) {
     // smp_init();
     // limine_parsed_data.smp_enabled = true;
 
-    cpio_file_t *pci_ids = cpio_fs_get_file(&fs, "pci.ids");
-
-    pci_scan(pci_ids);
+    pci_scan(INITRD_MOUNT "/pci.ids");
     kprintf_ok("PCI devices parsing done\n");
-    if (pcie_init() != PCIE_STATUS_OK) {
+    if (pcie_init(INITRD_MOUNT "/pci.ids") != PCIE_STATUS_OK) {
         kprintf_warn("Failed to parse PCIe devices!\n");
     } else {
         kprintf_ok("PCIe devices parsing done\n");
     }
+
+    print_pcie_list();
 
     /*mod_t *mbr = load_module("/initrd/modules/mbr.km");
     start_module(mbr);

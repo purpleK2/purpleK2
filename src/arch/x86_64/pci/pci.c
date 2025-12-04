@@ -9,6 +9,8 @@
 
 #include <autoconf.h>
 
+#include <pci/pci_ids.h>
+
 pci_device_t *pci_devices_head = NULL;
 
 pci_device_t *get_pcihead() {
@@ -104,10 +106,14 @@ void pci_config_write(uint8_t bus, uint8_t device, uint8_t function,
 }
 
 pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
-                             cpio_file_t *pci_ids) {
+                             const char *pciids_path) {
     uint32_t vendor_device = pci_config_read(bus, device, function, 0);
     if ((vendor_device & 0xFFFF) == 0xFFFF)
         return NULL;
+
+    if (!pciids_path) {
+        return NULL;
+    }
 
     pci_device_t *new_dev = kmalloc(sizeof(pci_device_t));
     memset(new_dev, 0, sizeof(pci_device_t));
@@ -122,7 +128,11 @@ pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
     new_dev->subclass    = (class_info >> 16) & 0xFF;
     new_dev->prog_if     = (class_info >> 8) & 0xFF;
     new_dev->header_type = pci_config_read(bus, device, function, 0x0C) & 0xFF;
-    pci_lookup_vendor_device(new_dev, pci_ids->data, pci_ids->filesize);
+
+    fileio_t *pci_ids = open(pciids_path, 0);
+    get_pcix_vendor_device_name(new_dev->vendor_id, new_dev->device_id, pci_ids,
+                                new_dev->vendor_str, new_dev->device_str);
+    close(pci_ids);
 
     // Initialize BARs and BAR types to zero
     for (int i = 0; i < 6; i++) {
@@ -170,97 +180,14 @@ pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
     return new_dev;
 }
 
-void pci_scan(cpio_file_t *pci_ids) {
+void pci_scan(const char *pciids_path) {
     for (uint16_t bus = 0; bus < 256; bus++) {
         for (uint8_t device = 0; device < 32; device++) {
             for (uint8_t function = 0; function < 8; function++) {
-                pci_add_device(bus, device, function, pci_ids);
+                pci_add_device(bus, device, function, pciids_path);
             }
         }
     }
-}
-
-void pci_lookup_vendor_device(pci_device_t *dev, const char *pci_ids,
-                              size_t length) {
-    size_t i                              = 0;
-    char vendor_name[PCI_MAX_VENDOR_NAME] = "Unknown Vendor";
-    char device_name[PCI_MAX_DEVICE_NAME] = "Unknown Device";
-    int found_vendor                      = 0;
-
-    if (dev->vendor_id == 0x1234) {
-        memcpy(vendor_name, "QEMU", PCI_MAX_VENDOR_NAME);
-        if (dev->device_id == 0x1111) {
-            memcpy(device_name, "BOCHS Emulated VGA Display Controller",
-                   PCI_MAX_DEVICE_NAME);
-        } else if (dev->device_id == 0x0001) {
-            memcpy(device_name, "Virtio Block Device", PCI_MAX_DEVICE_NAME);
-        } else if (dev->device_id == 0x0002) {
-            memcpy(device_name, "Virtio Network Device", PCI_MAX_DEVICE_NAME);
-        }
-
-        strcpy(dev->vendor_str, vendor_name);
-        strcpy(dev->device_str, device_name);
-
-        return;
-    }
-
-    while (i < length) {
-        if (pci_ids[i] == '#') {
-            while (i < length && pci_ids[i] != '\n')
-                i++;
-            i++;
-            continue;
-        }
-        if (pci_ids[i] != '\t') {
-            uint16_t v_id = 0;
-            size_t j      = 0;
-            while (i < length && pci_ids[i] != ' ' && j < 4) {
-                v_id = (v_id << 4) | (pci_ids[i] >= '0' && pci_ids[i] <= '9'
-                                          ? pci_ids[i] - '0'
-                                          : (pci_ids[i] | 32) - 'a' + 10);
-                i++;
-                j++;
-            }
-            while (i < length && pci_ids[i] == ' ')
-                i++;
-            size_t k = 0;
-            while (i < length && pci_ids[i] != '\n' &&
-                   k < PCI_MAX_VENDOR_NAME - 1) {
-                vendor_name[k++] = pci_ids[i++];
-            }
-            vendor_name[k] = '\0';
-            if (v_id == dev->vendor_id) {
-                found_vendor = 1;
-            }
-        } else if (found_vendor) {
-            i++;
-            uint16_t d_id = 0;
-            size_t j      = 0;
-            while (i < length && pci_ids[i] != ' ' && j < 4) {
-                d_id = (d_id << 4) | (pci_ids[i] >= '0' && pci_ids[i] <= '9'
-                                          ? pci_ids[i] - '0'
-                                          : (pci_ids[i] | 32) - 'a' + 10);
-                i++;
-                j++;
-            }
-            while (i < length && pci_ids[i] == ' ')
-                i++;
-            size_t k = 0;
-            while (i < length && pci_ids[i] != '\n' &&
-                   k < PCI_MAX_DEVICE_NAME - 1) {
-                device_name[k++] = pci_ids[i++];
-            }
-            device_name[k] = '\0';
-            if (d_id == dev->device_id) {
-                break;
-            }
-        }
-        while (i < length && pci_ids[i] != '\n')
-            i++;
-        i++;
-    }
-    strcpy(dev->vendor_str, vendor_name);
-    strcpy(dev->device_str, device_name);
 }
 
 void pci_print_info(uint8_t bus, uint8_t device, uint8_t function) {

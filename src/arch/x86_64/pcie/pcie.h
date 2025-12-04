@@ -145,6 +145,8 @@ typedef struct pcie_device {
     struct pcie_device *next;
 } pcie_device_t;
 
-pcie_status pcie_init();
+pcie_status pcie_init(const char *pciids_path);
+
+void print_pcie_list();
 
 #endif

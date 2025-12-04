@@ -10,6 +10,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <pci/pci_ids.h>
+
 /*
     What do we do with PCIe?
 
@@ -48,6 +50,7 @@ pcie_status check_pcie_device(pcie_header_t *header) {
 
     return PCIE_STATUS_OK;
 }
+
 // append a device to the list
 pcie_status pcie_append_to_list(pcie_device_t **list, pcie_device_t *dev) {
     if (!list) {
@@ -68,12 +71,18 @@ pcie_status pcie_append_to_list(pcie_device_t **list, pcie_device_t *dev) {
 
     return PCIE_STATUS_OK;
 }
+
 // create the pcie_device struct to add to the list
 // @param pcie_cfgaddr the PHYSICAL address to the actual PCIe configuration
 // space
 pcie_status add_pcie_device(pcie_header_t *header, void *pcie_cfgaddr,
-                            uint8_t bus_range) {
+                            uint8_t bus_range, const char *pciids_path) {
     if (!header || !pcie_cfgaddr) {
+        return PCIE_STATUS_NULLPTR;
+    }
+
+    if (!pciids_path) {
+        debugf_warn("No pci.ids path given!\n");
         return PCIE_STATUS_NULLPTR;
     }
 
@@ -92,6 +101,14 @@ pcie_status add_pcie_device(pcie_header_t *header, void *pcie_cfgaddr,
     dev->device_id     = header->device_id;
     dev->class_code    = header->class_code;
     dev->subclass_code = header->subclass_code;
+
+    dev->vendor_str = kmalloc(PCIE_MAX_VENDOR_NAME);
+    dev->device_str = kmalloc(PCIE_MAX_DEVICE_NAME);
+
+    fileio_t *pci_ids = open(pciids_path, 0);
+    get_pcix_vendor_device_name(dev->vendor_id, dev->device_id, pci_ids,
+                                dev->vendor_str, dev->device_str);
+    close(pci_ids);
 
     dev->revision = header->revision_id;
 
@@ -136,8 +153,14 @@ pcie_status add_pcie_device(pcie_header_t *header, void *pcie_cfgaddr,
 
 // iterate through the ECAM
 // check all buses
-pcie_status pcie_parse_ecam(struct acpi_mcfg_allocation *ecam) {
+pcie_status pcie_parse_ecam(struct acpi_mcfg_allocation *ecam,
+                            const char *pciids_path) {
     if (!ecam) {
+        return PCIE_STATUS_NULLPTR;
+    }
+
+    if (!pciids_path) {
+        debugf_warn("No pci.ids path given!\n");
         return PCIE_STATUS_NULLPTR;
     }
 
@@ -177,8 +200,8 @@ pcie_status pcie_parse_ecam(struct acpi_mcfg_allocation *ecam) {
                     continue;
                 }
 
-                if (add_pcie_device(header, (void *)addr,
-                                    bus_end - bus_start) != PCIE_STATUS_OK) {
+                if (add_pcie_device(header, (void *)addr, bus_end - bus_start,
+                                    pciids_path) != PCIE_STATUS_OK) {
                     debugf_warn(
                         "Couldn't parse device [%.02hhx:%.02hhx.%.01hhx]\n",
                         bus, device, function);
@@ -193,7 +216,12 @@ pcie_status pcie_parse_ecam(struct acpi_mcfg_allocation *ecam) {
 }
 
 // PCIe init
-pcie_status pcie_init() {
+pcie_status pcie_init(const char *pciids_path) {
+    if (!pciids_path) {
+        debugf_warn("No pci.ids path given!\n");
+        return PCIE_STATUS_NULLPTR;
+    }
+
     struct uacpi_table *table = kmalloc(sizeof(struct uacpi_table));
     uacpi_table_find_by_signature(ACPI_MCFG_SIGNATURE, table);
 
@@ -215,7 +243,7 @@ pcie_status pcie_init() {
     for (int idx = 0; idx < ecam_count; idx++) {
         struct acpi_mcfg_allocation ecam = mcfg_table->entries[idx];
 
-        switch (pcie_parse_ecam(&ecam)) {
+        switch (pcie_parse_ecam(&ecam, pciids_path)) {
         case PCIE_STATUS_OK:
             break;
 
@@ -227,4 +255,12 @@ pcie_status pcie_init() {
 
     kfree(table);
     return PCIE_STATUS_OK;
+}
+
+void print_pcie_list() {
+    for (pcie_device_t *p = pcie_list; p != NULL; p = p->next) {
+        debugf("PCIE[%.02hhx:%.02hhx.%.01hhx](%hx:%hx) %s %s\n", p->bus,
+               p->device, p->function, p->vendor_id, p->device_id,
+               p->vendor_str, p->device_str);
+    }
 }
