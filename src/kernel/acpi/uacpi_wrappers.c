@@ -394,7 +394,7 @@ void uacpi_kernel_sleep(uacpi_u64 msec) {
 uacpi_handle uacpi_kernel_create_mutex(void) {
     lock_t *atomic = kmalloc(sizeof(lock_t));
 
-    lock_t ugh = ATOMIC_FLAG_INIT;
+    lock_t ugh = LOCK_INIT;
     *atomic    = ugh;
 
     return atomic;

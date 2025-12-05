@@ -19,7 +19,7 @@
 
 #include <stdatomic.h>
 
-lock_t PMM_LOCK = ATOMIC_FLAG_INIT;
+lock_t PMM_LOCK = LOCK_INIT;
 
 extern void _hcf();
 
