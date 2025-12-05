@@ -25,6 +25,8 @@ static int cpu_count;
 
 procfs_t *procfs;
 
+lock_t SCHEDULER_LOCK = LOCK_INIT;
+
 // SHOULD BE CALLED **ONLY ONCE** IN KSTART. NOWHERE ELSE.
 int init_scheduler() {
     cpu_count = get_bootloader_data()->cpu_count;
@@ -167,6 +169,8 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
         krealloc(parent->threads, sizeof(tcb_t *) * parent->thread_count);
     parent->threads[thread->tid] = thread;
 
+    spinlock_acquire(&SCHEDULER_LOCK);
+
     int cpu                 = get_cpu();
     thread->next            = thread_queues[cpu].head;
     thread_queues[cpu].head = thread;
@@ -175,6 +179,8 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
     if (!current_threads[cpu]) {
         current_threads[cpu] = thread;
     }
+
+    spinlock_release(&SCHEDULER_LOCK);
 
     return thread->tid;
 }
@@ -252,6 +258,7 @@ int pcb_destroy(int pid) {
 }
 
 void thread_push_to_queue(tcb_t *to_push) {
+    spinlock_acquire(&SCHEDULER_LOCK);
     int cpu   = get_cpu();
     tcb_t **p = &thread_queues[cpu].head;
 
@@ -269,6 +276,8 @@ void thread_push_to_queue(tcb_t *to_push) {
         q = &(*q)->next;
     }
     *q = to_push;
+
+    spinlock_release(&SCHEDULER_LOCK);
 }
 
 void thread_remove_from_queue(tcb_t *to_remove) {
