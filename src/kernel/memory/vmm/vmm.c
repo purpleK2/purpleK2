@@ -17,6 +17,7 @@
 
 vmc_t *current_vmc = NULL;
 vmc_t *global_vmc  = NULL;
+vmc_t *kernel_vmc  = NULL; // for kmalloc()
 
 vmc_t *get_current_vmc() {
     return current_vmc;
@@ -24,6 +25,17 @@ vmc_t *get_current_vmc() {
 
 void vmc_switch(vmc_t *new) {
     current_vmc = new;
+}
+
+void set_kernel_vmc(vmc_t *kvmc) {
+    // so that it only gets set once
+    if (!kernel_vmc) {
+        kernel_vmc = kvmc;
+    }
+}
+
+vmc_t *get_kernel_vmc() {
+    return kernel_vmc;
 }
 
 void set_global_vmc(vmc_t *glob) {
@@ -368,8 +380,9 @@ void process_vmm_init(vmc_t **proc_vmcr, uint64_t flags) {
         proc_vmor = &(*proc_vmor)->next;
     }
 
-    proc_vmc->pml4_table = (uint64_t *)PHYS_TO_VIRTUAL(pmm_alloc_page());
-    memcpy(proc_vmc->pml4_table, global_vmc->pml4_table, PFRAME_SIZE);
+    proc_vmc->pml4_table = (uint64_t *)pmm_alloc_page();
+    memcpy((void *)PHYS_TO_VIRTUAL(proc_vmc->pml4_table),
+           global_vmc->pml4_table, PFRAME_SIZE);
 }
 
 void *valloc(vmc_t *ctx, size_t pages, uint8_t flags, void *phys) {

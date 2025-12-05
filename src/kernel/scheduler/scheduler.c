@@ -71,7 +71,12 @@ int proc_create(void (*entry)(), int flags, char *name) {
 
     // Enhanced VMM context creation with proper permissions
     int vflags = (flags & TF_MODE_USER ? VMO_USER_RW : VMO_KERNEL_RW);
-    process_vmm_init(&proc->vmc, vflags);
+    if (flags & TF_MODE_USER) {
+        process_vmm_init(&proc->vmc, vflags);
+    } else {
+        proc->vmc = get_kernel_vmc();
+    }
+
     proc->cwd = NULL;
 
     debugf_debug("Created process PID=%d flags=0x%x mode=%s\n", proc->pid,

@@ -33,6 +33,9 @@ typedef struct vmm_linkedlist {
 vmc_t *get_current_vmc();
 void vmc_switch(vmc_t *new_ctx);
 
+void set_kernel_vmc(vmc_t *kvmc);
+vmc_t *get_kernel_vmc();
+
 vmc_t *get_global_vmc();
 void set_global_vmc(vmc_t *glob);
 

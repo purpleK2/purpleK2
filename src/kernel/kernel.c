@@ -120,7 +120,7 @@ struct bootloader_data *get_bootloader_data() {
     return &limine_parsed_data;
 }
 
-vmc_t *kernel_vmc;
+vmc_t *kvmc;
 
 extern void __sched_test(void);
 
@@ -319,10 +319,10 @@ void kstart(void) {
     uint64_t *kernel_pml4 = (uint64_t *)pmm_alloc_page();
     paging_init((uint64_t *)PHYS_TO_VIRTUAL(kernel_pml4));
 
-    kernel_vmc =
-        vmc_init((uint64_t *)PHYS_TO_VIRTUAL(kernel_pml4), VMO_KERNEL_RW);
-    vmm_init(kernel_vmc);
-    vmc_switch(kernel_vmc);
+    kvmc = vmc_init((uint64_t *)PHYS_TO_VIRTUAL(kernel_pml4), VMO_KERNEL_RW);
+    vmm_init(kvmc);
+    vmc_switch(kvmc);
+    set_kernel_vmc(kvmc);
     kprintf_ok("Initialized VMM\n");
 
     kmalloc_init();
@@ -506,8 +506,7 @@ void kstart(void) {
         create a template VMC for all the processes
         for stuff like scheduler structs, heap structures
     */
-
-    global_vmc_init(kernel_vmc);
+    global_vmc_init(kvmc);
 
     init_scheduler();
     init_cpu_scheduler(pk_init);

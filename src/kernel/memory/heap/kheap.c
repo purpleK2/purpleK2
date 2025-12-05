@@ -35,7 +35,7 @@ static inline kmem_cache_t *get_cache_for_size(size_t size) {
 
 /// Carve a new page into objects and build freelist
 static void refill_cache(kmem_cache_t *cache) {
-    void *page = valloc(get_current_vmc(), 1, VMO_KERNEL_RW | VMO_NX, NULL);
+    void *page = valloc(get_kernel_vmc(), 1, VMO_KERNEL_RW | VMO_NX, NULL);
     if (!page) {
         kprintf_panic("SLUB: out of memory in refill_cache");
         _hcf();
@@ -79,7 +79,7 @@ void *kmalloc(size_t size) {
         // Large object: fall back to page allocator
         size_t pages = (size + PFRAME_SIZE - 1) / PFRAME_SIZE;
         void *ptr =
-            valloc(get_current_vmc(), pages, VMO_KERNEL_RW | VMO_NX, NULL);
+            valloc(get_kernel_vmc(), pages, VMO_KERNEL_RW | VMO_NX, NULL);
         if (!ptr)
             return NULL;
         stats.total_allocs++;
