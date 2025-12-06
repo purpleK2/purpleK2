@@ -333,10 +333,16 @@ allyesconfig:
 	python scripts/kconfig.py
 
 debug: $(OS_CODENAME).iso
-	gdb -x debug_iso.gdb $(BUILD_DIR)/$(KERNEL)
+	gdb -x debug_scripts/iso_bios.gdb $(BUILD_DIR)/$(KERNEL)
+
+debug-uefi: $(OS_CODENAME).iso
+	gdb -x debug_scripts/iso_uefi.gdb $(BUILD_DIR)/$(KERNEL)
 
 debug-hdd: $(OS_CODENAME).hdd
-	gdb -x debug_hdd.gdb $(BUILD_DIR)/$(KERNEL)
+	gdb -x debug_scripts/hdd_bios.gdb $(BUILD_DIR)/$(KERNEL)
+
+debug-hdd-uefi: $(OS_CODENAME).hdd
+	gdb -x debug_scripts/hdd_uefi.gdb $(BUILD_DIR)/$(KERNEL)
 
 # Remove object files.
 .PHONY: clean distclean
