@@ -72,13 +72,15 @@ void lapic_init() {
     debugf_debug("LAPIC_SPURIOUS_REG: %lx\n",
                  lapic_read_reg(LAPIC_SPURIOUS_REG));
 
-    lapic_write_reg(LAPIC_LINT0_REG, 0xfe);
-    lapic_write_reg(LAPIC_LINT1_REG, 0xfe);
-    lapic_write_reg(LAPIC_CMCI_REG, 0xfe);
-    lapic_write_reg(LAPIC_ERR_REG, 0xfe);
-    lapic_write_reg(LAPIC_PERFMON_COUNT_REG, 0xfe);
-    lapic_write_reg(LAPIC_THERM_REG, 0xfe);
-    lapic_write_reg(LAPIC_TIMER_REG, 0xfe);
+    // mask them, if we want to initialize these vectors, someone will
+    // initialize it on his own
+    lapic_write_reg(LAPIC_LINT0_REG, LAPIC_DISABLE);
+    lapic_write_reg(LAPIC_LINT1_REG, LAPIC_DISABLE);
+    lapic_write_reg(LAPIC_CMCI_REG, LAPIC_DISABLE);
+    lapic_write_reg(LAPIC_ERR_REG, LAPIC_DISABLE);
+    lapic_write_reg(LAPIC_PERFMON_COUNT_REG, LAPIC_DISABLE);
+    lapic_write_reg(LAPIC_THERM_REG, LAPIC_DISABLE);
+    lapic_write_reg(LAPIC_TIMER_REG, LAPIC_DISABLE);
 
     debugf_debug("LAPIC ID: %hhx\n", lapic_get_id());
 
