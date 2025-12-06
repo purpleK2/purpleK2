@@ -3,13 +3,13 @@
 #include <stdio.h>
 #include <types.h>
 
-void spinlock_acquire(lock_t *lock) {
+void spinlock_acquire(atomic_flag *lock) {
     while (atomic_flag_test_and_set(lock)) {
         asm("pause");
     }
 }
 
-void spinlock_force_acquire(lock_t *lock) {
+void spinlock_force_acquire(atomic_flag *lock) {
     unsigned int timeout = 100;
 
     while (atomic_flag_test_and_set(lock)) {
@@ -22,6 +22,6 @@ void spinlock_force_acquire(lock_t *lock) {
     }
 }
 
-void spinlock_release(lock_t *lock) {
+void spinlock_release(atomic_flag *lock) {
     atomic_flag_clear(lock);
 }

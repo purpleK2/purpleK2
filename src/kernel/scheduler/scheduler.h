@@ -11,7 +11,7 @@
 
 #include <fs/file_io.h>
 
-#define SCHEDULER_PROCFS_PATH "/proc"
+#define SCHEDULER_PROCFS_MOUNT "/proc"
 
 // **T**ime **S**lice, not that "ts"
 #define SCHEDULER_THREAD_TS 10
@@ -61,7 +61,7 @@ typedef struct thread {
     void *kernel_stack;
     void *user_stack;
 
-    lock_t lock;
+    atomic_flag lock;
 
     struct thread *next;
 

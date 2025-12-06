@@ -16,7 +16,7 @@ typedef struct pipe {
     int readers;
     int writers;
 
-    lock_t lock;
+    atomic_flag lock;
 } pipe_t;
 
 int pipe(fileio_t *fds[2]);

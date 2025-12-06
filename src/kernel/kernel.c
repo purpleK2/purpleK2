@@ -133,6 +133,7 @@ devfs_t *devfs = NULL;
 extern procfs_t *procfs;
 
 void pk_init() {
+    debugf("Hello!\n");
     proc_create(__sched_test, TF_MODE_KERNEL, "__sched_test");
     debugf_ok("Starting __sched_test\n");
 
@@ -373,8 +374,8 @@ void kstart(void) {
         debugf_debug("APIC is not supported. Going on with legacy PIC\n");
     }
 
-    // hpet_init();
-    // kprintf_ok("HPET initialized\n");
+// hpet_init();
+// kprintf_ok("HPET initialized\n");
 #endif
 
     char *cpu_name   = kmalloc(49);
@@ -501,14 +502,19 @@ void kstart(void) {
 
     devfs_print(devfs->root_node, 0);
 
+    init_scheduler();
+
     /*
         IDEA:
         create a template VMC for all the processes
         for stuff like scheduler structs, heap structures
+
+        Which means that every component that processes should access must be
+       initialized before this function.
     */
+
     global_vmc_init(kvmc);
 
-    init_scheduler();
     init_cpu_scheduler(pk_init);
 
     // boom

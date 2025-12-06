@@ -109,7 +109,7 @@ typedef struct vfs {
     void *vfs_data; // points to the FS-specific structure
 
     // for future :^)
-    lock_t vfs_lock;
+    atomic_flag vfs_lock;
 
     vfsops_t *ops;
 

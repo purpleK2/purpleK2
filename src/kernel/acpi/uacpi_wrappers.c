@@ -392,10 +392,10 @@ void uacpi_kernel_sleep(uacpi_u64 msec) {
 }
 
 uacpi_handle uacpi_kernel_create_mutex(void) {
-    lock_t *atomic = kmalloc(sizeof(lock_t));
+    atomic_flag *atomic = kmalloc(sizeof(atomic_flag));
 
-    lock_t ugh = LOCK_INIT;
-    *atomic    = ugh;
+    atomic_flag ugh = ATOMIC_FLAG_INIT;
+    *atomic         = ugh;
 
     return atomic;
 }
@@ -548,7 +548,7 @@ uacpi_kernel_uninstall_interrupt_handler(uacpi_interrupt_handler handler,
 }
 
 uacpi_handle uacpi_kernel_create_spinlock(void) {
-    lock_t *atomic = kmalloc(sizeof(lock_t));
+    atomic_flag *atomic = kmalloc(sizeof(atomic_flag));
 
     return atomic;
 }

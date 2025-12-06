@@ -25,7 +25,7 @@ static int cpu_count;
 
 procfs_t *procfs;
 
-lock_t SCHEDULER_LOCK = LOCK_INIT;
+atomic_flag SCHEDULER_LOCK = ATOMIC_FLAG_INIT;
 
 // SHOULD BE CALLED **ONLY ONCE** IN KSTART. NOWHERE ELSE.
 int init_scheduler() {
@@ -38,7 +38,7 @@ int init_scheduler() {
 
     // create the procFS
     procfs = procfs_create();
-    procfs_vfs_init(procfs, SCHEDULER_PROCFS_PATH);
+    procfs_vfs_init(procfs, SCHEDULER_PROCFS_MOUNT);
     return 0;
 }
 
@@ -258,7 +258,6 @@ int pcb_destroy(int pid) {
 }
 
 void thread_push_to_queue(tcb_t *to_push) {
-    spinlock_acquire(&SCHEDULER_LOCK);
     int cpu   = get_cpu();
     tcb_t **p = &thread_queues[cpu].head;
 
@@ -276,8 +275,6 @@ void thread_push_to_queue(tcb_t *to_push) {
         q = &(*q)->next;
     }
     *q = to_push;
-
-    spinlock_release(&SCHEDULER_LOCK);
 }
 
 void thread_remove_from_queue(tcb_t *to_remove) {
