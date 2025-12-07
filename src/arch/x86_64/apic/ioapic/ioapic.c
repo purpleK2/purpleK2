@@ -10,6 +10,8 @@
 #include <memory/pmm/pmm.h>
 #include <paging/paging.h>
 
+#include <pic/pic.h>
+
 #include <stdint.h>
 #include <stdio.h>
 #include <time.h>
@@ -41,6 +43,8 @@ void apic_irq_handler(void *ctx) {
 
     int apic_irq = regs->interrupt - IOAPIC_IRQ_OFFSET;
 
+    debugf_debug("IOAPIC IRQ %d\n", apic_irq);
+
     uint64_t apic_isr = lapic_read_reg(LAPIC_INSERVICE_REG);
     uint64_t apic_irr = lapic_read_reg(LAPIC_INT_REQ_REG);
 
@@ -68,8 +72,8 @@ void ioapic_unregisterHandler(int irq) {
 // @param irq			- The hardware interrupt that'll be fired
 // @param interrupt		- The interrupt vector that will be written to
 // the I/O APIC
-// @param handler		- The ISR that will be called when the interrupt
-// gets fired
+// @param handler		- The ISR handler that will be called when the
+// interrupt gets fired
 
 void ioapic_map_irq(int irq, int interrupt, irq_handler handler) {
     uint32_t redtble_lo = (0 << 16) |    // Unmask the entry
@@ -115,6 +119,11 @@ void ioapic_init() {
            ACPI_MADT_ENTRY_TYPE_INTERRUPT_SOURCE_OVERRIDE;
          redirection_entries++)
         ;
+
+    pic_disable();
+
+    pic_config(IOAPIC_IRQ_OFFSET + IOAPIC_REDTBL_ENTRIES,
+               IOAPIC_IRQ_OFFSET + IOAPIC_REDTBL_ENTRIES + 8);
 
     for (int i = 0; i < redirection_entries; i++) {
         debugf_debug("Redirection entry n.%d:\n", i + 1);

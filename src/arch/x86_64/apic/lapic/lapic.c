@@ -61,9 +61,6 @@ void lapic_init() {
     map_region((uint64_t *)PHYS_TO_VIRTUAL(_get_pml4()), lapic_msr_phys,
                lapic_base, 1, PMLE_KERNEL_READ_WRITE);
 
-    pic_disable();
-    // TODO: remap all PIC IRQs
-
     lapic_write_reg(LAPIC_TASKPR_REG, 0);
     lapic_write_reg(LAPIC_DEST_FMT_REG, 0xFFFFFFFF);
     debugf_debug("LAPIC is globally enabled and MSR is now %llx\n",
