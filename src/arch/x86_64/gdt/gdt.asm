@@ -5,10 +5,12 @@ section '.text' executable align 16
 public _load_gdt
 _load_gdt:
     lgdt [rdi]
-    push ax
-    mov ax, 0x28
-    ltr ax
-    pop ax
+    ret
+
+; void _load_tss(uint16_t offset)
+public _load_tss
+_load_tss:
+    ltr di
     ret
 
 ; void _reload_segments(uint64_t cs, uint64_t ds)

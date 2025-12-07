@@ -8,12 +8,10 @@ struct {
     gdt_entry_t gdt_entries[5];
     tss_entry_t tss_entry;
 } PACKED gdt;
+
 tss_t tss = {0};
 
 char kernel_stack[KERNEL_STACK_SIZE];
-
-extern void _load_gdt(gdt_pointer_t *descriptor);
-extern void _reload_segments(uint64_t cs, uint64_t ds);
 
 // https://wiki.osdev.org/GDT_Tutorial#Flat_/_Long_Mode_Setup
 void gdt_init() {
@@ -45,6 +43,7 @@ void gdt_init() {
 
     debugf_debug("Loading GDTR %llp\n", (uint64_t *)&gdtr);
     _load_gdt(&gdtr);
+    _load_tss(0x28);
 
     _reload_segments(GDT_CODE_SEGMENT, GDT_DATA_SEGMENT);
 }

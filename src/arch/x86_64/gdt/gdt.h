@@ -76,6 +76,11 @@ typedef struct {
 
 void gdt_init();
 
+extern void _load_gdt(gdt_pointer_t *descriptor);
+extern void _reload_segments(uint64_t cs, uint64_t ds);
+// @param offset the offset into the GDT for the TSS entry
+extern void _load_tss(uint16_t offset);
+
 void tss_set_kernel_stack(uint64_t stack_ptr);
 uint64_t tss_get_kernel_stack(void);
 tss_t *get_tss(void);
