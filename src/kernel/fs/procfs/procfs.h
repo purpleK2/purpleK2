@@ -14,6 +14,8 @@
 // idea: each file is going to be a multiple of 512 bytes :bigbrain:
 #define PROCFS_FILESZ 512
 
+#define PROCFS_INFO_BUFSZ 100
+
 /*
     procFS implementation for purpleK2
 

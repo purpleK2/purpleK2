@@ -56,15 +56,8 @@ void procfs_info_add(procfs_info_t *info, char *buf, size_t offset,
 
     char *d = info->data; // data
 
-    if (!d) {
-        info->size = ROUND_UP((size + offset) + 1, PROCFS_FILESZ);
-        d          = kmalloc(info->size); // for '\0'
-    }
-
-    if (info->size < (offset + size)) {
-        info->size = ROUND_UP(offset + size, PROCFS_FILESZ);
-        d          = krealloc(d, info->size);
-    }
+    info->size = ROUND_UP((size + offset) + 1, PROCFS_FILESZ);
+    d          = krealloc(d, info->size);
 
     memcpy(&d[offset], buf, size);
     d[offset + size] = '\0';
@@ -136,8 +129,8 @@ procfs_info_t *procfs_tinfo_create(tcb_t *tcb) {
     }
 
     // should be enough for a single line
-    char *buf = kmalloc(100);
-    memset(buf, 0, 100);
+    char *buf = kmalloc(PROCFS_INFO_BUFSZ);
+    memset(buf, 0, PROCFS_INFO_BUFSZ);
 
     procfs_info_t *tinfo = kmalloc(sizeof(procfs_info_t));
     memset(tinfo, 0, sizeof(procfs_info_t));
@@ -145,27 +138,36 @@ procfs_info_t *procfs_tinfo_create(tcb_t *tcb) {
     // this is veeeery wacky
 
     // flags
-    snprintf(buf, 100, "TF_USER::%d\n", (tcb->flags & TF_MODE_USER) ? 1 : 0);
+    snprintf(buf, PROCFS_INFO_BUFSZ, "TF_USER::%d\n",
+             (tcb->flags & TF_MODE_USER) ? 1 : 0);
     procfs_info_add(tinfo, buf, 0, strlen(buf));
     int offset = procfs_info_linelen(tinfo, buf);
 
-    snprintf(buf, 100, "TF_BUSY::%d\n", (tcb->flags & TF_BUSY) ? 1 : 0);
+    snprintf(buf, PROCFS_INFO_BUFSZ, "TF_BUSY::%d\n",
+             (tcb->flags & TF_BUSY) ? 1 : 0);
     procfs_info_add(tinfo, buf, offset, strlen(buf));
     offset += procfs_info_linelen(tinfo, buf);
 
-    snprintf(buf, 100, "TF_DETACHED::%d\n", (tcb->flags & TF_DETACHED) ? 1 : 0);
+    snprintf(buf, PROCFS_INFO_BUFSZ, "TF_DETACHED::%d\n",
+             (tcb->flags & TF_DETACHED) ? 1 : 0);
     procfs_info_add(tinfo, buf, offset, strlen(buf));
     offset += procfs_info_linelen(tinfo, buf);
 
-    // entry point (suppose we are called first on process creation)
-    snprintf(buf, 100, "ENTRY::%016llx\n", tcb->regs->rip);
-    procfs_info_add(tinfo, buf, offset, strlen(buf));
-    offset += procfs_info_linelen(tinfo, buf);
+    if (tcb->regs) {
+        // entry point (suppose we are called first on process creation)
+        snprintf(buf, PROCFS_INFO_BUFSZ, "ENTRY::%016llx\n", tcb->regs->rip);
+        procfs_info_add(tinfo, buf, offset, strlen(buf));
+        offset += procfs_info_linelen(tinfo, buf);
 
-    // stack
-    snprintf(buf, 100, "STACK::%016llx\n", tcb->regs->rbp);
-    procfs_info_add(tinfo, buf, offset, strlen(buf));
-    offset += procfs_info_linelen(tinfo, buf);
+        // stack
+        snprintf(buf, PROCFS_INFO_BUFSZ, "STACK::%016llx\n", tcb->regs->rbp);
+        procfs_info_add(tinfo, buf, offset, strlen(buf));
+        offset += procfs_info_linelen(tinfo, buf);
+    } else {
+        debugf_warn("Sir we have a problem, this TCB(%p) doesn't have the regs "
+                    "structure\n",
+                    tcb);
+    }
 
     tinfo->size = strlen(tinfo->data);
 
@@ -179,30 +181,32 @@ procfs_info_t *procfs_procinfo_create(pcb_t *pcb) {
     }
 
     // should be enough for a single line
-    char *buf = kmalloc(100);
-    memset(buf, 0, 100);
+    char *buf = kmalloc(PROCFS_INFO_BUFSZ);
+    memset(buf, 0, PROCFS_INFO_BUFSZ);
 
     procfs_info_t *procinfo = kmalloc(sizeof(procfs_info_t));
     memset(procinfo, 0, sizeof(procfs_info_t));
 
     // fd count
-    snprintf(buf, 100, "FD_COUNT::%d\n", pcb->fd_count);
+    snprintf(buf, PROCFS_INFO_BUFSZ, "FD_COUNT::%d\n", pcb->fd_count);
     procfs_info_add(procinfo, buf, 0, strlen(buf) + 1);
     int offset = procfs_info_linelen(procinfo, buf);
 
     // tcb count
-    snprintf(buf, 100, "TCB_COUNT::%d\n", pcb->thread_count);
+    snprintf(buf, PROCFS_INFO_BUFSZ, "TCB_COUNT::%d\n", pcb->thread_count);
     procfs_info_add(procinfo, buf, offset, strlen(buf) + 1);
     offset += procfs_info_linelen(procinfo, buf);
 
     // cpu where is currently running
-    snprintf(buf, 100, "CURRENT_CPU::%d\n", get_current_cpu());
+    snprintf(buf, PROCFS_INFO_BUFSZ, "CURRENT_CPU::%d\n", get_current_cpu());
     procfs_info_add(procinfo, buf, offset, strlen(buf) + 1);
     offset += procfs_info_linelen(procinfo, buf);
 
     // signal handler? (later)
 
     procinfo->size = strlen(procinfo->data);
+
+    kfree(buf);
     return procinfo;
 }
 
@@ -548,7 +552,7 @@ int procfs_write(vnode_t *vnode, void *buf, size_t *size, size_t *offset) {
     UNUSED(size);
     UNUSED(offset);
 
-    debugf("STOP! YOU VIOLATED THE LAW!\n");
+    debugf_warn("STOP! YOU VIOLATED THE LAW!\n");
     return EACCES;
 }
 
