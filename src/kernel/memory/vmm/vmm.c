@@ -15,6 +15,8 @@
 #include <stdio.h>
 #include <string.h>
 
+atomic_flag VMM_LOCK = ATOMIC_FLAG_INIT;
+
 vmc_t *current_vmc = NULL;
 vmc_t *global_vmc  = NULL;
 vmc_t *kernel_vmc  = NULL; // for kmalloc()
@@ -24,14 +26,20 @@ vmc_t *get_current_vmc() {
 }
 
 void vmc_switch(vmc_t *new) {
+    spinlock_acquire(&VMM_LOCK);
+
     current_vmc = new;
+
+    spinlock_release(&VMM_LOCK);
 }
 
 void set_kernel_vmc(vmc_t *kvmc) {
+    spinlock_acquire(&VMM_LOCK);
     // so that it only gets set once
     if (!kernel_vmc) {
         kernel_vmc = kvmc;
     }
+    spinlock_release(&VMM_LOCK);
 }
 
 vmc_t *get_kernel_vmc() {
@@ -39,7 +47,9 @@ vmc_t *get_kernel_vmc() {
 }
 
 void set_global_vmc(vmc_t *glob) {
+    spinlock_acquire(&VMM_LOCK);
     global_vmc = glob;
+    spinlock_release(&VMM_LOCK);
 }
 
 vmc_t *get_global_vmc() {
@@ -216,6 +226,8 @@ vmo_t *vmo_init(uint64_t base, size_t length, uint64_t flags) {
 // @note We will not care if `pml4` is 0x0 :^)
 // @param pml4_virt VIRTUAL address
 vmc_t *vmc_init(uint64_t *pml4_virt, uint64_t flags) {
+    spinlock_acquire(&VMM_LOCK);
+
     vmc_t *ctx = vmc_alloc();
 
     if (pml4_virt == NULL) {
@@ -225,10 +237,14 @@ vmc_t *vmc_init(uint64_t *pml4_virt, uint64_t flags) {
     ctx->pml4_table = (uint64_t *)VIRT_TO_PHYSICAL(pml4_virt);
     ctx->root_vmo   = vmo_init(0x1000, 1, flags);
 
+    spinlock_release(&VMM_LOCK);
+
     return ctx;
 }
 
 void vmc_destroy(vmc_t *ctx) {
+
+    spinlock_acquire(&VMM_LOCK);
 
     if (VIRT_TO_PHYSICAL(ctx->pml4_table) == (uint64_t)cpu_get_cr(3)) {
         kprintf_warn("Attempted to destroy a pagemap that's currently in use. "
@@ -291,6 +307,8 @@ void vmc_destroy(vmc_t *ctx) {
     vmc_free(ctx);
 
     ctx->pml4_table = NULL;
+
+    spinlock_release(&VMM_LOCK);
 }
 
 // @param where after how many pages should we split the VMO
@@ -358,6 +376,8 @@ void vmm_init(vmc_t *ctx) {
 
 // to be used by scheduler
 void process_vmm_init(vmc_t **proc_vmcr, uint64_t flags) {
+    spinlock_acquire(&VMM_LOCK);
+
     if (!proc_vmcr) {
         return;
     }
@@ -383,9 +403,13 @@ void process_vmm_init(vmc_t **proc_vmcr, uint64_t flags) {
     proc_vmc->pml4_table = (uint64_t *)pmm_alloc_page();
     memcpy((void *)PHYS_TO_VIRTUAL(proc_vmc->pml4_table),
            global_vmc->pml4_table, PFRAME_SIZE);
+
+    spinlock_release(&VMM_LOCK);
 }
 
 void *valloc(vmc_t *ctx, size_t pages, uint8_t flags, void *phys) {
+    spinlock_acquire(&VMM_LOCK);
+
     void *ptr = NULL;
 
     vmo_t *cur_vmo = ctx->root_vmo;
@@ -439,12 +463,15 @@ void *valloc(vmc_t *ctx, size_t pages, uint8_t flags, void *phys) {
 
     // debugf_debug("Returning pointer %p\n", ptr);
 
+    spinlock_release(&VMM_LOCK);
+
     return (ptr + offset);
 }
 
 // @param free do you want to give back the physical address of `ptr` back to
 // the PMM? (this will zero out that region on next allocation)
 void vfree(vmc_t *ctx, void *ptr, bool free) {
+    spinlock_acquire(&VMM_LOCK);
 
 #ifdef CONFIG_VMM_DEBUG
     debugf_debug("Deallocating pointer %p\n", ptr);
@@ -494,6 +521,8 @@ void vfree(vmc_t *ctx, void *ptr, bool free) {
 
     // debugf_debug("Region %llx destroyed\n", to_dealloc->base);
     vmo_free(to_dealloc);
+
+    spinlock_release(&VMM_LOCK);
 }
 
 void global_vmc_init(vmc_t *kernel_vmc) {
