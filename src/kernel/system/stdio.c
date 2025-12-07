@@ -26,13 +26,18 @@ atomic_flag STDIO_E9_LOCK = ATOMIC_FLAG_INIT;
 uint32_t current_bg;
 uint32_t current_fg;
 
+// yeah, it's a bit brutal :P
+void stdio_force_unlock() {
+    spinlock_release(&STDIO_FB_LOCK);
+    spinlock_release(&STDIO_E9_LOCK);
+}
+
 // unlocks spinlocks by force
 // interrupts are disabled to avoid other ones to be fired
 void stdio_panic_init() {
     asm("cli");
 
-    spinlock_release(&STDIO_FB_LOCK);
-    spinlock_release(&STDIO_E9_LOCK);
+    stdio_force_unlock();
 }
 
 uint32_t fb_get_bg() {

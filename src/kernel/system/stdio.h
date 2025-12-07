@@ -31,6 +31,7 @@ void fb_set_fg(uint32_t fg_rgb);
 
 void set_screen_bg_fg(uint32_t bg_rgb, uint32_t fg_rgb);
 
+void stdio_force_unlock();
 void stdio_panic_init();
 void clearscreen();
 void bsod_init();
