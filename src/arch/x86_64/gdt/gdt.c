@@ -36,14 +36,8 @@ void gdt_init() {
 
     tss.rsp0 = (uint64_t)(kernel_stack + KERNEL_STACK_SIZE);
 
-    gdt.tss_entry.limit_low   = sizeof(tss_t);
-    gdt.tss_entry.base_low    = (uint16_t)((uint64_t)&tss & 0xffff);
-    gdt.tss_entry.base_middle = (uint8_t)(((uint64_t)&tss >> 16) & 0xff);
-    gdt.tss_entry.access      = 0x89;
-    gdt.tss_entry.limit_high_and_flags = 0;
-    gdt.tss_entry.base_high   = (uint8_t)(((uint64_t)&tss >> 24) & 0xff);
-    gdt.tss_entry.base_higher = (uint32_t)((uint64_t)&tss >> 32);
-    gdt.tss_entry.zero        = 0;
+    gdt.tss_entry =
+        (tss_entry_t)TSS_ENTRY((uint64_t)&tss, (sizeof(tss_t) - 1), 0x89, 0);
 
     debugf_debug("GDTR:\n");
     debugf_debug("\tsize: %u\n", gdtr.size);

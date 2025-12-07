@@ -27,6 +27,17 @@
      GDT_FLAGS_HI_LIMIT(limit, flags),                                         \
      GDT_BASE_HIGH(base)}
 
+#define TSS_BASE_HIGHER(base) ((base >> 32) & 0xFFFFFFFF)
+
+#define TSS_ENTRY(base, limit, access, flags)                                  \
+    {GDT_LIMIT_LOW(limit),                                                     \
+     GDT_BASE_LOW(base),                                                       \
+     GDT_BASE_MIDDLE(base),                                                    \
+     access,                                                                   \
+     GDT_FLAGS_HI_LIMIT(limit, flags),                                         \
+     GDT_BASE_HIGH(base),                                                      \
+     TSS_BASE_HIGHER(base)}
+
 typedef struct {
     uint32_t reserved0;
     uint64_t rsp0;
