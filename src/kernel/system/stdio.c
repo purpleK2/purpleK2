@@ -62,12 +62,23 @@ void clearscreen() {
     _term_cls();
 }
 
-void putc(char c) {
+void putc(int c, void *ctx) {
+    spinlock_acquire(&STDIO_FB_LOCK);
+    UNUSED(ctx);
     _term_putc(c);
+    spinlock_release(&STDIO_FB_LOCK);
 }
 
-void dputc(char c) {
+void dputc(int c, void *ctx) {
+    spinlock_acquire(&STDIO_E9_LOCK);
+    UNUSED(ctx);
     _outb(0xE9, c);
+    spinlock_release(&STDIO_E9_LOCK);
+}
+
+void mputc(int c, void *ctx) {
+    putc(c, ctx);
+    dputc(c, ctx);
 }
 
 void bsod_init() {
@@ -76,44 +87,12 @@ void bsod_init() {
     clearscreen();
 }
 
-void kprintf_impl(const char *buffer, int len) {
-    spinlock_acquire(&STDIO_FB_LOCK);
-
-    for (int i = 0; i < len; ++i) {
-        putc(buffer[i]);
-    }
-
-    spinlock_release(&STDIO_FB_LOCK);
-}
-
-void debugf_impl(const char *buffer, int len) {
-    spinlock_acquire(&STDIO_E9_LOCK);
-
-    for (int i = 0; i < len; ++i) {
-        dputc(buffer[i]);
-    }
-
-    spinlock_release(&STDIO_E9_LOCK);
-}
-
-void mprintf_impl(const char *buffer, int len) {
-    debugf_impl(buffer, len);
-    kprintf_impl(buffer, len);
-}
-
-int printf(void (*putc_function)(const char *, int), const char *fmt, ...) {
-    char buffer[1024];
+int printf(void (*putc_function)(int, void *), const char *fmt, ...) {
     va_list args;
 
     va_start(args, fmt);
-    int length = npf_vsnprintf(buffer, sizeof(buffer), fmt, args);
+    int length = npf_vpprintf(putc_function, NULL, fmt, args);
     va_end(args);
-
-    if (length < 0 || length >= (int)sizeof(buffer)) {
-        return -1;
-    }
-
-    (*putc_function)(buffer, length);
 
     return length;
 }
