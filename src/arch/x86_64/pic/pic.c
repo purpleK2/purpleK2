@@ -98,26 +98,6 @@ void irq_unmask(uint8_t irq_line) {
 
 // Disable the PIC
 void pic_disable() {
-    _outb(PIC1_COMMAND, PIC_ICW1_INITIALIZE | PIC_ICW1_ICW4);
-    _io_wait();
-    _outb(PIC2_COMMAND, PIC_ICW1_INITIALIZE | PIC_ICW1_ICW4);
-    _io_wait();
-
-    _outb(PIC1_DATA, 0x20);
-    _io_wait();
-    _outb(PIC1_DATA, 0x28);
-    _io_wait();
-
-    _outb(PIC1_DATA, 0x2);
-    _io_wait();
-    _outb(PIC1_DATA, 0x4);
-    _io_wait();
-
-    _outb(PIC1_DATA, PIC_ICW4_8086);
-    _io_wait();
-    _outb(PIC1_DATA, PIC_ICW4_8086);
-    _io_wait();
-
     // Masks all interrupts
     _outb(PIC1_DATA, 0xff);
     _io_wait();
