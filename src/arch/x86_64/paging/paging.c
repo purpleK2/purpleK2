@@ -138,14 +138,18 @@ uint64_t *get_create_pmlt(uint64_t *pml_table, uint64_t pmlt_index,
                           uint64_t flags) {
     // is there something at pml_table[pmlt_index]?
     if (!(pml_table[pmlt_index] & PMLE_PRESENT)) {
-        /*debugf_debug("Table %llp entry %llx is not present, creating
-           it...\n", pml_table, pmlt_index);*/
+#ifdef CONFIG_PAGING_DEBUG
+        debugf_debug("Table %llp entry %llx is not present, creating it...\n",
+                     pml_table, pmlt_index);
+#endif
 
         pml_table[pmlt_index] = (uint64_t)pmm_alloc_page() | flags;
     }
 
-    // kprintf_info("Table %llp entry %llx contents:%llx flags:%llx\n",
-    // pml_table, pmlt_index, pml_table[pmlt_index], flags);
+#ifdef CONFIG_PAGING_DEBUG
+    debugf_debug("Table %llp entry %llx contents:%llx flags:%llx\n", pml_table,
+                 pmlt_index, pml_table[pmlt_index], flags);
+#endif
 
     return get_pmlt(pml_table, pmlt_index);
 }
@@ -208,10 +212,10 @@ void map_phys_to_page(uint64_t *pml4_table, uint64_t physical, uint64_t virtual,
         get_create_pmlt(pdir_table, pdir_index, (flags & ~(PMLE_PAT)));
 
     page_table[ptab_index] = PG_GET_ADDR(physical) | flags;
-    // debugf_debug("Page table %llp entry %llu mapped to (virt)%llx
-    // (phys)%llx \n", page_table, ptab_index, virtual, physical);
-    // debugf_debug("\tcontents of table[entry]: %llx\n",
-    // page_table[ptab_index]);
+
+#ifdef CONFIG_PAGING_DEBUG
+    debugf_debug("Virtual address %llx mapped to %llx\n", virtual, physical);
+#endif
 
     _invalidate(virtual);
     if (get_bootloader_data()->smp_enabled) {
@@ -354,18 +358,6 @@ void paging_init(uint64_t *kernel_pml4) {
     debugf_debug("Limine's PML4 sits at %llp\n", limine_pml4);
 
     pat_init();
-
-    /*  TBH it doesn't even make sense to apply a custom PAT if i don't have any
-    idea on why i should
-
-    // set up a custom PAT
-    debugf_debug("PAT MSR: %.16llx\n", _cpu_get_msr(0x277));
-
-    uint64_t custom_pat = PAT_WRITEBACK | (PAT_WRITE_THROUGH << 8) |
-    (PAT_WRITE_COMBINING << 16) | (PAT_UNCACHEABLE << 24);
-    _cpu_set_msr(0x277, custom_pat);
-    debugf_debug("Custom PAT has been set up: %.16llx\n", _cpu_get_msr(0x277));
-    */
 
     /*
             24/12/2024

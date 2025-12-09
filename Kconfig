@@ -19,6 +19,15 @@ config DEVFS_MOUNT_PATH
 
 endmenu # DevFS options
 
+menu "ProcFS options"
+config PROCFS_MOUNT
+    string "ProcFS mount path"
+    default "/proc"
+    help
+      Where to mount the DevFS pseudo filesystem
+
+endmenu # DevFS options
+
 endmenu # Filesystems
 
 menu "Advanced debugging"

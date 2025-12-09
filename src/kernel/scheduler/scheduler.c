@@ -2,6 +2,8 @@
 
 #include <gdt/gdt.h>
 
+#include <autoconf.h>
+
 #include <cpu.h>
 #include <errors.h>
 #include <kernel.h>
@@ -38,7 +40,7 @@ int init_scheduler() {
 
     // create the procFS
     procfs = procfs_create();
-    procfs_vfs_init(procfs, SCHEDULER_PROCFS_MOUNT);
+    procfs_vfs_init(procfs, CONFIG_PROCFS_MOUNT);
     return 0;
 }
 
@@ -81,8 +83,10 @@ int proc_create(void (*entry)(), int flags, char *name) {
 
     proc->cwd = NULL;
 
+#ifdef CONFIG_SCHED_DEBUG
     debugf_debug("Created process PID=%d flags=0x%x mode=%s\n", proc->pid,
                  flags, (flags & TF_MODE_USER) ? "USER" : "KERNEL");
+#endif
 
     thread_create(proc, entry, flags);
 
@@ -144,9 +148,11 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
             return -1;
         }
 
+#ifdef CONFIG_SCHED_DEBUG
         debugf_debug(
             "Created usermode thread TID=%d entry=%p ustack=%p kstack=%p\n",
             thread->tid, entry, (void *)ctx->rsp, thread->kernel_stack);
+#endif
     } else {
         thread->kernel_stack =
             (void *)PHYS_TO_VIRTUAL(pmm_alloc_pages(SCHEDULER_STACK_PAGES));
@@ -159,8 +165,10 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
         ctx->rflags = 0x202;
         ctx->rsp    = (uint64_t)(thread->kernel_stack + SCHEDULER_STACKSZ - 8);
 
+#ifdef CONFIG_SCHED_DEBUG
         debugf_debug("Created kernel thread TID=%d entry=%p kstack=%p\n",
                      thread->tid, entry, (void *)ctx->rsp);
+#endif
     }
 
     thread->regs = ctx;

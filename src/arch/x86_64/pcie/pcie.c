@@ -12,6 +12,8 @@
 
 #include <pci/pci_ids.h>
 
+#include <autoconf.h>
+
 /*
     What do we do with PCIe?
 
@@ -179,11 +181,21 @@ pcie_status pcie_parse_ecam(struct acpi_mcfg_allocation *ecam,
                 map_region(pml4, addr, PHYS_TO_VIRTUAL(addr), 1,
                            PMLE_KERNEL_READ_WRITE);
 
+#ifdef CONFIG_PCIE_DEBUG
+                debugf("[%.02hhx:%.02hhx.%.01hhx] Checking %llx\n", bus, device,
+                       function, addr);
+#endif
+
                 pcie_header_t *header = (pcie_header_t *)PHYS_TO_VIRTUAL(addr);
 
                 switch (check_pcie_device(header)) {
                 case PCIE_STATUS_ILLEGAL:
                     unmap_region(pml4, PHYS_TO_VIRTUAL(addr), 1);
+#ifdef CONFIG_PCIE_DEBUG
+                    debugf(
+                        "[%.02hhx:%.02hhx.%.01hhx] Nope, not a PCIe device\n",
+                        bus, device, function);
+#endif
                     continue; // don't add the device :meow:
 
                 case PCIE_STATUS_MULTIFUN:
@@ -199,6 +211,11 @@ pcie_status pcie_parse_ecam(struct acpi_mcfg_allocation *ecam,
                                 "device type!\n");
                     continue;
                 }
+
+#ifdef CONFIG_PCIE_DEBUG
+                debugf("[%.02hhx:%.02hhx.%.01hhx] Ok we're good\n", bus, device,
+                       function);
+#endif
 
                 if (add_pcie_device(header, (void *)addr, bus_end - bus_start,
                                     pciids_path) != PCIE_STATUS_OK) {

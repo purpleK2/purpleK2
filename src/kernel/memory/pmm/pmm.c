@@ -47,6 +47,7 @@ void pmm_init(LIMINE_PTR(struct limine_memmap_response *) memmap_response) {
 
     kprintf_info("Found %d usable regions\n", usable_entry_count);
 
+#ifdef CONFIG_PMM_DEBUG
     // prints all nodes
     for (flnode_t *fl_node = pmm_headnode; fl_node != NULL;
          fl_node           = fl_node->next) {
@@ -58,6 +59,7 @@ void pmm_init(LIMINE_PTR(struct limine_memmap_response *) memmap_response) {
             debugf_debug("\tEND\n");
         }
     }
+#endif
 }
 
 // Returns the count of the entries.
@@ -127,15 +129,13 @@ void *pmm_alloc_page() {
         new_node->length   = (cur_node->length - PFRAME_SIZE);
         new_node->next     = cur_node->next;
         pmm_headnode       = new_node;
+
+#ifdef CONFIG_PMM_DEBUG
+        debugf_debug("old head %p is now %p\n", ptr, pmm_headnode);
+#endif
     }
 
     fl_update_nodes();
-
-#ifdef CONFIG_PMM_DEBUG
-    debugf_debug("old head %p is now %p\n", ptr, fl_head);
-    debugf_debug("\tsize: %zx\n", fl_head->length);
-    debugf_debug("\tnext: %p\n", fl_head->next);
-#endif
 
     // zero out the whole allocated region
     memset((void *)ptr, 0, PFRAME_SIZE);
@@ -176,20 +176,36 @@ void pmm_free(void *ptr, size_t pages) {
         }
 
         if ((f + (f->length)) == deallocated) {
+#ifdef CONFIG_PMM_DEBUG
+            debugf_debug("This node %p has claimed %zu pages\n", f, pages);
+#endif
             f->length += (PFRAME_SIZE * pages);
         } else if ((f - (PFRAME_SIZE * pages)) == deallocated) {
             flnode_t *new = next - (PFRAME_SIZE * pages);
             new->length   = next->length + (PFRAME_SIZE * pages);
             new->next     = next->next;
             f->next       = new;
+
+#ifdef CONFIG_PMM_DEBUG
+            debugf_debug("Reclaimed pointer %p has claimed %zu pages\n", f,
+                         pages);
+#endif
         } else {
             deallocated->length = (PFRAME_SIZE * pages);
             deallocated->next   = next;
             f->next             = deallocated;
+#ifdef CONFIG_PMM_DEBUG
+            debugf_debug("Created node %p with %zu pages\n", deallocated,
+                         pages);
+#endif
         }
 
         break;
     }
+
+#ifdef CONFIG_PMM_DEBUG
+    debugf_debug("Pointer %p reclaimed OK!\n", ptr);
+#endif
 
     fl_update_nodes();
 

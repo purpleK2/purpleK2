@@ -58,12 +58,14 @@ vmc_t *get_global_vmc() {
 
 // imagine making a function to print stuff that you're going to barely use LMAO
 void vmo_dump(vmo_t *vmo) {
-    /*debugf_debug("VMO %p\n", vmo);
+#ifdef CONFIG_VMM_DEBUG
+    debugf_debug("VMO %p\n", vmo);
     debugf_debug("\tprev: %p\n", vmo->prev);
     debugf_debug("\tbase: %llx\n", vmo->base);
     debugf_debug("\tlen %zu\n", vmo->len);
     debugf_debug("\tflags: %llb\n", vmo->flags);
-    debugf_debug("\tnext: %p\n", vmo->next);*/
+    debugf_debug("\tnext: %p\n", vmo->next);
+#endif
 }
 
 static vmm_node_t *vmolist_root_node = NULL;
@@ -416,25 +418,28 @@ void *valloc(vmc_t *ctx, size_t pages, uint8_t flags, void *phys) {
     vmo_t *new_vmo;
 
     for (; cur_vmo != NULL; cur_vmo = cur_vmo->next) {
-        // debugf_debug("Checking for available memory\n");
         vmo_dump(cur_vmo);
 
         if ((cur_vmo->len >= pages) && (BIT_GET(cur_vmo->flags, 8) == 0)) {
-
-            // debugf_debug("Well, we've got enough memory :D\n");
             break;
         }
 
-        // debugf_debug("Current VMO is either too small or already "
-        //              "allocated. Skipping...\n");
+#ifdef CONFIG_VMM_DEBUG
+        debugf_debug("Current VMO is either too small or already "
+                     "allocated. Skipping...\n");
+#endif
+
         if (!cur_vmo->next) {
             uint64_t offset = (uint64_t)(cur_vmo->len * PFRAME_SIZE);
             new_vmo         = vmo_init(cur_vmo->base + offset, pages,
                                        flags & ~(VMO_ALLOCATED));
             cur_vmo->next   = new_vmo;
-            // debugf_debug("VMO %p created successfully. Proceeding to next "
-            //              "iteration\n",
-            //             new_vmo);
+
+#ifdef CONFIG_VMM_DEBUG
+            debugf_debug("VMO %p created successfully. Proceeding to next "
+                         "iteration\n",
+                         new_vmo);
+#endif
         }
     }
 
@@ -461,7 +466,9 @@ void *valloc(vmc_t *ctx, size_t pages, uint8_t flags, void *phys) {
                (uint64_t)phys_to_map, (uint64_t)ptr, (uint64_t)pages,
                vmo_to_page_flags(flags));
 
-    // debugf_debug("Returning pointer %p\n", ptr);
+#ifdef CONFIG_VMM_DEBUG
+    debugf_debug("Returning pointer %p\n", ptr);
+#endif
 
     spinlock_release(&VMM_LOCK);
 
@@ -479,18 +486,23 @@ void vfree(vmc_t *ctx, void *ptr, bool free) {
 
     ptr = (void *)ROUND_DOWN((uint64_t)ptr, PFRAME_SIZE);
 
+    vmo_t *d_prev = NULL;
+
     vmo_t *cur_vmo = ctx->root_vmo;
     for (; cur_vmo != NULL; cur_vmo = cur_vmo->next) {
         vmo_dump(cur_vmo);
         if ((uint64_t)ptr == cur_vmo->base) {
             break;
         }
-        // debugf_debug("Pointer and vmo->base don't match. Skipping\n");
+
+        d_prev = cur_vmo;
     }
 
     if (cur_vmo == NULL) {
-        // debugf_debug(
-        //    "Tried to deallocate a non-existing pointer. Quitting...\n");
+#ifdef CONFIG_VMM_DEBUG
+        debugf_debug("Tried to deallocate a non-existing virtual address. "
+                     "Quitting...\n");
+#endif
         return;
     }
 
@@ -505,22 +517,20 @@ void vfree(vmc_t *ctx, void *ptr, bool free) {
                  cur_vmo->len);
 
     vmo_t *to_dealloc = cur_vmo;
-    // d_ is deallocated_
+    // d is deallocated
     vmo_t *d_next     = to_dealloc->next;
-    vmo_t *d_prev     = NULL;
 
     if (cur_vmo == ctx->root_vmo) {
         ctx->root_vmo = ctx->root_vmo->next;
     } else {
-        for (d_prev = ctx->root_vmo; d_prev->next != to_dealloc;
-             d_prev = d_prev->next)
-            ;
-
         d_prev->next = d_next;
     }
 
-    // debugf_debug("Region %llx destroyed\n", to_dealloc->base);
     vmo_free(to_dealloc);
+
+#ifdef CONFIG_VMM_DEBUG
+    debugf("VM range %p deallocated OK!\n", to_dealloc);
+#endif
 
     spinlock_release(&VMM_LOCK);
 }
