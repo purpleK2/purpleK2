@@ -9,7 +9,7 @@
 
 #include <stdint.h>
 
-#include "time.h"
+#include <time.h>
 
 extern bool pit;
 
@@ -40,17 +40,11 @@ void putc(int c, void *ctx);
 void dputc(int c, void *ctx);
 void mputc(int c, void *ctx);
 
-int printf(void (*putc_function)(int, void *), const char *fmt, ...);
+int printf(void (*putc_function)(int, void *), const char *fmt, va_list var);
 
-#ifdef PRINTF_MIRROR
-#define kprintf(fmt, ...) printf(mputc, fmt, ##__VA_ARGS__)
-#else
-#define kprintf(fmt, ...) printf(putc, fmt, ##__VA_ARGS__)
-#endif
-
-#define debugf(fmt, ...) printf(dputc, fmt, ##__VA_ARGS__)
-
-#define mprintf(fmt, ...) printf(mputc, fmt, ##__VA_ARGS__)
+int kprintf(const char *fmt, ...);
+int debugf(const char *fmt, ...);
+int mprintf(const char *fmt, ...);
 
 // snprintf and such are copied from nanoprintf directly
 
