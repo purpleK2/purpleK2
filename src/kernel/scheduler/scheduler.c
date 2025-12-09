@@ -412,3 +412,7 @@ void yield(registers_t *regs) {
         memcpy(regs, next->regs, sizeof(registers_t));
     }
 }
+
+void scheduler_procfs_print() {
+    procfs_print(procfs);
+}

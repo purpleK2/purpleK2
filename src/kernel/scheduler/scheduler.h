@@ -138,4 +138,6 @@ void yield(registers_t *regs);
 void enter_usermode(void (*entry)(), void *user_stack);
 void syscall_return(registers_t *regs);
 
+void scheduler_procfs_print();
+
 #endif // SCHEDULER_H

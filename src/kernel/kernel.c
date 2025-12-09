@@ -130,8 +130,6 @@ extern void __sched_test(void);
 
 devfs_t *devfs = NULL;
 
-extern procfs_t *procfs;
-
 void pk_init() {
     debugf("Hello!\n");
     proc_create(__sched_test, TF_MODE_KERNEL, "__sched_test");
@@ -142,8 +140,9 @@ void pk_init() {
     fileio_t *f = open("/proc/self/procinfo", 0);
     char buf_test[200];
     read(f, sizeof(buf_test), buf_test);
-    // yes you can
-    procfs_print(procfs);
+    kprintf(buf_test);
+
+    scheduler_procfs_print();
 }
 
 // kernel main function
