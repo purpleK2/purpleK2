@@ -471,7 +471,7 @@ uacpi_bool uacpi_kernel_wait_for_event(uacpi_handle semaphore,
 
     switch (timeout) {
     case 0xFFFF:
-        while (0 == 0) {
+        for (;;) {
             if (sem > 0) {
                 sem                       -= 1;
                 *(semaphore_t *)semaphore  = sem;
