@@ -14,13 +14,13 @@ void set_ticks(uint64_t new) {
     ticks = new;
 }
 
-void timer_tick(void *ctx) {
+void timer_tick(registers_t *ctx) {
     UNUSED(ctx);
 
     set_ticks(get_ticks() + 1);
 }
 
-void scheduler_timer_tick(void *ctx) {
+void scheduler_timer_tick(registers_t *ctx) {
     timer_tick(ctx);
     yield(ctx);
 }

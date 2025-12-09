@@ -72,14 +72,13 @@ unrelated to ordinary paging.
         Simply gives information about a page fault error code
         (C) RepubblicaTech 2024
 */
-void pf_handler(void *ctx) {
-    registers_t *regs      = ctx;
-    uint64_t pf_error_code = (uint64_t)regs->error;
+void pf_handler(registers_t *ctx) {
+    uint64_t pf_error_code = (uint64_t)ctx->error;
 
     if (PG_IF(pf_error_code)) {
         debugf_warn("Process %s killed!\n", get_current_pcb()->name);
         proc_exit();
-        yield(regs); // tell scheduler to select another process  427b1
+        yield(ctx); // tell scheduler to select another process  427b1
         return;
     }
 
@@ -116,7 +115,7 @@ void pf_handler(void *ctx) {
     mprintf("SHADOW_STACK_ACCESS: %d\n", PG_SS(pf_error_code));
     mprintf("SGX_VIOLATION: %d\n", PG_SGX(pf_error_code));
 
-    panic_common(regs);
+    panic_common(ctx);
 
     debugf(ANSI_COLOR_RESET);
 }

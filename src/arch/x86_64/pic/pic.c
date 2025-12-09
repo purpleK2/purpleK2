@@ -124,16 +124,14 @@ uint16_t pic_get_isr(void) {
     return __pic_get_irq_reg(PIC_READ_ISR);
 }
 
-void pic_irq_handler(void *ctx) {
-    registers_t *regs = ctx;
-
-    int irq = regs->interrupt - PIC_REMAP_OFFSET;
+void pic_irq_handler(registers_t *ctx) {
+    int irq = ctx->interrupt - PIC_REMAP_OFFSET;
 
     uint8_t pic_isr = pic_get_isr();
     uint8_t pic_irr = pic_get_irr();
 
     if (pic_irq_handlers[irq] != NULL) {
-        pic_irq_handlers[irq](regs); // tries to handle the interrupt
+        pic_irq_handlers[irq](ctx); // tries to handle the interrupt
     } else {
         debugf_warn("Unhandled IRQ %d  ISR=%x  IRR=%x\n", irq, pic_isr,
                     pic_irr);

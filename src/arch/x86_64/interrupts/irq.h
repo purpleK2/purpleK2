@@ -5,7 +5,7 @@
 
 #include <stdint.h>
 
-typedef void (*irq_handler)(void *ctx);
+typedef void (*irq_handler)(registers_t *ctx);
 
 void irq_registerHandler(int irq, irq_handler handler);
 void irq_sendEOI(uint8_t irq);

@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <interrupts/isr.h>
+
 #define LAPIC_BASE_MSR  0x1B
 #define LAPIC_BASE_MASK 0xffffff000
 
@@ -66,6 +68,6 @@ void lapic_init();
 uint32_t lapic_timer_calibrate_pit(void);
 uint32_t calibrate_apic_timer_tsc(void);
 void lapic_timer_init();
-void lapic_timer_handler(void *ctx);
+void lapic_timer_handler(registers_t *ctx);
 
 #endif

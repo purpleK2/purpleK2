@@ -22,12 +22,12 @@ context_load:
 public fpu_save
 public fpu_restore
 
-; void fpu_save(void *ctx)
+; void fpu_save(registers_t *ctx)
 fpu_save:
     fxsave [rdi]
     ret
 
-; void fpu_restore(void *ctx)
+; void fpu_restore(registers_t *ctx)
 fpu_restore:
     fxrstor [rdi]
     ret

@@ -58,29 +58,26 @@ static const char *const exceptions[] = {"Divide by zero error",
                                          "Security Exception",
                                          ""};
 
-void isr_syscall(void *ctx) {
-    registers_t *regs = ctx;
-
-    long syscall_num = regs->rax;
-    long arg1        = regs->rdi;
-    long arg2        = regs->rsi;
-    long arg3        = regs->rdx;
-    long arg4        = regs->r8;
-    long arg5        = regs->r9;
-    long arg6        = regs->r10;
+void isr_syscall(registers_t *ctx) {
+    long syscall_num = ctx->rax;
+    long arg1        = ctx->rdi;
+    long arg2        = ctx->rsi;
+    long arg3        = ctx->rdx;
+    long arg4        = ctx->r8;
+    long arg5        = ctx->r9;
+    long arg6        = ctx->r10;
 
     long ret = handle_syscall(syscall_num, arg1, arg2, arg3, arg4, arg5, arg6);
 
-    regs->rax = ret;
+    ctx->rax = ret;
 }
 
-static void isr_debug(void *ctx) {
-    registers_t *regs = ctx;
-    debugf_warn("Debug exception at RIP=0x%llx\n", regs->rip);
+static void isr_debug(registers_t *ctx) {
+    debugf_warn("Debug exception at RIP=0x%llx\n", ctx->rip);
 
-    regs->rflags &= ~(1ULL << 8);
+    ctx->rflags &= ~(1ULL << 8);
 
-    regs->rip += 1;
+    ctx->rip += 1;
 }
 
 void isr_init() {
@@ -92,11 +89,8 @@ void isr_init() {
     isr_registerHandler(0x1, isr_debug);
 }
 
-void print_reg_dump(void *ctx) {
+void print_reg_dump(registers_t *ctx) {
     debugf(ANSI_COLOR_BLUE);
-
-    registers_t *regs = ctx;
-
     mprintf("\nRegister dump:\n\n");
 
     mprintf("--- GENERAL PURPOSE REGISTERS ---\n");
@@ -108,14 +102,14 @@ void print_reg_dump(void *ctx) {
             "\t\t\tr13: 0x%.016llx\n"
             "\t\t\tr14: 0x%.016llx\n"
             "\t\t\tr15: 0x%.016llx\n",
-            regs->rax, regs->r8, regs->rbx, regs->r9, regs->rcx, regs->r10,
-            regs->rdx, regs->r11, regs->r12, regs->r13, regs->r14, regs->r15);
+            ctx->rax, ctx->r8, ctx->rbx, ctx->r9, ctx->rcx, ctx->r10, ctx->rdx,
+            ctx->r11, ctx->r12, ctx->r13, ctx->r14, ctx->r15);
 
     mprintf("\n--- SEGMENT REGS ---\n");
     mprintf("\tcs (Code segment):   %llx\n"
             "\tds (Data segment):   %llx\n"
             "\tss (Stack segment):  %llx\n",
-            regs->cs, regs->ds, regs->ss);
+            ctx->cs, ctx->ds, ctx->ss);
 
     mprintf("\n--- FLAGS, POINTER AND INDEX REGISTERS ---\n");
     mprintf("\teflags:%llx\n"
@@ -124,8 +118,7 @@ void print_reg_dump(void *ctx) {
             "\trsp (Stack pointer):        %llx\n"
             "\trdi:                        %llx\n"
             "\trsi:                        %llx\n",
-            regs->rflags, regs->rip, regs->rbp, regs->rsp, regs->rdi,
-            regs->rsi);
+            ctx->rflags, ctx->rip, ctx->rbp, ctx->rsp, ctx->rdi, ctx->rsi);
 }
 
 static void print_symbol(int frame, uintptr_t addr) {
@@ -178,17 +171,16 @@ static void print_symbol(int frame, uintptr_t addr) {
     }
 }
 
-void panic_common(void *ctx) {
-    registers_t *regs = ctx;
+void panic_common(registers_t *ctx) {
 
-    print_reg_dump(regs);
+    print_reg_dump(ctx);
 
     // stacktrace
     mprintf("\n\n --- STACK TRACE ---\n");
-    struct stackFrame *stack = (struct stackFrame *)regs->rbp;
+    struct stackFrame *stack = (struct stackFrame *)ctx->rbp;
     int frame                = 0;
 
-    print_symbol(frame++, regs->rip);
+    print_symbol(frame++, ctx->rip);
 
     while (stack) {
         print_symbol(frame++, stack->rip);
@@ -201,19 +193,17 @@ void panic_common(void *ctx) {
     _hcf();
 }
 
-void isr_handler(void *ctx) {
-    registers_t *regs = ctx;
-
+void isr_handler(registers_t *ctx) {
     uint64_t cpu = 0;
     if (is_lapic_enabled())
         cpu = lapic_get_id();
 
     UNUSED(cpu);
 
-    if (isr_handlers[regs->interrupt] != NULL) {
-        isr_handlers[regs->interrupt](regs);
-    } else if (regs->interrupt >= 32) {
-        debugf_warn("Unhandled interrupt %d on CPU %hhu\n", regs->interrupt,
+    if (isr_handlers[ctx->interrupt] != NULL) {
+        isr_handlers[ctx->interrupt](ctx);
+    } else if (ctx->interrupt >= 32) {
+        debugf_warn("Unhandled interrupt %d on CPU %hhu\n", ctx->interrupt,
                     lapic_get_id());
     } else {
         stdio_panic_init();
@@ -227,10 +217,10 @@ void isr_handler(void *ctx) {
             cpu = lapic_get_id();
 
         mprintf("KERNEL PANIC! \"%s\" (Exception n. %d) on CPU %hhu\n",
-                exceptions[regs->interrupt], regs->interrupt, cpu);
-        mprintf("\terrcode: %llx\n", regs->error);
+                exceptions[ctx->interrupt], ctx->interrupt, cpu);
+        mprintf("\terrcode: %llx\n", ctx->error);
 
-        panic_common(regs);
+        panic_common(ctx);
 
         _hcf();
     }

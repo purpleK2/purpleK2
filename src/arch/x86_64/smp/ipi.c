@@ -4,13 +4,13 @@
 #include <apic/lapic/lapic.h>
 #include <interrupts/isr.h>
 
-extern void ipi_handler_halt(void *ctx);
-extern void ipi_handler_tlb_flush(void *ctx);
-extern void ipi_handler_reschedule(void *ctx);
-extern void ipi_handler_test(void *ctx);
+extern void ipi_handler_halt(registers_t *ctx);
+extern void ipi_handler_tlb_flush(registers_t *ctx);
+extern void ipi_handler_reschedule(registers_t *ctx);
+extern void ipi_handler_test(registers_t *ctx);
 extern void
 do_nothing_and_shut_up_im_talking_to_you_vector_254_yes_you_just_dont_spam_logs_ok_thanks(
-    void *ctx);
+    registers_t *ctx);
 
 void register_ipi(void) {
     isr_registerHandler(IPI_VECTOR_HALT, ipi_handler_halt);

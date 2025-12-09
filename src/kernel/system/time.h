@@ -8,7 +8,7 @@
 uint64_t get_ticks();
 void set_ticks(uint64_t new);
 
-void timer_tick(void *ctx);
-void scheduler_timer_tick(void *ctx);
+void timer_tick(registers_t *ctx);
+void scheduler_timer_tick(registers_t *ctx);
 
 #endif

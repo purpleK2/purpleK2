@@ -77,7 +77,7 @@
 #define PAT_WRITEBACK       6
 #define PAT_UNCACHED        7
 
-void pf_handler(void *ctx);
+void pf_handler(registers_t *ctx);
 
 /********************
  *   PAGING STUFF   *

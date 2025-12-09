@@ -38,18 +38,16 @@ void ioapic_reg_write(uint8_t reg, uint32_t value) {
     regsel[4] = value;
 }
 
-void apic_irq_handler(void *ctx) {
-    registers_t *regs = ctx;
+void apic_irq_handler(registers_t *ctx) {
+    int apic_irq = ctx->interrupt - IOAPIC_IRQ_OFFSET;
 
-    int apic_irq = regs->interrupt - IOAPIC_IRQ_OFFSET;
-
-    debugf_debug("IOAPIC IRQ %d\n", apic_irq);
+    // debugf_debug("IOAPIC IRQ %d\n", apic_irq);
 
     uint64_t apic_isr = lapic_read_reg(LAPIC_INSERVICE_REG);
     uint64_t apic_irr = lapic_read_reg(LAPIC_INT_REQ_REG);
 
     if (apic_irq_handlers[apic_irq] != NULL) {
-        apic_irq_handlers[apic_irq](regs);
+        apic_irq_handlers[apic_irq](ctx);
     } else {
         debugf_warn("Unhandled IRQ %d  ISR=%llx  IRR=%llx\n", apic_irq,
                     apic_isr, apic_irr);
