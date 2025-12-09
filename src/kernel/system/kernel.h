@@ -55,9 +55,6 @@ typedef struct bootloader_data {
 
     uint64_t boot_time; // milliseconds since boot
 
-    // scheduler
-    bool scheduler_enabled;
-
     void *kernel_file_data;
     size_t kernel_file_size;
 } bootloader_data;
