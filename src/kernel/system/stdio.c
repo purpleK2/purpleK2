@@ -122,60 +122,15 @@ int mprintf(const char *fmt, ...) {
 
     va_start(args, fmt);
 
-    int length  = kprintf(fmt, args);
-    length     += debugf(fmt, args);
+    spinlock_acquire(&STDIO_FB_LOCK);
+    int length = printf(putc, fmt, args);
+    spinlock_release(&STDIO_FB_LOCK);
+
+    spinlock_acquire(&STDIO_E9_LOCK);
+    length += printf(dputc, fmt, args);
+    spinlock_release(&STDIO_E9_LOCK);
 
     va_end(args);
 
     return length;
 }
-
-/*
-#define debugf_debug(fmt, ...)                                                 \
-    ({                                                                         \
-        if (!(pit || tsc)) {                                                   \
-            debugf(COLOR(ANSI_COLOR_GRAY, "early: (%s:%d) " fmt),              \
-                   __FUNCTION__, __LINE__, ##__VA_ARGS__);                     \
-        } else {                                                               \
-            debugf(COLOR(ANSI_COLOR_GRAY, "[%llu.%03llu] (%s:%d) " fmt),       \
-                   get_ticks() / 1000, get_ticks() % 1000, __FUNCTION__,       \
-                   __LINE__, ##__VA_ARGS__);                                   \
-        }                                                                      \
-    })
-
-#define debugf_ok(fmt, ...)                                                    \
-    ({                                                                         \
-        if (!(pit || tsc)) {                                                   \
-            debugf(COLOR(ANSI_COLOR_GREEN, "early: (%s:%d) " fmt),             \
-                   __FUNCTION__, __LINE__, ##__VA_ARGS__);                     \
-        } else {                                                               \
-            debugf(COLOR(ANSI_COLOR_GREEN, "[%llu.%03llu] (%s:%d) " fmt),      \
-                   get_ticks() / 1000, get_ticks() % 1000, __FUNCTION__,       \
-                   __LINE__, ##__VA_ARGS__);                                   \
-        }                                                                      \
-    })
-
-#define debugf_warn(fmt, ...)                                                  \
-    ({                                                                         \
-        if (!(pit || tsc)) {                                                   \
-            debugf(COLOR(ANSI_COLOR_ORANGE, "early: (%s:%d) " fmt),            \
-                   __FUNCTION__, __LINE__, ##__VA_ARGS__);                     \
-        } else {                                                               \
-            debugf(COLOR(ANSI_COLOR_ORANGE, "[%llu.%03llu] (%s:%d) " fmt),     \
-                   get_ticks() / 1000, get_ticks() % 1000, __FUNCTION__,       \
-                   __LINE__, ##__VA_ARGS__);                                   \
-        }                                                                      \
-    })
-
-#define debugf_panic(fmt, ...)                                                 \
-    ({                                                                         \
-        if (!(pit || tsc)) {                                                   \
-            debugf(COLOR(ANSI_COLOR_RED, "early: (%s:%d) " fmt), __FUNCTION__, \
-                   __LINE__, ##__VA_ARGS__);                                   \
-        } else {                                                               \
-            debugf(COLOR(ANSI_COLOR_RED, "[%llu.%03llu] (%s:%d) " fmt),        \
-                   get_ticks() / 1000, get_ticks() % 1000, __FUNCTION__,       \
-                   __LINE__, ##__VA_ARGS__);                                   \
-        }                                                                      \
-    })
-*/
