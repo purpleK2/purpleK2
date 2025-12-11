@@ -36,8 +36,8 @@ void uacpi_irq_handler(registers_t *ctx) {
                ctx->interrupt);
     }
 
-    uacpi_handle ctx = uacpi_ctxs[irq];
-    uacpi_handlers[irq](ctx);
+    uacpi_handle uacpi_ctx = uacpi_ctxs[irq];
+    uacpi_handlers[irq](uacpi_ctx);
 }
 
 void uacpi_register_handler(uint32_t irq, uacpi_handle ctx,

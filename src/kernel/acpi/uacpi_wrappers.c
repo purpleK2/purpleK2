@@ -540,7 +540,7 @@ uacpi_status uacpi_kernel_install_interrupt_handler(
     uint32_t *irq_handle = kmalloc(sizeof(uint32_t));
     *irq_handle          = irq;
 
-    *(uint32_t *)out_irq_handle = irq_handle;
+    *(uint32_t **)out_irq_handle = irq_handle;
 
     return UACPI_STATUS_OK;
 }
