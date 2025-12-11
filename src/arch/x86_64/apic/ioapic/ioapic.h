@@ -16,6 +16,7 @@
 void set_ioapic_base(uint64_t base);
 
 void ioapic_registerHandler(int irq, irq_handler handler);
+void ioapic_unregisterHandler(int irq);
 
 void ioapic_init();
 

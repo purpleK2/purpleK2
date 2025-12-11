@@ -36,3 +36,11 @@ void irq_registerHandler(int irq, irq_handler handler) {
         pic_registerHandler(irq, handler);
     }
 }
+
+void irq_unregisterHandler(int irq) {
+    if (is_lapic_enabled()) {
+        ioapic_unregisterHandler(irq);
+    } else {
+        pic_unregisterHandler(irq);
+    }
+}

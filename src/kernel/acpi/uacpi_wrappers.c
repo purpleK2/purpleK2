@@ -12,6 +12,7 @@
 #include <paging/paging.h>
 
 #include <acpi/uacpi/types.h>
+#include <acpi_arch_helpers.h>
 
 #include <pci/pci.h>
 
@@ -530,21 +531,29 @@ uacpi_kernel_handle_firmware_request(uacpi_firmware_request *fw_req) {
 uacpi_status uacpi_kernel_install_interrupt_handler(
     uacpi_u32 irq, uacpi_interrupt_handler handler, uacpi_handle ctx,
     uacpi_handle *out_irq_handle) {
-    UNUSED(irq);
-    UNUSED(handler);
-    UNUSED(ctx);
-    UNUSED(out_irq_handle);
+    if (!handler) {
+        UACPI_STATUS_NO_HANDLER;
+    }
 
-    return UACPI_STATUS_UNIMPLEMENTED;
+    uacpi_register_handler(irq, ctx, handler);
+
+    uint32_t *irq_handle = kmalloc(sizeof(uint32_t));
+    *irq_handle          = irq;
+
+    *(uint32_t *)out_irq_handle = irq_handle;
+
+    return UACPI_STATUS_OK;
 }
 
 uacpi_status
 uacpi_kernel_uninstall_interrupt_handler(uacpi_interrupt_handler handler,
                                          uacpi_handle irq_handle) {
     UNUSED(handler);
-    UNUSED(irq_handle);
 
-    return UACPI_STATUS_UNIMPLEMENTED;
+    uint32_t *irq = irq_handle;
+    uacpi_unregister_handler(irq[0]);
+
+    return UACPI_STATUS_OK;
 }
 
 uacpi_handle uacpi_kernel_create_spinlock(void) {

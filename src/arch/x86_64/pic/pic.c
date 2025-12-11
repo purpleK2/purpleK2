@@ -143,3 +143,7 @@ void pic_irq_handler(registers_t *ctx) {
 void pic_registerHandler(int irq, irq_handler handler) {
     pic_irq_handlers[irq] = handler;
 }
+
+void pic_unregisterHandler(int irq) {
+    pic_irq_handlers[irq] = NULL;
+}

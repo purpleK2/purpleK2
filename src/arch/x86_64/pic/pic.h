@@ -74,5 +74,6 @@ uint16_t pic_get_irr(void);
 uint16_t pic_get_isr(void);
 
 void pic_registerHandler(int irq, irq_handler handler);
+void pic_unregisterHandler(int irq);
 
 #endif
