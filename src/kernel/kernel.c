@@ -516,9 +516,10 @@ void kstart(void) {
 
     init_cpu_scheduler(pk_init);
 
-    // boom
+    _disable_interrupts(); // just in case
     irq_registerHandler(0, scheduler_timer_tick);
     kprintf_ok("Scheduler initialized\n");
+    // boom
     _enable_interrupts();
 
     for (;;)
