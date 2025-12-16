@@ -107,7 +107,7 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
     thread->time_slice = SCHEDULER_THREAD_TS;
 
     thread->fpu = (void *)PHYS_TO_VIRTUAL(pmm_alloc_page());
-    memset(thread->fpu, 0, 512);
+    memset(thread->fpu, 0, PFRAME_SIZE);
 
     registers_t *ctx = kmalloc(sizeof(registers_t));
     memset(ctx, 0, sizeof(registers_t));
