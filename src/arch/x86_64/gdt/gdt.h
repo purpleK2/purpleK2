@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <util/macro.h>
 
-#define KERNEL_STACK_SIZE 4096 * 8
+#define KERNEL_STACK_SIZE 4096 * 10
 
 #define GDT_CODE_SEGMENT      0x08
 #define GDT_DATA_SEGMENT      0x10

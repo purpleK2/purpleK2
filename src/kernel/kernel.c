@@ -451,29 +451,22 @@ void kstart(void) {
         kprintf_warn("CPIO to RAMFS conversion failed!\n");
     }*/
 
-	debugf("Test1\n");
 
-	ramfs_init(); // registers the type
+ramfs_init(); // Register the ramfs filesystem type
 	
-	debugf("Test2\n");
-	
-	ramfs_t *cpio_ramfs = ramfs_create_fs();
+ramfs_t *cpio_ramfs = ramfs_create_fs();
+cpio_ramfs->root_node = ramfs_create_node(RAMFS_DIRECTORY);
+cpio_ramfs->root_node->name = strdup("/");
 
-	debugf("Test3\n");
-	/*cpio_ramfs->root_node = ramfs_create_node(RAMFS_DIRECTORY);
-	cpio_ramfs->root_node->name = strdup(INITRD_MOUNT);
+// Populate ramfs from CPIO
+if (cpio_ramfs_init(&fs, cpio_ramfs) != 0) {
+    kprintf_warn("CPIO to RAMFS conversion failed!\n");
+}
 
-	ramfs_vfs_init(cpio_ramfs, INITRD_MOUNT);*/
-
-	if (cpio_ramfs_init(&fs, cpio_ramfs) != 0) {
-		kprintf_warn("CPIO to RAMFS conversion failed!\n");
-	}
-
-	debugf("Test4\n");
-
-	vfs_mount(cpio_ramfs, "ramfs", INITRD_MOUNT, NULL);
-
-	debugf("Test5\n");
+// Mount using new API
+if (ramfs_vfs_init(cpio_ramfs, INITRD_MOUNT) != 0) {
+    kprintf_warn("Failed to mount RAMFS!\n");
+}
 
     fileio_t *test_file = open(INITRD_MOUNT "/directory/another.txt", 0);
     if (!test_file) {
