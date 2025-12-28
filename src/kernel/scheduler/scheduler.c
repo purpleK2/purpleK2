@@ -328,7 +328,7 @@ int proc_exit() {
 
     int ret = pcb_destroy(current->parent->pid);
 
-    debugf("Process %d killed!\n", current->parent->pid);
+    debugf("Process %d (%s) killed!\n", current->parent->pid, current->parent->name ? current->parent->name : "no-name");
 
     return ret;
 }

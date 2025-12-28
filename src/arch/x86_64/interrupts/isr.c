@@ -171,9 +171,21 @@ static void print_symbol(int frame, uintptr_t addr) {
     }
 }
 
+static uint8_t stack_failed_count = -1;
+
 void panic_common(registers_t *ctx) {
 
     print_reg_dump(ctx);
+
+    stack_failed_count++;
+    if (stack_failed_count > 0) {
+        mprintf(
+            "\nStack trace failed before. Not attempting to print it again.\n");
+        mprintf("\nPANIC LOG END --- HALTING ---\n");
+        debugf(ANSI_COLOR_RESET);
+        asm("cli");
+        _hcf();
+    }
 
     // stacktrace
     mprintf("\n\n --- STACK TRACE ---\n");

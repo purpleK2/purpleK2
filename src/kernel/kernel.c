@@ -143,6 +143,9 @@ void pk_init() {
     kprintf(buf_test);
 
     scheduler_procfs_print();
+
+	// IT IS STILL A BAD IDEA TO JUST LET THE PAGEFAULT HANDLER KILL THE PROC 😭
+	proc_exit();
 }
 
 // kernel main function
