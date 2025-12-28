@@ -56,4 +56,6 @@ int atoi(char *s);
 // natoi but for strings with hex numbers
 int nxatoi(char *s, size_t n);
 
+char *strcat(char *dest, const char *src);
+
 #endif

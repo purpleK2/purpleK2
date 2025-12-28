@@ -72,35 +72,29 @@ typedef struct procfs_vnode {
 
 procfs_t *procfs_create();
 void procfs_destroy(procfs_t *procfs);
-
-void procfs_info_add(procfs_info_t *info, char *buf, size_t offset,
-                     size_t size);
+void procfs_info_add(procfs_info_t *info, char *buf, size_t offset, size_t size);
 void procfs_info_del(procfs_info_t *info, size_t offset, size_t size);
-
 int procfs_info_find(procfs_info_t *info, char *key);
 int procfs_info_linelen(procfs_info_t *info, char *key);
-
 procfs_info_t *procfs_tinfo_create(tcb_t *tcb);
 procfs_info_t *procfs_procinfo_create(pcb_t *pcb);
-
 procfs_tcb_t *procfs_thread_create(tcb_t *tcb);
 procfs_pcb_t *procfs_proc_create(pcb_t *pcb);
-
 void procfs_proc_append(procfs_t *procfs, procfs_pcb_t *proc);
-
+void procfs_proc_remove(procfs_t *procfs, int pid);
 procfs_pcb_t *procfs_find_proc(procfs_t *procfs, int pid);
 procfs_tcb_t *procfs_find_thread(procfs_t *procfs, int pid, int tid);
-
 void *procfs_find(procfs_t *procfs, char *path, int *ftype);
+
+void procfs_init(void);
+int procfs_vfs_init(procfs_t *procfs, char *path);
+void procfs_print(procfs_t *procfs);
 
 int procfs_open(vnode_t **vout, int flags, bool clone, fileio_t **fout);
 int procfs_read(vnode_t *vnode, size_t *size, size_t *offset, void *out);
 int procfs_write(vnode_t *vnode, void *buf, size_t *size, size_t *offset);
 int procfs_close(vnode_t *vnode, int flags, bool clone);
 int procfs_ioctl(vnode_t *vnode, int request, void *arg);
-
-int procfs_vfs_init(procfs_t *procfs, char *path);
-
-void procfs_print(procfs_t *procfs);
-
+int procfs_lookup(vnode_t *parent, const char *name, vnode_t **out);
+int procfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count);
 #endif

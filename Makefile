@@ -32,6 +32,8 @@ QEMU_FLAGS = -m 2G \
     		 -smp 2 \
     		 -enable-kvm \
     		 -netdev tap,id=net0,ifname=tap0,script=no,downscript=no \
+			 -no-shutdown \
+			 -d cpu_reset,int \
 		 -device rtl8139,netdev=net0,mac=52:54:00:12:34:56
 
 QEMU_FLAGS_GDB = -m 2G \

@@ -51,4 +51,6 @@ size_t seek(fileio_t *file, size_t offset, fseek_t whence);
 
 size_t fcntl(fileio_t *file, fcntl_cmd_t cmd, void *arg);
 
+int fs_list(const char *path, int max_depth);
+
 #endif
