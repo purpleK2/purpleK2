@@ -44,7 +44,7 @@ size_t rx_offset = 0;
 
 static rtl8139_t *rtl8139_device = NULL;
 
-void rtl8139_interrupt_handler(void *regs) {
+void rtl8139_interrupt_handler(registers_t *regs) {
     UNUSED(regs);
     uint16_t status = _inw(rtl8139_device->mmio_addr + 0x3E);
     _outw(rtl8139_device->mmio_addr + 0x3E, 0x05);
