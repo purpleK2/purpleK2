@@ -126,6 +126,10 @@ int mprintf(const char *fmt, ...) {
     int length = printf(putc, fmt, args);
     spinlock_release(&STDIO_FB_LOCK);
 
+    va_end(args);
+
+    va_start(args, fmt);
+
     spinlock_acquire(&STDIO_E9_LOCK);
     length += printf(dputc, fmt, args);
     spinlock_release(&STDIO_E9_LOCK);
