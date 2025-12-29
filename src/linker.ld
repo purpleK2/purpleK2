@@ -25,21 +25,21 @@ SECTIONS
     /* Kernel and text section start */
     __kernel_start = .;
 
-    .text BLOCK(4K) : ALIGN(4K)
+    .text BLOCK(4K) : ALIGN(CONSTANT(MAXPAGESIZE))
     {
         __kernel_text_start = .;
         *(.text .text.*)
         __kernel_text_end = .;    /* Kernel text section end */
     } :text
 
-    .rodata BLOCK(4K) : ALIGN(4K)
+    .rodata BLOCK(4K) : ALIGN(CONSTANT(MAXPAGESIZE))
     {
         __kernel_rodata_start = .;
         *(.rodata .rodata.*)
         __kernel_rodata_end = .;
     } :rodata
 
-    .data BLOCK(4K) : ALIGN(4K)
+    .data BLOCK(4K) : ALIGN(CONSTANT(MAXPAGESIZE))
     {
         __kernel_data_start = .;  /* Kernel data section start */
         *(.data .data.*)
@@ -55,7 +55,7 @@ SECTIONS
     } :data
 
     /* Dynamic section for relocations, both in its own PHDR and inside data PHDR */
-    .dynamic : {
+    .dynamic : ALIGN(CONSTANT(MAXPAGESIZE)) {
         *(.dynamic)
     } :data :dynamic
     __kernel_data_end = .;    /* Kernel data section end */
