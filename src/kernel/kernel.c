@@ -144,8 +144,8 @@ void pk_init() {
 
     scheduler_procfs_print();
 
-	// IT IS STILL A BAD IDEA TO JUST LET THE PAGEFAULT HANDLER KILL THE PROC 😭
-	proc_exit();
+    // IT IS STILL A BAD IDEA TO JUST LET THE PAGEFAULT HANDLER KILL THE PROC 😭
+    proc_exit();
 }
 
 // kernel main function
@@ -451,22 +451,21 @@ void kstart(void) {
         kprintf_warn("CPIO to RAMFS conversion failed!\n");
     }*/
 
+    ramfs_init(); // Register the ramfs filesystem type
 
-ramfs_init(); // Register the ramfs filesystem type
-	
-ramfs_t *cpio_ramfs = ramfs_create_fs();
-cpio_ramfs->root_node = ramfs_create_node(RAMFS_DIRECTORY);
-cpio_ramfs->root_node->name = strdup("/");
+    ramfs_t *cpio_ramfs         = ramfs_create_fs();
+    cpio_ramfs->root_node       = ramfs_create_node(RAMFS_DIRECTORY);
+    cpio_ramfs->root_node->name = strdup("/");
 
-// Populate ramfs from CPIO
-if (cpio_ramfs_init(&fs, cpio_ramfs) != 0) {
-    kprintf_warn("CPIO to RAMFS conversion failed!\n");
-}
+    // Populate ramfs from CPIO
+    if (cpio_ramfs_init(&fs, cpio_ramfs) != 0) {
+        kprintf_warn("CPIO to RAMFS conversion failed!\n");
+    }
 
-// Mount using new API
-if (ramfs_vfs_init(cpio_ramfs, INITRD_MOUNT) != 0) {
-    kprintf_warn("Failed to mount RAMFS!\n");
-}
+    // Mount using new API
+    if (ramfs_vfs_init(cpio_ramfs, INITRD_MOUNT) != 0) {
+        kprintf_warn("Failed to mount RAMFS!\n");
+    }
 
     fileio_t *test_file = open(INITRD_MOUNT "/directory/another.txt", 0);
     if (!test_file) {
