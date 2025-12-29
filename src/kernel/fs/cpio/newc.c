@@ -194,71 +194,72 @@ int cpio_ramfs_init(cpio_fs_t *fs, ramfs_t *ramfs) {
         debugf_warn("Missing CPIO archive or RAMFS root struct!\n");
         return -1;
     }
-
-    ramfs_node_t *cur_node;
+    
+    if (!ramfs->root_node) {
+        debugf_warn("RAMFS root_node must be created before calling cpio_ramfs_init!\n");
+        return -1;
+    }
+    
+    ramfs_node_t *cur_node = ramfs->root_node; // Start at the existing root
     ramfs_node_t *next_node;
-
+    
     for (size_t i = 0; i < fs->file_count; i++) {
         cpio_file_t *file = &fs->files[i];
-
-        // use this to check for parents, and eventually create them
+        
         char *name_dup = strdup(file->filename);
         char *temp     = name_dup;
         char *dir;
-
-        // debugf_debug("[%d] path: '%s'\n", i, path);
-
-        // j = level of current node
+        
+        // Reset to root for each file
+        cur_node = ramfs->root_node;
+        
         for (int j = 0; *temp; j++) {
             dir = strtok_r(NULL, "/", &temp);
-            // debugf_debug("\tstrtok:'%s'; temp:'%s'\n", dir, temp);
-
+            
             ramfs_ftype_t rt;
-            // if there's something in temp, it means we need to create
-            // directories
             if (*temp) {
                 rt = RAMFS_DIRECTORY;
             } else {
                 rt = RAMFS_FILE;
             }
-
-            switch (ramfs_find_or_create_node(ramfs, dir, rt, &next_node)) {
-            case 0: // a node was found
-                break;
-
-            case 1: // a node has been created
+            
+            // Look for existing node in current directory
+            ramfs_node_t *found = NULL;
+            if (cur_node->type == RAMFS_DIRECTORY) {
+                for (ramfs_node_t *child = cur_node->child; child != NULL; child = child->sibling) {
+                    if (strcmp(child->name, dir) == 0) {
+                        found = child;
+                        break;
+                    }
+                }
+            }
+            
+            if (found) {
+                // Node exists, descend into it
+                cur_node = found;
+            } else {
+                // Create new node
+                next_node = ramfs_create_node(rt);
                 next_node->name = strdup(dir);
+                
                 if (rt == RAMFS_FILE) {
                     next_node->size = file->filesize;
                     next_node->data = file->data;
                 }
-
-                if (j == 0 && i == 0) { // create the first node
-                    cur_node         = next_node;
-                    ramfs->root_node = cur_node;
-
-                    continue;
-                }
-
-                break;
-
-            default:
-                debugf_warn("Invalid return code\n");
-                return -1;
-            }
-
-            if (j == 0 && cur_node != next_node) {
-                cur_node->sibling = next_node;
-                cur_node          = cur_node->sibling;
-            } else if (j > 0) {
+                
+                // Add as child of current node
                 ramfs_append_child(cur_node, next_node);
-                if (*temp)
+                
+                // Descend into new node if it's a directory
+                if (*temp) {
                     cur_node = next_node;
+                }
             }
         }
-
+        
         kfree(name_dup);
     }
-
+    
     return 0;
 }
+

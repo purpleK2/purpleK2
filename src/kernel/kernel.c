@@ -462,14 +462,14 @@ void kstart(void) {
         kprintf_warn("CPIO to RAMFS conversion failed!\n");
     }
 
-    // Mount using new API
-    if (ramfs_vfs_init(cpio_ramfs, INITRD_MOUNT) != 0) {
+	if (ramfs_vfs_init(cpio_ramfs, INITRD_MOUNT) != 0) {
         kprintf_warn("Failed to mount RAMFS!\n");
     }
 
     fileio_t *test_file = open(INITRD_MOUNT "/directory/another.txt", 0);
+
     if (!test_file) {
-        kprintf_warn("Couldn't open file!\n");
+        debugf_warn("Couldn't open file!\n");
     }
 
     ramfs_print(cpio_ramfs->root_node, 0);

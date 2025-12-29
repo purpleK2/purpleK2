@@ -265,19 +265,25 @@ int ramfs_open(vnode_t **vnode_r, int flags, bool clone, fileio_t **fio_out) {
     ramfs_find_node(ramfs, vnode->path, &ramfs_node);
 
     if (!ramfs_node) {
-        if (!(flags & V_CREATE)) {
-            return ENOENT;
-        }
+        
+        ramfs_node = (ramfs_node_t *)vnode->node_data;
+        
+        if (!ramfs_node) {
+            
+            if (!(flags & V_CREATE)) {
+                return ENOENT;
+            }
 
-        // create the node
-        if (ramfs_node_add(ramfs, vnode->path, &ramfs_node) != EOK) {
-            return EUNFB;
-        }
+            // create the node
+            if (ramfs_node_add(ramfs, vnode->path, &ramfs_node) != EOK) {
+                return EUNFB;
+            }
 
-        if (ramfs_node->type == RAMFS_FILE) {
-            ramfs_node->size = 10; // give it a size to start
+            if (ramfs_node->type == RAMFS_FILE) {
+                ramfs_node->size = 10; // give it a size to start
+            }
         }
-    }
+	}
 
     // this is the RAMFS node to be attached to the vnode
     ramfs_node_t *v_ramfs_node = kmalloc(sizeof(ramfs_node_t));
@@ -435,18 +441,30 @@ int ramfs_lookup(vnode_t *parent, const char *name, vnode_t **out) {
     }
 
     ramfs_node_t *parent_node = parent->node_data;
+    
     if (!parent_node) {
         char *rel_path = parent->path + strlen(parent->root_vfs->root_vnode->path);
         if (rel_path[0] == '/') rel_path++;
-        ramfs_find_node(ramfs, rel_path, &parent_node);
+        
+        if (rel_path[0] == '\0' || strcmp(parent->path, parent->root_vfs->root_vnode->path) == 0) {
+            parent_node = ramfs->root_node;
+        } else {
+            ramfs_find_node(ramfs, rel_path, &parent_node);
+        }
     }
 
-    if (!parent_node || parent_node->type != RAMFS_DIRECTORY) {
+    if (!parent_node) {
+        return ENOENT;
+    }
+    
+    if (parent_node->type != RAMFS_DIRECTORY) {
         return ENOTDIR;
     }
 
+    int child_count = 0;
     for (ramfs_node_t *child = parent_node->child; child != NULL; child = child->sibling) {
         if (strcmp(child->name, name) == 0) {
+            
             size_t parent_len = strlen(parent->path);
             size_t child_len = strlen(name);
             char *child_path = kmalloc(parent_len + child_len + 2);
@@ -847,6 +865,11 @@ static int ramfs_fstype_mount(void *device, char *mount_point, void *mount_data,
         ramfs->root_node->name = strdup("/");
     }
     
+    if (!ramfs->root_node) {
+        ramfs->root_node = ramfs_create_node(RAMFS_DIRECTORY);
+        ramfs->root_node->name = strdup("/");
+    }
+    
     vfs_fstype_t fstype;
     memset(&fstype, 0, sizeof(vfs_fstype_t));
     strncpy(fstype.name, "ramfs", sizeof(fstype.name) - 1);
@@ -864,9 +887,7 @@ static int ramfs_fstype_mount(void *device, char *mount_point, void *mount_data,
         kfree(vfs);
         return ENOMEM;
     }
-    
-    memcpy(vfs->root_vnode->ops, &ramfs_vnops, sizeof(vnops_t));
-    
+	memcpy(vfs->root_vnode->ops, &ramfs_vnops, sizeof(vnops_t));
     *out = vfs;
     return EOK;
 }

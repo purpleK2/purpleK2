@@ -122,18 +122,6 @@ vfs_t *vfs_mount(void *device, const char *fstype_name, char *path, void *mount_
     
     vfs->fs_type = *fstype;
     
-    vfs_t *parent_vfs;
-    char *remaining;
-    
-    if (vfs_resolve_mount(path, &parent_vfs, &remaining) == EOK && parent_vfs) {
-        vfs->root_vnode = vnode_create(parent_vfs, path, VNODE_DIR, NULL);
-        if (vfs->root_vnode) {
-            vfs->root_vnode->vfs_here = vfs;
-        }
-    } else {
-        vfs->root_vnode = vnode_create(vfs, path, VNODE_DIR, NULL);
-    }
-    
     vfs_append(vfs);
     return vfs;
 }
@@ -465,7 +453,7 @@ int vfs_open(const char *path, int flags, fileio_t **out) {
         
         if (ret != EOK) return ret;
     } else if (ret != EOK) {
-        return ret;
+		return ret;
     }
     
     if (!vnode->ops || !vnode->ops->open) {
