@@ -247,8 +247,8 @@ void map_region(uint64_t *pml4_table, uint64_t physical_start,
                 uint64_t virtual_start, uint64_t pages, uint64_t flags) {
 #ifdef CONFIG_PAGING_DEBUG
     debugf_debug("Mapping address range (phys)%llx-%llx (virt)%llx-%llx\n",
-                 physical_start, physical_start + (len * PFRAME_SIZE),
-                 virtual_start, virtual_start + (len * PFRAME_SIZE));
+                 physical_start, physical_start + pages, virtual_start,
+                 virtual_start + pages);
 #endif
 
     for (uint64_t i = 0; i < pages; i++) {
@@ -263,7 +263,7 @@ void unmap_region(uint64_t *pml4_table, uint64_t virtual_start,
 
 #ifdef CONFIG_PAGING_DEBUG
     debugf_debug("Unmapping address range (virt)%llx-%llx\n", virtual_start,
-                 virtual_start + (len * PFRAME_SIZE));
+                 virtual_start + pages);
 #endif
     for (uint64_t i = 0; i < pages; i++) {
         uint64_t virt = virtual_start + (i * PFRAME_SIZE);
@@ -371,6 +371,7 @@ void paging_init(uint64_t *kernel_pml4) {
 
     uint64_t a_kernel_text_start = (uint64_t)&__kernel_text_start;
     uint64_t a_kernel_text_end   = (uint64_t)&__kernel_text_end;
+    a_kernel_text_end            = ROUND_UP(a_kernel_text_end, PFRAME_SIZE);
     uint64_t kernel_text_len =
         ROUND_UP(a_kernel_text_end - a_kernel_text_start, PFRAME_SIZE);
     map_region(kernel_pml4, a_kernel_text_start - VIRT_BASE + PHYS_BASE,
@@ -379,6 +380,7 @@ void paging_init(uint64_t *kernel_pml4) {
 
     uint64_t a_kernel_rodata_start = (uint64_t)&__kernel_rodata_start;
     uint64_t a_kernel_rodata_end   = (uint64_t)&__kernel_rodata_end;
+    a_kernel_rodata_end            = ROUND_UP(a_kernel_rodata_end, PFRAME_SIZE);
     uint64_t kernel_rodata_len =
         ROUND_UP(a_kernel_rodata_end - a_kernel_rodata_start, PFRAME_SIZE);
     map_region(kernel_pml4, a_kernel_rodata_start - VIRT_BASE + PHYS_BASE,
@@ -387,12 +389,19 @@ void paging_init(uint64_t *kernel_pml4) {
 
     uint64_t a_kernel_data_start = (uint64_t)&__kernel_data_start;
     uint64_t a_kernel_data_end   = (uint64_t)&__kernel_data_end;
-    uint64_t kernel_data_len     = a_kernel_data_end - a_kernel_data_start;
-    uint64_t kernel_other_len =
-        ROUND_UP(a_kernel_end - a_kernel_data_end, PFRAME_SIZE);
+    a_kernel_data_end            = ROUND_UP(a_kernel_data_end, PFRAME_SIZE);
+    uint64_t kernel_data_len =
+        ROUND_UP(a_kernel_data_end - a_kernel_data_start, PFRAME_SIZE);
+
     map_region(kernel_pml4, a_kernel_data_start - VIRT_BASE + PHYS_BASE,
-               a_kernel_data_start,
-               ((kernel_data_len + kernel_other_len) / PFRAME_SIZE),
+               a_kernel_data_start, kernel_data_len / PFRAME_SIZE,
+               PMLE_KERNEL_READ_WRITE | PMLE_NOT_EXECUTABLE);
+
+    uint64_t kernel_other_start = a_kernel_data_end;
+    uint64_t kernel_other_len =
+        ROUND_UP(a_kernel_end - kernel_other_start, PFRAME_SIZE);
+    map_region(kernel_pml4, kernel_other_start - VIRT_BASE + PHYS_BASE,
+               kernel_other_start, kernel_other_len / PFRAME_SIZE,
                PMLE_KERNEL_READ_WRITE | PMLE_NOT_EXECUTABLE);
 
     uint64_t a_limine_reqs_start = (uint64_t)&__limine_reqs_start;
