@@ -105,7 +105,7 @@ typedef struct rtl8139 {
     pci_device_t *pci_device; // PCI device
     uintptr_t mmio_addr;      // MMIO/IO space address
     uint8_t io_space;         // I/O space toggle
-    lock_t lock;              // Garbage lock
+    atomic_flag lock;         // Garbage lock
     uintptr_t rx_buffer;      // Rx buffer (physical address)
     void *rx_buffer_virt;     // Rx buffer (virtual address) - ADD THIS
     uint32_t rx_current;      // Current Rx indicator
