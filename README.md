@@ -50,7 +50,7 @@ The base of the kernel is the [Limine Bare Bones Template](https://wiki.osdev.or
 > [!CAUTION]
 > The building of this project has been only properly tested on Linux, but if you can report anything about other platforms (Windows, MacOS, Ubuntu, ...) feel free to open an issue/PR! Here is a list of currently tested (and supported) platorms
 
-- Endeavour OS (at least one build per week)
+- Debian Trixie (at least one build per week)
 - Arch Linux (at least one build per week)
 - Debian 12 on WSL2 (Windows 10 21H2 build 19044, last tested: September 2024)
 - Ubuntu 24.04 on WSL2 (Windows 11 24H2 build 26100.2033, last tested: March 2025)
@@ -62,14 +62,6 @@ The base of the kernel is the [Limine Bare Bones Template](https://wiki.osdev.or
 ### Testing on real hardware
 
 Tests on real hardware are made _at least_ every merging to the `main` branch is made. </br>
-The hardware being tested on is the following:
-
-- Intel Core i7-5820K (6C12T)
-- ASUS X99-A
-- 16GB RAM
-- Sapphire Radeon R9 280
-
-~~If you want to try the kernel with legacy booting, make sure you run `limine bios-install <your target drive>`.~~ There's no need to re-install Limine's MBR to your target drive.
 
 ### Prequisites
 
@@ -85,6 +77,7 @@ The following packages are required to build the kernel:
   > Fedora users: if you know how to read a `PKGBUILD` file, you can follow the commands in the AUR to install the latest version of `kconfig-frontends` (4.11.0.1 at the time of writing this) to your `/usr/bin`
 - [OPTIONAL] `edk2-ovmf`: useful for running QEMU with UEFI support
 - [OPTIONAL] `mtools` and `sgdisk`: for partitioning and managing the files in the virtual disk image
+- [OPTIONAL] `clang-format`: code formatting (if you're just building the kernel, you don't really need it)
 
 ### Setting up a cross compiler
 
