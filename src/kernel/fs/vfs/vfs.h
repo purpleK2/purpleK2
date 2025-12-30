@@ -125,6 +125,8 @@ typedef struct vfs {
     struct vfs *next; // next VFS
 } vfs_t;
 
+extern vfs_t *vfs_list;
+
 // driver api thingeth
 int vfs_register_fstype(vfs_fstype_t *fstype);
 int vfs_unregister_fstype(const char *name);

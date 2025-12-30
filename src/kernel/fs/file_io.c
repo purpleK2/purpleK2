@@ -30,9 +30,10 @@ fileio_t *open(const char *path, int flags) {
     UNUSED(flags);
     
     fileio_t *f = NULL;
-    
-    if (vfs_open(path, f2vflags(flags), &f) != 0) {
-        return NULL;
+   
+	int ret = vfs_open(path, f2vflags(flags), &f);
+    if (ret != 0) {
+		return (void *)(uintptr_t)-ret; // most hackey thing ever ffs
     }
     
     f->offset = 0;
@@ -185,7 +186,7 @@ static void fs_list_internal(vnode_t *dir, int depth, int max_depth, int indent)
         const char *type_str = vtype_to_str(entries[i].d_type);
         
         if (entries[i].d_type == VNODE_DIR) {
-            kprintf("├─ [%s] %s/\n", type_str, entries[i].d_name);
+            kprintf("|- [%s] %s/\n", type_str, entries[i].d_name);
         } else if (entries[i].d_type == VNODE_LINK) {
             size_t path_len = strlen(dir->path) + strlen(entries[i].d_name) + 2;
             char *full_path = kmalloc(path_len);
@@ -193,14 +194,14 @@ static void fs_list_internal(vnode_t *dir, int depth, int max_depth, int indent)
             
             char target[256];
             if (vfs_readlink(full_path, target, sizeof(target)) == EOK) {
-                kprintf("├─ [%s] %s -> %s\n", type_str, entries[i].d_name, target);
+                kprintf("|- [%s] %s -> %s\n", type_str, entries[i].d_name, target);
             } else {
-                kprintf("├─ [%s] %s -> ???\n", type_str, entries[i].d_name);
+                kprintf("|- [%s] %s -> ???\n", type_str, entries[i].d_name);
             }
             
             kfree(full_path);
         } else {
-            kprintf("├─ [%s] %s\n", type_str, entries[i].d_name);
+            kprintf("|- [%s] %s\n", type_str, entries[i].d_name);
         }
         
         if (entries[i].d_type == VNODE_DIR) {

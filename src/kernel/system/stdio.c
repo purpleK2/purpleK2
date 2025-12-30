@@ -111,7 +111,7 @@ int debugf(const char *fmt, ...) {
     va_start(args, fmt);
     spinlock_acquire(&STDIO_E9_LOCK);
     int length = printf(dputc, fmt, args);
-    spinlock_release(&STDIO_E9_LOCK);
+	spinlock_release(&STDIO_E9_LOCK);
     va_end(args);
 
     return length;

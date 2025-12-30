@@ -105,7 +105,7 @@ vfs_t *vfs_create(vfs_fstype_t *fs_type, void *fs_data) {
 }
 
 vfs_t *vfs_mount(void *device, const char *fstype_name, char *path, void *mount_data) {
-	if (!device || !fstype_name || !path) {
+    if (!fstype_name || !path) {
         return NULL;
     }
     
@@ -116,6 +116,7 @@ vfs_t *vfs_mount(void *device, const char *fstype_name, char *path, void *mount_
     
     vfs_t *vfs = NULL;
     int ret = fstype->mount(device, path, mount_data, &vfs);
+    
     if (ret != EOK || !vfs) {
         return NULL;
     }
@@ -123,6 +124,7 @@ vfs_t *vfs_mount(void *device, const char *fstype_name, char *path, void *mount_
     vfs->fs_type = *fstype;
     
     vfs_append(vfs);
+    
     return vfs;
 }
 

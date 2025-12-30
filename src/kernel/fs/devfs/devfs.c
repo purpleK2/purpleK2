@@ -27,166 +27,101 @@ devfs_node_t *devfs_create_node(devfs_ftype_t ftype) {
     return node;
 }
 
+
 int devfs_find_node(devfs_t *devfs, char *path, devfs_node_t **out) {
-    // root node here is "/", actual devices are its children
-    devfs_node_t *cur_node = devfs->root_node->child;
-    *out                   = NULL;
-
-    // use this to check for parents, and eventually create them
-    if (path[0] == '/') {
-        path++;
-    }
-
-    if (path[0] == '\0') {
-        *out = devfs->root_node;
-        return 0;
-    }
-
-    char *name_dup = strdup(path);
-    char *temp     = name_dup;
-    char *dir;
-
-    // j = level of current node
-    for (int j = 0; *temp; j++) {
-        UNUSED(j);
-        dir = strtok_r(NULL, "/", &temp);
-
-        for (; cur_node != NULL; cur_node = cur_node->sibling) {
-            if (strcmp(cur_node->name, dir) != 0)
-                continue;
-
-            // if there's more to parse, go to the child
-            if (*temp) {
-                cur_node = cur_node->child;
-                break;
-            }
-
-            // we should be fine and we can exit the loop
-            break;
-        }
-    }
-
-    kfree(name_dup);
-
-    *out = cur_node;
-
-    if (!cur_node) {
-        return -1;
-    }
-
-    return 0;
-}
-
-int devfs_node_add(devfs_t *devfs, char *path, devfs_node_t **out) {
-    if (!devfs || !devfs->root_node || !path) {
+    if (!devfs || !devfs->root_node || !path || !out) {
         return ENULLPTR;
     }
 
-    // use this to check for parents, and eventually create them
-    if (path[0] == '/') {
-        path++;
+    *out = NULL;
+
+    if (path[0] == '/') path++;
+
+    if (*path == '\0') {
+        *out = devfs->root_node;
+        return EOK;
     }
 
-    char *name_dup = strdup(path);
-    char *temp     = name_dup;
-    char *dir;
+    char *dup = strdup(path);
+    if (!dup) return ENOMEM;
 
-    devfs_node_t *cur_node = devfs->root_node;
+    char *save = NULL;
+    char *token = strtok_r(dup, "/", &save);
 
-    devfs_ftype_t rt;
+    devfs_node_t *cur = devfs->root_node;
 
-    // j = level of current node
-    for (int j = 0; *temp; j++) {
-        UNUSED(j);
-        dir = strtok_r(NULL, "/", &temp);
-
-        for (; cur_node != NULL; cur_node = cur_node->sibling) {
-
-            if (*temp) {
-                rt = DEVFS_TYPE_DIR;
-            } else {
-                device_t *dev = device_table[0];
-                for (int i = 0; i < device_count; i++) {
-                    if (strcmp(device_table[i]->dev_node_path, dir) == 0) {
-                        dev = device_table[i];
-                        rt  = dev->type == DEVICE_TYPE_BLOCK ? DEVFS_TYPE_BLOCK
-                                                             : DEVFS_TYPE_CHAR;
-                        break;
-                    }
-                }
-                rt = DEVFS_TYPE_FILE;
+    while (token && cur) {
+        devfs_node_t *child;
+        for (child = cur->child; child; child = child->sibling) {
+            if (strcmp(child->name, token) == 0) {
+                break;
             }
-
-            if (strcmp(cur_node->name, dir) != 0) {
-                if (cur_node->sibling) {
-                    continue;
-                }
-
-                // we just create the entries
-                devfs_node_t *n = devfs_create_node(rt);
-                n->name         = strdup(dir);
-                device_t *dev   = device_table[0];
-                for (int i = 0; i < device_count; i++) {
-                    if (strcmp(device_table[i]->dev_node_path, dir) == 0) {
-                        dev = device_table[i];
-                        break;
-                    }
-                }
-                n->device = dev;
-
-                continue;
-            }
-
-            if (cur_node->type != rt) {
-                continue;
-            }
-
-            // we should be fine and we can exit the loop
-            break;
         }
 
-        // go to the child
-        if (*temp) {
-            if (strchr(temp, '/')) {
-                rt = DEVFS_TYPE_DIR;
-            } else {
-                device_t *dev = device_table[0];
-                for (int i = 0; i < device_count; i++) {
-                    if (strcmp(device_table[i]->dev_node_path, dir) == 0) {
-                        dev = device_table[i];
-                        rt  = dev->type == DEVICE_TYPE_BLOCK ? DEVFS_TYPE_BLOCK
-                                                             : DEVFS_TYPE_CHAR;
-                        break;
-                    }
-                }
-                rt = DEVFS_TYPE_FILE;
-            }
-
-            if (!cur_node->child) {
-                devfs_node_t *n = devfs_create_node(rt);
-                n->name         = strdup(temp);
-                device_t *dev   = device_table[0];
-                for (int i = 0; i < device_count; i++) {
-                    if (strcmp(device_table[i]->dev_node_path, dir) == 0) {
-                        dev = device_table[i];
-                        break;
-                    }
-                }
-                n->device = dev;
-
-                devfs_append_child(cur_node, n);
-            }
-
-            cur_node = cur_node->child;
-        } else {
-            *out = cur_node;
+        if (!child) {
+            kfree(dup);
+            return ENOENT;
         }
 
-        if (!cur_node) {
-            return EUNFB;
-        }
+        cur = child;
+        token = strtok_r(NULL, "/", &save);
     }
 
+    kfree(dup);
+    *out = cur;
+    return EOK;
+}
+
+
+int devfs_node_add(devfs_t *devfs, char *path, devfs_node_t **out) {
+    if (!devfs || !devfs->root_node || !path || !out) {
+        return ENULLPTR;
+    }
+
+    if (path[0] == '/') path++;
+
+    char *dup = strdup(path);
+    if (!dup) return ENOMEM;
+
+    char *save = NULL;
+    char *token = strtok_r(dup, "/", &save);
+
+    devfs_node_t *cur = devfs->root_node;
+
+    while (token) {
+        devfs_node_t *child;
+        for (child = cur->child; child; child = child->sibling) {
+            if (strcmp(child->name, token) == 0) {
+                break;
+            }
+        }
+
+        if (!child) {
+            devfs_ftype_t type = strtok_r(NULL, "/", &save)
+                ? DEVFS_TYPE_DIR
+                : DEVFS_TYPE_FILE;
+
+            devfs_node_t *n = devfs_create_node(type);
+            n->name = strdup(token);
+
+            for (int i = 0; i < device_count; i++) {
+                if (device_table[i] &&
+                    strcmp(device_table[i]->dev_node_path, token) == 0) {
+                    n->device = device_table[i];
+                    break;
+                }
+            }
+
+            devfs_append_child(cur, n);
+            child = n;
+        }
+
+        cur = child;
+        token = strtok_r(NULL, "/", &save);
+    }
+
+    kfree(dup);
+    *out = cur;
     return EOK;
 }
 
@@ -260,131 +195,133 @@ int devfs_print(devfs_node_t *devfs, int lvl) {
     return 0;
 }
 
-int devfs_refresh(devfs_t *devfs) {
-    if (!devfs || !devfs->root_node) {
-        return ENULLPTR;
-    }
-
-    devfs_node_t *root = devfs->root_node;
-
-    devfs_node_t *prev = NULL;
-    devfs_node_t *cur  = root->child;
-
-    while (cur) {
-        devfs_node_t *next = cur->sibling;
-
-        bool still_exists = false;
-
-        for (int i = 0; i < device_count; i++) {
-            if (!device_table[i]) {
+int devfs_refresh(void) {
+    for (vfs_t *vfs = vfs_list; vfs != NULL; vfs = vfs->next) {
+        
+        if (strcmp(vfs->fs_type.name, "devfs") != 0) {
+            continue;
+        }
+        
+        devfs_t *devfs = (devfs_t *)vfs->vfs_data;
+        if (!devfs || !devfs->root_node) {
+            continue;
+        }
+        
+        
+        devfs_node_t *root = devfs->root_node;
+        
+        // Remove devices that no longer exist
+        devfs_node_t *prev = NULL;
+        devfs_node_t *cur  = root->child;
+        
+        while (cur) {
+            devfs_node_t *next = cur->sibling;
+            bool still_exists = false;
+            
+            for (int i = 0; i < device_count; i++) {
+                if (!device_table[i]) {
+                    continue;
+                }
+                
+                if (strcmp(device_table[i]->dev_node_path, cur->name) == 0) {
+                    still_exists = true;
+                    break;
+                }
+            }
+            
+            if (!still_exists) {
+                if (prev) {
+                    prev->sibling = next;
+                } else {
+                    root->child = next;
+                }
+                
+                if (cur->name) {
+                    kfree(cur->name);
+                }
+                kfree(cur);
+                
+                cur = next;
                 continue;
             }
-
-            if (strcmp(device_table[i]->dev_node_path, cur->name) == 0) {
-                still_exists = true;
-                break;
-            }
+            
+            prev = cur;
+            cur  = next;
         }
-
-        if (!still_exists) {
-            if (prev) {
-                prev->sibling = next;
-            } else {
-                root->child = next;
+        
+        for (int i = 0; i < device_count; i++) {
+            device_t *dev = device_table[i];
+            if (!dev) {
+                continue;
             }
-
-            if (cur->name) {
-                kfree(cur->name);
+            
+            
+            bool found = false;
+            
+            devfs_node_t *node = root->child;
+            while (node) {
+                if (strcmp(node->name, dev->dev_node_path) == 0) {
+                    found = true;
+                    break;
+                }
+                node = node->sibling;
             }
-            kfree(cur);
-
-            cur = next;
-            continue;
-        }
-
-        prev = cur;
-        cur  = next;
+            
+            if (!found) {
+                devfs_node_t *new_node = devfs_create_node(
+                    dev->type == DEVICE_TYPE_BLOCK ? DEVFS_TYPE_BLOCK
+                                                   : DEVFS_TYPE_CHAR);
+                if (!new_node) {
+                    return ENOMEM;
+                }
+                
+                new_node->name   = strdup(dev->dev_node_path);
+                new_node->device = dev;
+                
+                if (!new_node->name) {
+                    kfree(new_node);
+                    return ENOMEM;
+                }
+                
+                devfs_append_child(root, new_node);
+            }
+		}
     }
-
-    for (int i = 0; i < device_count; i++) {
-        device_t *dev = device_table[i];
-        if (!dev) {
-            continue;
-        }
-
-        bool found = false;
-
-        devfs_node_t *node = root->child;
-        while (node) {
-            if (strcmp(node->name, dev->dev_node_path) == 0) {
-                found = true;
-                break;
-            }
-            node = node->sibling;
-        }
-
-        if (!found) {
-            devfs_node_t *new_node = devfs_create_node(
-                dev->type == DEVICE_TYPE_BLOCK ? DEVFS_TYPE_BLOCK
-                                               : DEVFS_TYPE_CHAR);
-            if (!new_node) {
-                return ENOMEM;
-            }
-
-            new_node->name   = strdup(dev->dev_node_path);
-            new_node->device = dev;
-
-            if (!new_node->name) {
-                kfree(new_node);
-                return ENOMEM;
-            }
-
-            devfs_append_child(root, new_node);
-        }
-    }
-
+    
     return EOK;
 }
+
 
 int devfs_open(vnode_t **vnode_r, int flags, bool clone, fileio_t **fio_out) {
     UNUSED(flags);
     UNUSED(clone);
 
-    // 1. find the file in the DEVFS
+    if (!vnode_r || !*vnode_r || !fio_out || !*fio_out)
+        return ENULLPTR;
+
     vnode_t *vnode = *vnode_r;
-    if (!vnode || !vnode_r) {
-        return ENULLPTR;
-    }
-
-    // vfs_data should have the root DEVFS struct
     devfs_t *devfs = vnode->root_vfs->vfs_data;
-
-    if (!devfs) {
+    if (!devfs)
         return ENULLPTR;
-    }
 
-    devfs_node_t *devfs_node;
+    devfs_node_t *devfs_node = NULL;
 
-    devfs_find_node(devfs, vnode->path, &devfs_node);
+    char *rel_path = vnode->path + strlen(vnode->root_vfs->root_vnode->path);
+    if (rel_path[0] == '/')
+        rel_path++;
 
-    if (!devfs_node) {
-        if (!(flags & V_CREATE)) {
+    int find_res = devfs_find_node(devfs, rel_path, &devfs_node);
+    if (find_res != 0) {
+        if (!(flags & V_CREATE))
             return ENOENT;
-        }
 
-        // create the node
-        if (devfs_node_add(devfs, vnode->path, &devfs_node) != EOK) {
+        if (devfs_node_add(devfs, rel_path, &devfs_node) != EOK)
             return EUNFB;
-        }
     }
 
     vnode->node_data = devfs_node;
 
     fileio_t *fio_file = *fio_out;
-    if (!fio_file || !fio_out) {
-        return ENOMEM;
-    }
-
     fio_file->buf_start = NULL;
     fio_file->flags |= SPECIAL_FILE_TYPE_DEVICE;
     fio_file->size = 0;
@@ -418,80 +355,89 @@ int devfs_ioctl(vnode_t *vnode, int request, void *arg) {
 }
 
 int devfs_read(vnode_t *vn, size_t *bytes, size_t *offset, void *out) {
-    
     if (!vn || !bytes || !offset || !out) {
         return ENULLPTR;
     }
 
-    device_t *dev = vn->node_data ? ((devfs_node_t *)vn->node_data)->device : NULL;
-    
-    if (!dev || !dev->read) {
+    devfs_node_t *node = vn->node_data;
+    if (!node || !node->device || !node->device->read) {
         return ENOIMPL;
     }
 
-    return dev->read(dev, out, *bytes, *offset);
+    int ret = node->device->read(
+        node->device,
+        out,
+        *bytes,
+        *offset
+    );
+
+    if (ret < 0) {
+        return ret;    
+	}
+
+    *bytes = (size_t)ret;
+    *offset += (size_t)ret;
+    return EOK;
 }
+
 
 int devfs_write(vnode_t *vn, void *buf, size_t *bytes, size_t *offset) {
     if (!vn || !buf || !bytes || !offset) {
         return ENULLPTR;
     }
 
-    device_t *dev =
-        vn->node_data ? ((devfs_node_t *)vn->node_data)->device : NULL;
-
-    if (!dev || !dev->write) {
+    devfs_node_t *node = vn->node_data;
+    if (!node || !node->device || !node->device->write) {
         return ENOIMPL;
     }
 
-    return dev->write(dev, buf, *bytes, *offset);
+    int ret = node->device->write(
+        node->device,
+        buf,
+        *bytes,
+        *offset
+    );
+
+    if (ret < 0) {
+        return ret;
+    }
+
+    *bytes = (size_t)ret;
+    *offset += (size_t)ret;
+    return EOK;
 }
 
 int devfs_lookup(vnode_t *parent, const char *name, vnode_t **out) {
-    if (!parent || !name || !out) {
-        return ENULLPTR;
-    }
+    if (!parent || !name || !out) return ENULLPTR;
 
-    devfs_t *devfs = parent->root_vfs->vfs_data;
-    if (!devfs) {
-        return ENULLPTR;
-    }
+    devfs_node_t *pnode = parent->node_data;
+    if (!pnode) return ENOENT;
 
-    devfs_node_t *parent_node = parent->node_data;
-    if (!parent_node) {
-        char *rel_path = parent->path + strlen(parent->root_vfs->root_vnode->path);
-        if (rel_path[0] == '/') rel_path++;
-        devfs_find_node(devfs, rel_path, &parent_node);
-    }
+    if (pnode->type != DEVFS_TYPE_DIR) return ENOTDIR;
 
-    if (!parent_node || parent_node->type != DEVFS_TYPE_DIR) {
-        return ENOTDIR;
-    }
+    for (devfs_node_t *c = pnode->child; c; c = c->sibling) {
+        if (strcmp(c->name, name) == 0) {
 
-    for (devfs_node_t *child = parent_node->child; child != NULL; child = child->sibling) {
-        if (strcmp(child->name, name) == 0) {
-            size_t parent_len = strlen(parent->path);
-            size_t child_len = strlen(name);
-            char *child_path = kmalloc(parent_len + child_len + 2);
-            strcpy(child_path, parent->path);
-            if (child_path[parent_len - 1] != '/') {
-                strcat(child_path, "/");
-            }
-            strcat(child_path, name);
+            size_t plen = strlen(parent->path);
+            size_t nlen = strlen(name);
 
-            vnode_type_t vtype = VNODE_REGULAR;
-            if (child->type == DEVFS_TYPE_DIR) {
-                vtype = VNODE_DIR;
-            } else if (child->type == DEVFS_TYPE_BLOCK) {
-                vtype = VNODE_BLOCK;
-            } else if (child->type == DEVFS_TYPE_CHAR) {
-                vtype = VNODE_CHAR;
-            }
+            char *path = kmalloc(plen + nlen + 2);
+            if (!path) return ENOMEM;
 
-            vnode_t *child_vnode = vnode_create(parent->root_vfs, child_path, vtype, child);
-            memcpy(child_vnode->ops, parent->ops, sizeof(vnops_t));
-            
-            *out = child_vnode;
+            strcpy(path, parent->path);
+            if (path[plen - 1] != '/') strcat(path, "/");
+            strcat(path, name);
+
+            vnode_type_t t =
+                c->type == DEVFS_TYPE_DIR   ? VNODE_DIR :
+                c->type == DEVFS_TYPE_BLOCK ? VNODE_BLOCK :
+                c->type == DEVFS_TYPE_CHAR  ? VNODE_CHAR :
+                                              VNODE_REGULAR;
+
+            vnode_t *vn = vnode_create(parent->root_vfs, path, t, c);
+            memcpy(vn->ops, parent->ops, sizeof(vnops_t));
+
+            *out = vn;
             return EOK;
         }
     }
@@ -500,55 +446,28 @@ int devfs_lookup(vnode_t *parent, const char *name, vnode_t **out) {
 }
 
 int devfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count) {
-    if (!vnode || !entries || !count) {
-        return ENULLPTR;
+    if (!vnode || !entries || !count) return ENULLPTR;
+    if (vnode->vtype != VNODE_DIR) return ENOTDIR;
+
+    devfs_node_t *dir = vnode->node_data;
+    if (!dir || dir->type != DEVFS_TYPE_DIR) return ENOTDIR;
+
+    size_t i = 0;
+    for (devfs_node_t *c = dir->child; c && i < *count; c = c->sibling) {
+        entries[i].d_ino = (uint64_t)c;
+        entries[i].d_off = i + 1;
+        entries[i].d_reclen = sizeof(dirent_t);
+        entries[i].d_type =
+            c->type == DEVFS_TYPE_DIR ? VNODE_DIR :
+            c->type == DEVFS_TYPE_BLOCK ? VNODE_BLOCK :
+            c->type == DEVFS_TYPE_CHAR ? VNODE_CHAR :
+            VNODE_REGULAR;
+        strncpy(entries[i].d_name, c->name, sizeof(entries[i].d_name) - 1);
+        entries[i].d_name[sizeof(entries[i].d_name) - 1] = 0;
+        i++;
     }
 
-    if (vnode->vtype != VNODE_DIR) {
-        return ENOTDIR;
-    }
-
-    devfs_t *devfs = vnode->root_vfs->vfs_data;
-    if (!devfs) {
-        return ENULLPTR;
-    }
-
-    devfs_node_t *dir_node = vnode->node_data;
-    if (!dir_node) {
-        char *rel_path = vnode->path + strlen(vnode->root_vfs->root_vnode->path);
-        if (rel_path[0] == '/') rel_path++;
-        devfs_find_node(devfs, rel_path, &dir_node);
-    }
-
-    if (!dir_node || dir_node->type != DEVFS_TYPE_DIR) {
-        return ENOTDIR;
-    }
-
-    size_t idx = 0;
-    size_t max = *count;
-
-    for (devfs_node_t *child = dir_node->child; child != NULL && idx < max; child = child->sibling) {
-        entries[idx].d_ino = (uint64_t)child;
-        entries[idx].d_off = idx + 1;
-        entries[idx].d_reclen = sizeof(dirent_t);
-        
-        if (child->type == DEVFS_TYPE_DIR) {
-            entries[idx].d_type = VNODE_DIR;
-        } else if (child->type == DEVFS_TYPE_BLOCK) {
-            entries[idx].d_type = VNODE_BLOCK;
-        } else if (child->type == DEVFS_TYPE_CHAR) {
-            entries[idx].d_type = VNODE_CHAR;
-        } else {
-            entries[idx].d_type = VNODE_REGULAR;
-        }
-        
-        strncpy(entries[idx].d_name, child->name, sizeof(entries[idx].d_name) - 1);
-        entries[idx].d_name[sizeof(entries[idx].d_name) - 1] = '\0';
-        
-        idx++;
-    }
-
-    *count = idx;
+    *count = i;
     return EOK;
 }
 
@@ -657,6 +576,7 @@ static int devfs_fstype_mount(void *device, char *mount_point, void *mount_data,
         kfree(vfs);
         return ENOMEM;
     }
+    
     root_node->name = strdup("/");
     if (!root_node->name) {
         kfree(root_node);
@@ -680,6 +600,7 @@ static int devfs_fstype_mount(void *device, char *mount_point, void *mount_data,
         kfree(vfs);
         return ENOMEM;
     }
+	vfs->root_vnode->node_data = root_node;
     
     memcpy(vfs->root_vnode->ops, &devfs_vnops, sizeof(vnops_t));
     

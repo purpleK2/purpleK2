@@ -33,7 +33,7 @@ int devfs_find_or_create_node(devfs_t *ramfs, char *path,
 int devfs_append_child(devfs_node_t *parent, devfs_node_t *child);
 int devfs_node_add(devfs_t *ramfs, char *path, devfs_node_t **out);
 int devfs_print(devfs_node_t *devfs, int lvl);
-int devfs_refresh(devfs_t *devfs);
+int devfs_refresh(void);
 
 void devfs_init(void);
 int devfs_vfs_init(devfs_t *devfs, char *mount_path);

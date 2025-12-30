@@ -124,6 +124,25 @@ vmc_t *kvmc;
 
 extern void __sched_test(void);
 
+void test_test(void) {
+	fileio_t *f = open("/dev/com1", 0);
+	if ((int)(uintptr_t)f <= 0) {
+		debugf_warn("failed to open /dev/com1: %d\n", (int)(uintptr_t)f);
+		proc_exit();
+	}
+
+	debugf("worked?\n");
+
+	int ret = write(f, "TestTest\n", strlen("TestTest\n"));
+	if (ret != EOK) {
+		debugf_warn("Failed to write /dev/com1: %d\n", ret);
+		proc_exit();
+	}
+
+	close(f);
+	proc_exit();
+}
+
 // HBA_MEM *abar_mem = NULL;
 
 // HBA_MEM *mem;
@@ -131,18 +150,18 @@ extern void __sched_test(void);
 devfs_t *devfs = NULL;
 
 void pk_init() {
-    debugf("Hello!\n");
-    proc_create(__sched_test, TF_MODE_KERNEL, "__sched_test");
-    debugf_ok("Starting __sched_test\n");
+    //debugf("Hello!\n");
+    proc_create(test_test, TF_MODE_KERNEL, "__sched_test");
+    //debugf_ok("Starting __sched_test\n");
 
-    kprintf("Yo we are in a process!\n");
+    //kprintf("Yo we are in a process!\n");
 
-    fileio_t *f = open("/proc/self/procinfo", 0);
+    /*fileio_t *f = open("/proc/self/procinfo", 0);
     char buf_test[200];
     read(f, sizeof(buf_test), buf_test);
     kprintf(buf_test);
 
-    scheduler_procfs_print();
+    scheduler_procfs_print();*/
 
     // IT IS STILL A BAD IDEA TO JUST LET THE PAGEFAULT HANDLER KILL THE PROC 😭
     proc_exit();
@@ -452,6 +471,8 @@ void kstart(void) {
     }*/
 
     ramfs_init(); // Register the ramfs filesystem type
+	devfs_init();
+	procfs_init();
 
     ramfs_t *cpio_ramfs         = ramfs_create_fs();
     cpio_ramfs->root_node       = ramfs_create_node(RAMFS_DIRECTORY);
@@ -476,12 +497,12 @@ void kstart(void) {
 
 #ifdef CONFIG_DEVFS_ENABLE
     devfs = devfs_create();
-    if (devfs_vfs_init(devfs, CONFIG_DEVFS_MOUNT_PATH) != EOK) {
-        kprintf_warn("Failed to initialize DEVFS!\n");
-    } else {
-        kprintf_ok("DEVFS initialized successfully!\n");
-    }
-
+  	
+	if (vfs_mount(NULL, "devfs", CONFIG_DEVFS_MOUNT_PATH, NULL) == NULL) {
+    	kprintf_warn("Failed to initialize DEVFS!\n");
+	} else {
+    	kprintf_ok("DEVFS initialized successfully!\n");
+	} 
     // devfs_print(devfs->root_node, 0);
 
 #endif
@@ -515,7 +536,8 @@ void kstart(void) {
     }
     start_module(ahci);*/
 
-    devfs_print(devfs->root_node, 0);
+	fs_list("/initrd", -1);
+	kprintf("DevFS dumped!\n");
 
     init_scheduler();
 

@@ -20,7 +20,7 @@ int register_device(device_t *dev) {
     debugf_debug("Device '%s' registered with type %s\n", dev->name,
                  dev->type == DEVICE_TYPE_BLOCK ? "BLK" : "CHR");
 
-    devfs_refresh(devfs);
+    devfs_refresh();
 
     return 0;
 }
@@ -47,7 +47,7 @@ int unregister_device(const char *name) {
 
     kfree(dev);
 
-    devfs_refresh(devfs);
+	devfs_refresh();
 
     return 0;
 }
