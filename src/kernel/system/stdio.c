@@ -93,48 +93,100 @@ int printf(void (*putc_function)(int, void *), const char *fmt, va_list var) {
     return npf_vpprintf(putc_function, NULL, fmt, var);
 }
 
+#define KPRINTF_BUF_SIZE 1024
+
+typedef struct {
+    char buf[KPRINTF_BUF_SIZE];
+    size_t len;
+} print_buffer_t;
+
+static print_buffer_t fb_buffer  = { .len = 0 };
+static print_buffer_t e9_buffer  = { .len = 0 };
+
+static void flush_buffer(print_buffer_t *buf, void (*putc_fn)(int, void *)) {
+    for (size_t i = 0; i < buf->len; i++) {
+        putc_fn(buf->buf[i], NULL);
+    }
+    buf->len = 0;
+}
+
 int kprintf(const char *fmt, ...) {
     va_list args;
-
     va_start(args, fmt);
-    spinlock_acquire(&STDIO_FB_LOCK);
-    int length = printf(putc, fmt, args);
-    spinlock_release(&STDIO_FB_LOCK);
+
+    int written = vsnprintf(fb_buffer.buf + fb_buffer.len,
+                            KPRINTF_BUF_SIZE - fb_buffer.len,
+                            fmt, args);
     va_end(args);
 
-    return length;
+    if (written > 0) {
+        // clip to buffer size
+        if ((size_t)written + fb_buffer.len >= KPRINTF_BUF_SIZE) {
+            written = KPRINTF_BUF_SIZE - fb_buffer.len;
+        }
+        fb_buffer.len += written;
+    }
+
+	flush_buffer(&fb_buffer, putc);
+
+    return written;
 }
+
 
 int debugf(const char *fmt, ...) {
     va_list args;
-
     va_start(args, fmt);
-    spinlock_acquire(&STDIO_E9_LOCK);
-    int length = printf(dputc, fmt, args);
-	spinlock_release(&STDIO_E9_LOCK);
+
+    int written = vsnprintf(e9_buffer.buf + e9_buffer.len,
+                            KPRINTF_BUF_SIZE - e9_buffer.len,
+                            fmt, args);
     va_end(args);
 
-    return length;
+    if (written > 0) {
+        if ((size_t)written + e9_buffer.len >= KPRINTF_BUF_SIZE) {
+            written = KPRINTF_BUF_SIZE - e9_buffer.len;
+        }
+        e9_buffer.len += written;
+    }
+
+    flush_buffer(&e9_buffer, dputc);
+
+    return written;
 }
+
 
 int mprintf(const char *fmt, ...) {
     va_list args;
-
     va_start(args, fmt);
 
-    spinlock_acquire(&STDIO_FB_LOCK);
-    int length = printf(putc, fmt, args);
-    spinlock_release(&STDIO_FB_LOCK);
-
+    // write to fb buffer
+    int written_fb = vsnprintf(fb_buffer.buf + fb_buffer.len,
+                               KPRINTF_BUF_SIZE - fb_buffer.len,
+                               fmt, args);
     va_end(args);
 
     va_start(args, fmt);
 
-    spinlock_acquire(&STDIO_E9_LOCK);
-    length += printf(dputc, fmt, args);
-    spinlock_release(&STDIO_E9_LOCK);
-
+    // write to e9 buffer
+    int written_e9 = vsnprintf(e9_buffer.buf + e9_buffer.len,
+                               KPRINTF_BUF_SIZE - e9_buffer.len,
+                               fmt, args);
     va_end(args);
 
-    return length;
+    if (written_fb > 0) {
+        if ((size_t)written_fb + fb_buffer.len >= KPRINTF_BUF_SIZE)
+            written_fb = KPRINTF_BUF_SIZE - fb_buffer.len;
+        fb_buffer.len += written_fb;
+    }
+
+    if (written_e9 > 0) {
+        if ((size_t)written_e9 + e9_buffer.len >= KPRINTF_BUF_SIZE)
+            written_e9 = KPRINTF_BUF_SIZE - e9_buffer.len;
+        e9_buffer.len += written_e9;
+    }
+
+    flush_buffer(&fb_buffer, putc);
+    flush_buffer(&e9_buffer, dputc);
+
+    return written_fb + written_e9;
 }
