@@ -211,15 +211,18 @@ static void fs_list_internal(vnode_t *dir, int depth, int max_depth, int indent)
             
             size_t path_len = strlen(dir->path) + strlen(entries[i].d_name) + 2;
             char *child_path = kmalloc(path_len);
-            snprintf(child_path, path_len, "%s/%s", dir->path, entries[i].d_name);
-            
+           	if (strcmp(dir->path, "/") == 0) {
+    			snprintf(child_path, path_len, "/%s", entries[i].d_name);
+			} else {
+    			snprintf(child_path, path_len, "%s/%s", dir->path, entries[i].d_name);
+			}
+
             vnode_t *child_vnode;
             if (vfs_lookup(child_path, &child_vnode) == EOK) {
                 fs_list_internal(child_vnode, depth + 1, max_depth, indent + 1);
                 vnode_unref(child_vnode);
             }
-            
-            kfree(child_path);
+			kfree(child_path);
         }
     }
 }

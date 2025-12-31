@@ -123,6 +123,43 @@ vfs_t *vfs_mount(void *device, const char *fstype_name, char *path, void *mount_
     
     vfs->fs_type = *fstype;
     
+    vnode_t *mount_point = NULL;
+    if (strcmp(path, "/") != 0) {
+        ret = vfs_lookup(path, &mount_point);
+        if (ret != EOK) {
+            if (!vfs_list) {
+                vfs_append(vfs);
+                return vfs;
+            }
+            
+            if (vfs->ops && vfs->ops->unmount) {
+                vfs->ops->unmount(vfs);
+            }
+            if (vfs->root_vnode) {
+                vnode_unref(vfs->root_vnode);
+            }
+            if (vfs->ops) kfree(vfs->ops);
+            kfree(vfs);
+            return NULL;
+        }
+        
+        if (mount_point->vtype != VNODE_DIR) {
+            vnode_unref(mount_point);
+            if (vfs->ops && vfs->ops->unmount) {
+                vfs->ops->unmount(vfs);
+            }
+            if (vfs->root_vnode) {
+                vnode_unref(vfs->root_vnode);
+            }
+            if (vfs->ops) kfree(vfs->ops);
+            kfree(vfs);
+            return NULL;
+        }
+        
+        mount_point->vfs_here = vfs;
+        vnode_unref(mount_point);
+    }
+    
     vfs_append(vfs);
     
     return vfs;
@@ -155,7 +192,14 @@ int vfs_unmount(const char *path) {
         if (current->root_vnode && 
             strcmp(current->root_vnode->path, path) == 0) {
             
-			// if there is an unmount op, call it
+            if (strcmp(path, "/") != 0) {
+                vnode_t *mount_point;
+                if (vfs_lookup(path, &mount_point) == EOK) {
+                    mount_point->vfs_here = NULL;
+                    vnode_unref(mount_point);
+                }
+            }
+            
             if (current->ops && current->ops->unmount) {
                 current->ops->unmount(current);
             }
@@ -190,6 +234,7 @@ vnode_t *vnode_create(vfs_t *root_vfs, char *path, vnode_type_t type, void *data
     vnode->root_vfs = root_vfs;
     vnode->node_data = data;
     vnode->refcount = 1;
+    vnode->vfs_here = NULL; 
     atomic_flag_clear(&vnode->vnode_lock);
     
     vnode->ops = kmalloc(sizeof(vnops_t));
@@ -236,14 +281,23 @@ int vfs_resolve_mount(const char *path, vfs_t **out, char **remaining_path) {
     while (atomic_flag_test_and_set(&vfs_list_lock));
     
     for (vfs_t *v = vfs_list; v != NULL; v = v->next) {
-        if (!v->root_vnode || !v->root_vnode->path) continue;
+        if (!v->root_vnode || !v->root_vnode->path) {
+            continue;
+        }
         
         const char *prefix = v->root_vnode->path;
         size_t prefix_len = strlen(prefix);
         
         if (strlen(path) < prefix_len) continue;
         
-        if (strncmp(path, prefix, prefix_len) == 0) {
+        if (prefix_len == 1 && prefix[0] == '/') {
+            if (path[0] == '/') {
+                if (prefix_len > best_len) {
+                    best_match = v;
+                    best_len = prefix_len;
+                }
+            }
+        } else if (strncmp(path, prefix, prefix_len) == 0) {
             if (path[prefix_len] == '\0' || path[prefix_len] == '/') {
                 if (prefix_len > best_len) {
                     best_match = v;
@@ -319,7 +373,12 @@ static int vfs_lookup_internal(const char *path, vnode_t **out, int depth) {
     
     if (!rel_path || rel_path[0] == '\0') {
         if (rel_path) kfree(rel_path);
-        *out = vfs->root_vnode;
+        
+        if (vfs->root_vnode && vfs->root_vnode->vfs_here) {
+            *out = vfs->root_vnode->vfs_here->root_vnode;
+        } else {
+            *out = vfs->root_vnode;
+        }
         vnode_ref(*out);
         return EOK;
     }
@@ -332,6 +391,13 @@ static int vfs_lookup_internal(const char *path, vnode_t **out, int depth) {
     
     vnode_ref(current);
     
+    if (current->vfs_here) {
+        vfs = current->vfs_here;
+        vnode_unref(current);
+        current = vfs->root_vnode;
+        vnode_ref(current);
+    }
+    
     char *path_copy = rel_path;
     char *component = strtok(path_copy, "/");
     
@@ -340,13 +406,6 @@ static int vfs_lookup_internal(const char *path, vnode_t **out, int depth) {
             vnode_unref(current);
             kfree(rel_path);
             return -ENOTDIR;
-        }
-        
-        if (current->vfs_here) {
-            vfs = current->vfs_here;
-            vnode_unref(current);
-            current = vfs->root_vnode;
-            vnode_ref(current);
         }
         
         if (!current->ops || !current->ops->lookup) {
@@ -363,7 +422,12 @@ static int vfs_lookup_internal(const char *path, vnode_t **out, int depth) {
             return ret;
         }
        
-		// follow symlinks
+        if (next->vfs_here) {
+            vnode_unref(next);
+            next = next->vfs_here->root_vnode;
+            vnode_ref(next);
+        }
+        
         vnode_t *resolved;
         ret = vfs_follow_symlink(next, &resolved, depth + 1);
         if (ret != EOK) {
@@ -402,15 +466,16 @@ int vfs_lookup_parent(const char *path, vnode_t **parent, char **filename) {
     }
     
     size_t parent_len = last_slash - path;
+   
+	char *parent_path;
     if (parent_len == 0) {
-        parent_len = 1;
+        parent_path = strdup("/");
+    } else {
+        parent_path = kmalloc(parent_len + 1);
+        if (!parent_path) return -ENOMEM;
+        memcpy(parent_path, path, parent_len);
+        parent_path[parent_len] = '\0';
     }
-    
-    char *parent_path = kmalloc(parent_len + 1);
-    if (!parent_path) return -ENOMEM;
-    
-    strncpy(parent_path, path, parent_len);
-    parent_path[parent_len] = '\0';
     
     *filename = strdup(last_slash + 1);
     if (!*filename) {
@@ -433,7 +498,7 @@ int vfs_lookup_parent(const char *path, vnode_t **parent, char **filename) {
 int vfs_open(const char *path, int flags, fileio_t **out) {
     if (!path || !out) return -EINVAL;
     
-    vnode_t *vnode;
+    vnode_t *vnode = NULL;
     int ret = vfs_lookup(path, &vnode);
     
     if (ret == -ENOENT && (flags & V_CREATE)) {
@@ -455,7 +520,11 @@ int vfs_open(const char *path, int flags, fileio_t **out) {
         
         if (ret != EOK) return ret;
     } else if (ret != EOK) {
-		return ret;
+        return ret;
+    }
+    
+    if (!vnode) {
+        return -ENOENT;
     }
     
     if (!vnode->ops || !vnode->ops->open) {
@@ -487,7 +556,6 @@ int vfs_read(vnode_t *vnode, size_t size, size_t offset, void *out) {
         return -ENULLPTR;
     }
 
-
     int ret = vnode->ops->read(vnode, &size, &offset, out);
 
     return ret;
@@ -515,16 +583,22 @@ int vfs_ioctl(vnode_t *vnode, int request, void *arg) {
 
 int vfs_close(vnode_t *vnode) {
     if (!vnode) {
-        return ENULLPTR;
+        return -ENULLPTR;
+    }
+
+    if (!vnode->ops || !vnode->ops->close) {
+        vnode_unref(vnode);
+        return -ENOSYS;
     }
 
     int r = vnode->ops->close(vnode, 0, false);
 
     if (r != EOK) {
+        vnode_unref(vnode);
         return r;
     }
 
-    kfree(vnode);
+    vnode_unref(vnode);
 
     return EOK;
 }

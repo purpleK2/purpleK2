@@ -139,6 +139,8 @@ void test_test(void) {
 		proc_exit();
 	}
 
+	fs_list("/", -1);
+
 	close(f);
 	proc_exit();
 }
@@ -474,6 +476,12 @@ void kstart(void) {
 	devfs_init();
 	procfs_init();
 
+	vfs_mount(NULL, "ramfs", "/", NULL);
+
+	vfs_mkdir("/initrd", 0755);
+	vfs_mkdir("/proc", 0755);
+	vfs_mkdir("/dev", 0755);
+
     ramfs_t *cpio_ramfs         = ramfs_create_fs();
     cpio_ramfs->root_node       = ramfs_create_node(RAMFS_DIRECTORY);
     cpio_ramfs->root_node->name = strdup("/");
@@ -492,8 +500,6 @@ void kstart(void) {
     if (!test_file) {
         debugf_warn("Couldn't open file!\n");
     }
-
-    ramfs_print(cpio_ramfs->root_node, 0);
 
 #ifdef CONFIG_DEVFS_ENABLE
     devfs = devfs_create();
@@ -535,9 +541,6 @@ void kstart(void) {
         debugf_warn("Couldn't find AHCI driver!\n");
     }
     start_module(ahci);*/
-
-	fs_list("/initrd", -1);
-	kprintf("DevFS dumped!\n");
 
     init_scheduler();
 
