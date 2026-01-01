@@ -603,6 +603,38 @@ int procfs_lookup(vnode_t *parent, const char *name, vnode_t **out) {
     }
     strcat(child_path, name);
 
+    char *fds_pos = strstr(child_path, "/fds/");
+    if (fds_pos != NULL) {
+        int fd_num = atoi(fds_pos + 5);
+        
+        size_t proc_path_len = fds_pos - child_path;
+        char *proc_path = kmalloc(proc_path_len + 1);
+        strncpy(proc_path, child_path, proc_path_len);
+        proc_path[proc_path_len] = '\0';
+        
+        int ftype;
+        void *file = procfs_find(procfs, proc_path, &ftype);
+        kfree(proc_path);
+        
+        if (!file || ftype != PROCFS_FILE_PROC) {
+            kfree(child_path);
+            return ENOENT;
+        }
+        
+        procfs_pcb_t *proc = (procfs_pcb_t *)file;
+        
+        if (fd_num < 0 || fd_num >= proc->pcb->fd_count || !proc->pcb->fds[fd_num]) {
+            kfree(child_path);
+            return ENOENT;
+        }
+        
+        vnode_t *child_vnode = vnode_create(parent->root_vfs, child_path, VNODE_LINK, proc->pcb->fds[fd_num]);
+        memcpy(child_vnode->ops, parent->ops, sizeof(vnops_t));
+        
+        *out = child_vnode;
+        return EOK;
+    }
+
     int ftype;
     void *file = procfs_find(procfs, child_path, &ftype);
     
@@ -614,9 +646,11 @@ int procfs_lookup(vnode_t *parent, const char *name, vnode_t **out) {
     vnode_type_t vtype = VNODE_REGULAR;
     if (ftype == PROCFS_FILE_PROC || ftype == PROCFS_FILE_THREAD) {
         vtype = VNODE_DIR;
-    }
+    } else if (ftype == PROCFS_FILE_FDS) {
+        vtype = VNODE_DIR;
+	}
 
-    vnode_t *child_vnode = vnode_create(parent->root_vfs, child_path, vtype, NULL);
+    vnode_t *child_vnode = vnode_create(parent->root_vfs, child_path, vtype, file);
     memcpy(child_vnode->ops, parent->ops, sizeof(vnops_t));
     
     *out = child_vnode;
@@ -643,6 +677,37 @@ int procfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count) {
     size_t idx = 0;
     size_t max = *count;
 
+    if (strstr(vnode->path, "/fds") && vnode->path[strlen(vnode->path) - 4] == '/' && 
+        strcmp(vnode->path + strlen(vnode->path) - 4, "/fds") == 0) {
+        
+        size_t proc_path_len = strlen(vnode->path) - 4;
+        char *proc_path = kmalloc(proc_path_len + 1);
+        strncpy(proc_path, vnode->path, proc_path_len);
+        proc_path[proc_path_len] = '\0';
+        
+        int ftype;
+        void *file = procfs_find(procfs, proc_path, &ftype);
+        kfree(proc_path);
+        
+        if (file && ftype == PROCFS_FILE_PROC) {
+            procfs_pcb_t *proc = (procfs_pcb_t *)file;
+            
+            for (int i = 0; i < proc->pcb->fd_count && idx < max; i++) {
+                if (!proc->pcb->fds[i]) continue;
+                
+                entries[idx].d_ino = i;
+                entries[idx].d_off = idx + 1;
+                entries[idx].d_reclen = sizeof(dirent_t);
+                entries[idx].d_type = VNODE_LINK;
+                snprintf(entries[idx].d_name, sizeof(entries[idx].d_name), "%d", i);
+                idx++;
+            }
+        }
+        
+        *count = idx;
+        return EOK;
+    }
+
     if (rel_path[0] == '\0') {
         for (size_t i = 0; i < procfs->pcb_count && idx < max; i++) {
             if (!procfs->procs[i]) continue;
@@ -651,7 +716,8 @@ int procfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count) {
             entries[idx].d_off = idx + 1;
             entries[idx].d_reclen = sizeof(dirent_t);
             entries[idx].d_type = VNODE_DIR;
-            snprintf(entries[idx].d_name, sizeof(entries[idx].d_name), "%d", procfs->procs[i]->pid);
+            snprintf(entries[idx].d_name, sizeof(entries[idx].d_name), "%lu", 
+					procfs->procs[i]->pid);
             idx++;
         }
 
@@ -679,12 +745,12 @@ int procfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count) {
                 idx++;
             }
             
-            if (idx < max && proc->pcb->fds) {
+            if (idx < max && proc->pcb->fds && proc->pcb->fd_count > 0) {
                 entries[idx].d_ino = 0;
                 entries[idx].d_off = idx + 1;
                 entries[idx].d_reclen = sizeof(dirent_t);
-                entries[idx].d_type = VNODE_REGULAR;
-                strncpy(entries[idx].d_name, PROCFS_FNAME_FDS, sizeof(entries[idx].d_name) - 1);
+                entries[idx].d_type = VNODE_DIR;
+				strncpy(entries[idx].d_name, PROCFS_FNAME_FDS, sizeof(entries[idx].d_name) - 1);
                 idx++;
             }
             
@@ -714,6 +780,35 @@ int procfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count) {
     return EOK;
 }
 
+int procfs_readlink(vnode_t *vnode, char *buf, size_t size) {
+    if (!vnode || !buf) {
+        return ENULLPTR;
+    }
+
+    if (vnode->vtype != VNODE_LINK) {
+        return EINVAL;
+    }
+
+    fileio_t *fio = (fileio_t *)vnode->node_data;
+    if (!fio || !fio->private) {
+        strncpy(buf, "(unknown)", size - 1);
+        buf[size - 1] = '\0';
+        return EOK;
+    }
+
+    vnode_t *target_vnode = (vnode_t *)fio->private;
+    if (!target_vnode || !target_vnode->path) {
+        strncpy(buf, "(unknown)", size - 1);
+        buf[size - 1] = '\0';
+        return EOK;
+    }
+
+    strncpy(buf, target_vnode->path, size - 1);
+    buf[size - 1] = '\0';
+
+    return EOK;
+}
+
 vnops_t procfs_vnops = {
     .open    = procfs_open,
     .close   = procfs_close,
@@ -722,6 +817,7 @@ vnops_t procfs_vnops = {
     .ioctl   = procfs_ioctl,
     .lookup  = procfs_lookup,
     .readdir = procfs_readdir,
+	.readlink = procfs_readlink,
 };
 
 static int procfs_vfs_mount(vfs_t *vfs, char *path, void *data) {
