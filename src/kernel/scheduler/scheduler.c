@@ -25,8 +25,6 @@ static cpu_queue_t *thread_queues;
 static tcb_t **current_threads;
 static int cpu_count;
 
-procfs_t *procfs;
-
 atomic_flag SCHEDULER_LOCK = ATOMIC_FLAG_INIT;
 
 // SHOULD BE CALLED **ONLY ONCE** IN KSTART. NOWHERE ELSE.
@@ -38,9 +36,6 @@ int init_scheduler() {
     memset(thread_queues, 0, sizeof(cpu_queue_t) * cpu_count);
     memset(current_threads, 0, sizeof(tcb_t *) * cpu_count);
 
-    // create the procFS
-    procfs = procfs_create();
-    procfs_vfs_init(procfs, CONFIG_PROCFS_MOUNT);
     return 0;
 }
 
@@ -90,9 +85,7 @@ int proc_create(void (*entry)(), int flags, char *name) {
 
     thread_create(proc, entry, flags);
 
-    procfs_pcb_t *procfs_proc =
-        procfs_proc_create(proc); // automatically creates the threads inside
-    procfs_proc_append(procfs, procfs_proc);
+	procfs_add_process(proc);
 
     return proc->pid;
 }
@@ -261,6 +254,7 @@ int pcb_destroy(int pid) {
     }
 
     // also remove it from the queue in the next yield just like the thread
+	procfs_remove_process(p);	
 
     return EOK;
 }
@@ -419,8 +413,4 @@ void yield(registers_t *regs) {
     } else {
         memcpy(regs, next->regs, sizeof(registers_t));
     }
-}
-
-void scheduler_procfs_print() {
-    procfs_print(procfs);
 }

@@ -193,10 +193,11 @@ static void fs_list_internal(vnode_t *dir, int depth, int max_depth, int indent)
             snprintf(full_path, path_len, "%s/%s", dir->path, entries[i].d_name);
             
             char target[256];
-            if (vfs_readlink(full_path, target, sizeof(target)) == EOK) {
+			int ret = vfs_readlink(full_path, target, sizeof(target));
+            if (ret == EOK) {
                 kprintf("|- [%s] %s -> %s\n", type_str, entries[i].d_name, target);
             } else {
-                kprintf("|- [%s] %s -> ???\n", type_str, entries[i].d_name);
+                kprintf("|- [%s] %s -> ??? (%d)\n", type_str, entries[i].d_name, ret);
             }
             
             kfree(full_path);

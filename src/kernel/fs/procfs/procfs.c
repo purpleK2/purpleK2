@@ -599,23 +599,56 @@ int procfs_lookup(vnode_t *parent, const char *name, vnode_t **out) {
     char *child_path = kmalloc(parent_len + name_len + 2);
     strcpy(child_path, parent->path);
     if (child_path[parent_len - 1] != '/') {
-        strcat(child_path, "/");
+    	strcat(child_path, "/");
     }
     strcat(child_path, name);
 
-    char *fds_pos = strstr(child_path, "/fds/");
-    if (fds_pos != NULL) {
-        int fd_num = atoi(fds_pos + 5);
-        
-        size_t proc_path_len = fds_pos - child_path;
-        char *proc_path = kmalloc(proc_path_len + 1);
-        strncpy(proc_path, child_path, proc_path_len);
-        proc_path[proc_path_len] = '\0';
-        
-        int ftype;
-        void *file = procfs_find(procfs, proc_path, &ftype);
-        kfree(proc_path);
-        
+	size_t path_len = strlen(child_path);
+	if (path_len >= 4 && strcmp(child_path + path_len - 4, "/fds") == 0) {
+    	size_t proc_path_len = path_len - 4;
+    	char *proc_path = kmalloc(proc_path_len + 1);
+    	strncpy(proc_path, child_path, proc_path_len);
+    	proc_path[proc_path_len] = '\0';
+    
+    	int ftype;
+    	void *file = procfs_find(procfs, proc_path, &ftype);
+    	kfree(proc_path);
+    
+    	if (!file || ftype != PROCFS_FILE_PROC) {
+        	kfree(child_path);
+        	return ENOENT;
+    	}
+    
+    	procfs_pcb_t *proc = (procfs_pcb_t *)file;
+    
+    	vnode_t *child_vnode = vnode_create(parent->root_vfs, child_path, VNODE_DIR, proc);
+    	memcpy(child_vnode->ops, parent->ops, sizeof(vnops_t));
+    
+    	*out = child_vnode;
+    	return EOK;
+	}
+
+	char *fds_pos = NULL;
+	for (size_t i = 0; i < strlen(child_path) - 4; i++) {
+    	if (child_path[i] == '/' && child_path[i+1] == 'f' && 
+        	child_path[i+2] == 'd' && child_path[i+3] == 's' && 
+        	child_path[i+4] == '/') {
+        	fds_pos = child_path + i;
+        	break;
+    	}
+	}
+
+	if (fds_pos != NULL) {
+    	int fd_num = atoi(fds_pos + 5);
+
+    	size_t proc_path_len = fds_pos - child_path;
+    	char *proc_path = kmalloc(proc_path_len + 1);
+    	strncpy(proc_path, child_path, proc_path_len);
+    	proc_path[proc_path_len] = '\0';
+    
+    	int ftype;
+    	void *file = procfs_find(procfs, proc_path, &ftype);
+    	kfree(proc_path);       
         if (!file || ftype != PROCFS_FILE_PROC) {
             kfree(child_path);
             return ENOENT;
@@ -661,7 +694,6 @@ int procfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count) {
     if (!vnode || !entries || !count) {
         return ENULLPTR;
     }
-
     if (vnode->vtype != VNODE_DIR) {
         return ENOTDIR;
     }
@@ -677,37 +709,6 @@ int procfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count) {
     size_t idx = 0;
     size_t max = *count;
 
-    if (strstr(vnode->path, "/fds") && vnode->path[strlen(vnode->path) - 4] == '/' && 
-        strcmp(vnode->path + strlen(vnode->path) - 4, "/fds") == 0) {
-        
-        size_t proc_path_len = strlen(vnode->path) - 4;
-        char *proc_path = kmalloc(proc_path_len + 1);
-        strncpy(proc_path, vnode->path, proc_path_len);
-        proc_path[proc_path_len] = '\0';
-        
-        int ftype;
-        void *file = procfs_find(procfs, proc_path, &ftype);
-        kfree(proc_path);
-        
-        if (file && ftype == PROCFS_FILE_PROC) {
-            procfs_pcb_t *proc = (procfs_pcb_t *)file;
-            
-            for (int i = 0; i < proc->pcb->fd_count && idx < max; i++) {
-                if (!proc->pcb->fds[i]) continue;
-                
-                entries[idx].d_ino = i;
-                entries[idx].d_off = idx + 1;
-                entries[idx].d_reclen = sizeof(dirent_t);
-                entries[idx].d_type = VNODE_LINK;
-                snprintf(entries[idx].d_name, sizeof(entries[idx].d_name), "%d", i);
-                idx++;
-            }
-        }
-        
-        *count = idx;
-        return EOK;
-    }
-
     if (rel_path[0] == '\0') {
         for (size_t i = 0; i < procfs->pcb_count && idx < max; i++) {
             if (!procfs->procs[i]) continue;
@@ -716,8 +717,8 @@ int procfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count) {
             entries[idx].d_off = idx + 1;
             entries[idx].d_reclen = sizeof(dirent_t);
             entries[idx].d_type = VNODE_DIR;
-            snprintf(entries[idx].d_name, sizeof(entries[idx].d_name), "%lu", 
-					procfs->procs[i]->pid);
+            snprintf(entries[idx].d_name, sizeof(entries[idx].d_name), "%lu",
+                     procfs->procs[i]->pid);
             idx++;
         }
 
@@ -732,46 +733,74 @@ int procfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count) {
     } else {
         int ftype;
         void *file = procfs_find(procfs, vnode->path, &ftype);
-        
+
         if (ftype == PROCFS_FILE_PROC) {
             procfs_pcb_t *proc = (procfs_pcb_t *)file;
-            
+
             if (idx < max) {
                 entries[idx].d_ino = 0;
                 entries[idx].d_off = idx + 1;
                 entries[idx].d_reclen = sizeof(dirent_t);
                 entries[idx].d_type = VNODE_REGULAR;
-                strncpy(entries[idx].d_name, PROCFS_FNAME_PROCINFO, sizeof(entries[idx].d_name) - 1);
+                strncpy(entries[idx].d_name, PROCFS_FNAME_PROCINFO,
+                        sizeof(entries[idx].d_name) - 1);
                 idx++;
             }
-            
-            if (idx < max && proc->pcb->fds && proc->pcb->fd_count > 0) {
+
+            if (idx < max) {
                 entries[idx].d_ino = 0;
                 entries[idx].d_off = idx + 1;
                 entries[idx].d_reclen = sizeof(dirent_t);
                 entries[idx].d_type = VNODE_DIR;
-				strncpy(entries[idx].d_name, PROCFS_FNAME_FDS, sizeof(entries[idx].d_name) - 1);
+                strncpy(entries[idx].d_name, PROCFS_FNAME_FDS,
+                        sizeof(entries[idx].d_name) - 1);
                 idx++;
             }
-            
+
             for (size_t i = 0; i < proc->tcb_count && idx < max; i++) {
                 if (!proc->tcbs[i]) continue;
-                
+
                 entries[idx].d_ino = proc->tcbs[i]->tid;
                 entries[idx].d_off = idx + 1;
                 entries[idx].d_reclen = sizeof(dirent_t);
                 entries[idx].d_type = VNODE_DIR;
-                snprintf(entries[idx].d_name, sizeof(entries[idx].d_name), "%lu", proc->tcbs[i]->tid);
+                snprintf(entries[idx].d_name, sizeof(entries[idx].d_name), "%lu",
+                         proc->tcbs[i]->tid);
                 idx++;
             }
-        } else if (ftype == PROCFS_FILE_THREAD) {
+        }
+
+        else if (ftype == PROCFS_FILE_THREAD) {
             if (idx < max) {
                 entries[idx].d_ino = 0;
                 entries[idx].d_off = idx + 1;
                 entries[idx].d_reclen = sizeof(dirent_t);
                 entries[idx].d_type = VNODE_REGULAR;
-                strncpy(entries[idx].d_name, PROCFS_FNAME_TINFO, sizeof(entries[idx].d_name) - 1);
+                strncpy(entries[idx].d_name, PROCFS_FNAME_TINFO,
+                        sizeof(entries[idx].d_name) - 1);
                 idx++;
+            }
+        
+		}
+        else {
+            size_t path_len = strlen(vnode->path);
+            if (path_len >= 4 && strcmp(vnode->path + path_len - 4, "/fds") == 0) {
+                procfs_pcb_t *proc = (procfs_pcb_t *)vnode->node_data;
+                if (!proc || !proc->pcb) {
+                    *count = 0;
+                    return EOK;
+                }
+
+                for (int i = 0; i < proc->pcb->fd_count && idx < max; i++) {
+                    if (!proc->pcb->fds[i]) continue;
+
+                    entries[idx].d_ino = i;
+                    entries[idx].d_off = idx + 1;
+                    entries[idx].d_reclen = sizeof(dirent_t);
+                    entries[idx].d_type = VNODE_LINK;
+                    snprintf(entries[idx].d_name, sizeof(entries[idx].d_name), "%d", i);
+                    idx++;
+                }
             }
         }
     }
@@ -781,7 +810,7 @@ int procfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count) {
 }
 
 int procfs_readlink(vnode_t *vnode, char *buf, size_t size) {
-    if (!vnode || !buf) {
+	if (!vnode || !buf) {
         return ENULLPTR;
     }
 
@@ -971,4 +1000,72 @@ void procfs_print(procfs_t *procfs) {
             kprintf("|\t|_procinfo\n");
         }
     }
+}
+
+void procfs_foreach(void (*callback)(procfs_t *procfs, void *arg), void *arg) {
+    for (vfs_t *vfs = vfs_list; vfs != NULL; vfs = vfs->next) {
+        if (vfs->fs_type.id == procfs_fstype.id && vfs->vfs_data) {
+            procfs_t *procfs = (procfs_t *)vfs->vfs_data;
+            callback(procfs, arg);
+        }
+    }
+}
+
+void procfs_remove_process_foreach(procfs_t *procfs, void *varg) {
+	pcb_t *pcb = (pcb_t *)varg;
+    procfs_proc_remove(procfs, pcb->pid);
+}
+
+void procfs_update_process_foreach(procfs_t* procfs, void *varg) {
+	struct update_arg *a = (struct update_arg *)varg;
+	pcb_t *pcb = a->pcb;
+
+    procfs_pcb_t *entry = procfs_find_proc(procfs, pcb->pid);
+
+    if (!entry) {
+        entry = procfs_proc_create(pcb);
+        if (entry) {
+            procfs_proc_append(procfs, entry);
+        }
+        return;
+    }
+
+    for (size_t i = 0; i < entry->tcb_count; i++) {
+        if (entry->tcbs[i]) {
+            kfree(entry->tcbs[i]->tinfo);
+            kfree(entry->tcbs[i]);
+        }
+    }
+    kfree(entry->tcbs);
+
+   	entry->tcb_count = pcb->thread_count;
+    entry->tcbs = kcalloc(entry->tcb_count, sizeof(procfs_tcb_t *));
+
+    for (size_t i = 0; i < pcb->thread_count; i++) {
+    	if (pcb->threads[i]) {
+        	entry->tcbs[i] = procfs_thread_create(pcb->threads[i]);
+        }
+    }
+
+    kfree(entry->procinfo->data);
+    kfree(entry->procinfo);
+    entry->procinfo = procfs_procinfo_create(pcb);
+}
+
+void procfs_update_process(pcb_t *pcb) {
+    if (!pcb) return;
+
+    struct update_arg arg = { .pcb = pcb };
+
+    procfs_foreach(procfs_update_process_foreach, &arg);
+}
+
+void procfs_add_process(pcb_t *pcb) {
+    procfs_update_process(pcb);
+}
+
+void procfs_remove_process(pcb_t *pcb) {
+    if (!pcb) return;
+
+    procfs_foreach(procfs_remove_process_foreach, pcb);
 }

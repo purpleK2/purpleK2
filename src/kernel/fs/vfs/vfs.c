@@ -324,7 +324,7 @@ int vfs_resolve_mount(const char *path, vfs_t **out, char **remaining_path) {
     return EOK;
 }
 
-static int vfs_lookup_internal(const char *path, vnode_t **out, int depth);
+static int vfs_lookup_internal(const char *path, vnode_t **out, int depth, bool follow_symlinks);
 
 static int vfs_follow_symlink(vnode_t *vnode, vnode_t **out, int depth) {
     if (depth >= MAX_SYMLINK_DEPTH) {
@@ -337,6 +337,7 @@ static int vfs_follow_symlink(vnode_t *vnode, vnode_t **out, int depth) {
     }
     
     if (!vnode->ops || !vnode->ops->readlink) {
+		debugf_debug("The vnode doesnt have the readlink(...) operation\n");
         return -EINVAL;
     }
     
@@ -348,7 +349,7 @@ static int vfs_follow_symlink(vnode_t *vnode, vnode_t **out, int depth) {
     
     // Resolve the symlink target
     vnode_t *target_vnode;
-    ret = vfs_lookup_internal(target, &target_vnode, depth + 1);
+    ret = vfs_lookup_internal(target, &target_vnode, depth + 1, false);
     if (ret != EOK) {
         return ret;
     }
@@ -357,23 +358,23 @@ static int vfs_follow_symlink(vnode_t *vnode, vnode_t **out, int depth) {
     return EOK;
 }
 
-static int vfs_lookup_internal(const char *path, vnode_t **out, int depth) {
+static int vfs_lookup_internal(const char *path, vnode_t **out, int depth, bool follow_symlinks) {
     if (!path || !out) return -EINVAL;
-    
+
     if (depth >= MAX_SYMLINK_DEPTH) {
         return -ELOOP;
     }
-    
+
     vfs_t *vfs;
     char *rel_path;
     int ret = vfs_resolve_mount(path, &vfs, &rel_path);
     if (ret != EOK) {
         return ret;
     }
-    
+
     if (!rel_path || rel_path[0] == '\0') {
         if (rel_path) kfree(rel_path);
-        
+
         if (vfs->root_vnode && vfs->root_vnode->vfs_here) {
             *out = vfs->root_vnode->vfs_here->root_vnode;
         } else {
@@ -382,38 +383,38 @@ static int vfs_lookup_internal(const char *path, vnode_t **out, int depth) {
         vnode_ref(*out);
         return EOK;
     }
-    
+
     vnode_t *current = vfs->root_vnode;
     if (!current) {
         kfree(rel_path);
         return -ENOENT;
     }
-    
+
     vnode_ref(current);
-    
+
     if (current->vfs_here) {
         vfs = current->vfs_here;
         vnode_unref(current);
         current = vfs->root_vnode;
         vnode_ref(current);
     }
-    
+
     char *path_copy = rel_path;
     char *component = strtok(path_copy, "/");
-    
+
     while (component) {
         if (current->vtype != VNODE_DIR) {
             vnode_unref(current);
             kfree(rel_path);
             return -ENOTDIR;
         }
-        
+
         if (!current->ops || !current->ops->lookup) {
             vnode_unref(current);
             kfree(rel_path);
             return -ENOSYS;
         }
-        
+
         vnode_t *next;
         ret = current->ops->lookup(current, component, &next);
         if (ret != EOK) {
@@ -421,40 +422,42 @@ static int vfs_lookup_internal(const char *path, vnode_t **out, int depth) {
             kfree(rel_path);
             return ret;
         }
-       
+
         if (next->vfs_here) {
             vnode_unref(next);
             next = next->vfs_here->root_vnode;
             vnode_ref(next);
         }
-        
-        vnode_t *resolved;
-        ret = vfs_follow_symlink(next, &resolved, depth + 1);
-        if (ret != EOK) {
-            vnode_unref(next);
-            vnode_unref(current);
-            kfree(rel_path);
-            return ret;
+
+        vnode_t *resolved = next;
+        if (follow_symlinks) {
+            ret = vfs_follow_symlink(next, &resolved, depth + 1);
+            if (ret != EOK) {
+                vnode_unref(next);
+                vnode_unref(current);
+                kfree(rel_path);
+                return ret;
+            }
         }
-        
+
         if (resolved != next) {
             vnode_unref(next);
             vnode_ref(resolved);
         }
-        
+
         vnode_unref(current);
         current = resolved;
-        
+
         component = strtok(NULL, "/");
     }
-    
+
     kfree(rel_path);
     *out = current;
     return EOK;
 }
 
 int vfs_lookup(const char *path, vnode_t **out) {
-    return vfs_lookup_internal(path, out, 0);
+    return vfs_lookup_internal(path, out, 0, true);
 }
 
 int vfs_lookup_parent(const char *path, vnode_t **parent, char **filename) {
@@ -663,24 +666,26 @@ int vfs_rmdir(const char *path) {
 
 int vfs_readlink(const char *path, char *buf, size_t size) {
     if (!path || !buf) return -EINVAL;
-    
+
     vnode_t *vnode;
-    int ret = vfs_lookup(path, &vnode);
-    if (ret != EOK) return ret;
-    
+    int ret = vfs_lookup_internal(path, &vnode, 0, false);
+	if (ret != EOK) return ret;
+
     if (vnode->vtype != VNODE_LINK) {
         vnode_unref(vnode);
+        debugf("vfs_readlink: vnode->vtype=%d @ vnode->path=%s (VNODE_LINK should be %d)\n", 
+           vnode->vtype, vnode->path, VNODE_LINK);
         return -EINVAL;
     }
-    
+
     if (!vnode->ops || !vnode->ops->readlink) {
         vnode_unref(vnode);
         return -ENOSYS;
     }
-    
+
     ret = vnode->ops->readlink(vnode, buf, size);
     vnode_unref(vnode);
-    
+
     return ret;
 }
 

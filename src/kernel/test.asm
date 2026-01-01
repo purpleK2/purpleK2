@@ -2,6 +2,9 @@ format ELF64
 
 filename db "/dev/com1", 0
 what_to_write db "hello from process\n", 0
+root db "/", 0
+
+extrn fs_list
 
 section '.text' executable align 16
 
@@ -17,6 +20,10 @@ __sched_test:
     mov rsi, what_to_write
     mov rdx, 20
     int 0x80
+
+	mov rdi, root
+	mov rsi, -1
+	call fs_list
 
     mov rax, 0
     mov rdi, 0

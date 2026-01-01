@@ -125,24 +125,6 @@ vmc_t *kvmc;
 extern void __sched_test(void);
 
 void test_test(void) {
-	fileio_t *f = open("/dev/com1", 0);
-	if ((int)(uintptr_t)f <= 0) {
-		debugf_warn("failed to open /dev/com1: %d\n", (int)(uintptr_t)f);
-		proc_exit();
-	}
-
-	debugf("worked?\n");
-
-	int ret = write(f, "TestTest\n", strlen("TestTest\n"));
-	if (ret != EOK) {
-		debugf_warn("Failed to write /dev/com1: %d\n", ret);
-		proc_exit();
-	}
-
-	fs_list("/", -1);
-
-	close(f);
-	proc_exit();
 }
 
 // HBA_MEM *abar_mem = NULL;
@@ -153,7 +135,7 @@ devfs_t *devfs = NULL;
 
 void pk_init() {
     //debugf("Hello!\n");
-    proc_create(test_test, TF_MODE_KERNEL, "__sched_test");
+    proc_create(__sched_test, TF_MODE_KERNEL, "__sched_test");
     //debugf_ok("Starting __sched_test\n");
 
     //kprintf("Yo we are in a process!\n");
@@ -541,6 +523,8 @@ void kstart(void) {
         debugf_warn("Couldn't find AHCI driver!\n");
     }
     start_module(ahci);*/
+
+	vfs_mount(NULL, "procfs", "/proc", NULL);
 
     init_scheduler();
 

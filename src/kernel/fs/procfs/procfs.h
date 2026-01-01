@@ -70,6 +70,11 @@ typedef struct procfs_vnode {
     procfs_vftype_t type;
 } procfs_vnode_t;
 
+// argument for the procfs_foreach thingeth
+struct update_arg {
+    pcb_t *pcb;
+}; 
+
 procfs_t *procfs_create();
 void procfs_destroy(procfs_t *procfs);
 void procfs_info_add(procfs_info_t *info, char *buf, size_t offset, size_t size);
@@ -97,4 +102,13 @@ int procfs_close(vnode_t *vnode, int flags, bool clone);
 int procfs_ioctl(vnode_t *vnode, int request, void *arg);
 int procfs_lookup(vnode_t *parent, const char *name, vnode_t **out);
 int procfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count);
+
+void procfs_remove_process(pcb_t *pcb);
+void procfs_update_process(pcb_t *pcb);
+void procfs_add_process(pcb_t *pcb);
+
+void procfs_foreach(void (*callback)(procfs_t *procfs, void *arg), void *arg);
+void procfs_update_process_foreach(procfs_t* procfs, void *varg);
+void procfs_remove_process_foreach(procfs_t *procfs, void *varg);
+
 #endif
