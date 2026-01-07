@@ -340,7 +340,7 @@ int proc_exit() {
     return ret;
 }
 
-void yield(registers_t *regs) {
+void yield() {
     int cpu        = get_cpu();
     tcb_t *current = current_threads[cpu];
     tcb_t *next;
@@ -360,10 +360,6 @@ void yield(registers_t *regs) {
         }
 
         fpu_save(current->fpu);
-
-        if (regs) {
-            memcpy(current->regs, regs, sizeof(registers_t));
-        }
 
         current->state      = THREAD_READY;
         current->time_slice = SCHEDULER_THREAD_TS;
@@ -421,9 +417,5 @@ void yield(registers_t *regs) {
 
     fpu_restore(next->fpu);
 
-    if (!regs) {
-        context_load(next->regs);
-    } else {
-        memcpy(regs, next->regs, sizeof(registers_t));
-    }
+    context_load(next->regs);
 }
