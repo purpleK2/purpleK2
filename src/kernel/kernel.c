@@ -124,9 +124,6 @@ vmc_t *kvmc;
 
 extern void __sched_test(void);
 
-void test_test(void) {
-}
-
 // HBA_MEM *abar_mem = NULL;
 
 // HBA_MEM *mem;
@@ -134,19 +131,9 @@ void test_test(void) {
 devfs_t *devfs = NULL;
 
 void pk_init() {
-    // debugf("Hello!\n");
+    kprintf_ok("Hello!\n");
     proc_create(__sched_test, TF_MODE_KERNEL, "__sched_test");
-
-    // debugf_ok("Starting __sched_test\n");
-
-    // kprintf("Yo we are in a process!\n");
-
-    /*fileio_t *f = open("/proc/self/procinfo", 0);
-    char buf_test[200];
-    read(f, sizeof(buf_test), buf_test);
-    kprintf(buf_test);
-
-    scheduler_procfs_print();*/
+    debugf_ok("Starting __sched_test\n");
 
     // IT IS STILL A BAD IDEA TO JUST LET THE PAGEFAULT HANDLER KILL THE PROC 😭
     proc_exit();
@@ -163,6 +150,7 @@ void kstart(void) {
     // Ensure we got a framebuffer.
     if (framebuffer_request.response == NULL ||
         framebuffer_request.response->framebuffer_count < 1) {
+        debugf_debug("No framebuffer!\n");
         _hcf();
     }
 
@@ -218,10 +206,7 @@ void kstart(void) {
     debugf_debug("Current video mode is: %dx%d address: %p\n\n",
                  framebuffer->width, framebuffer->height, framebuffer->address);
 
-    if (kernel_address_request.response == NULL) {
-        kprintf_panic("Couldn't get kernel address!\n");
-        _hcf();
-    }
+    assert(kernel_address_request.response);
     kernel_address_response = kernel_address_request.response;
     limine_parsed_data.kernel_base_physical =
         kernel_address_response->physical_base;
@@ -243,12 +228,7 @@ void kstart(void) {
                  &__limine_reqs_start, &__limine_reqs_end);
     debugf_debug("\tkernel_end: %p\n", &__kernel_end);
 
-    if (memmap_request.response == NULL ||
-        memmap_request.response->entry_count < 1) {
-        debugf_panic("No memory map received!\n");
-        _hcf();
-    }
-
+    assert(memmap_request.response || memmap_request.response->entry_count > 0);
     kernel_file = kernel_file_request.response->executable_file;
 
     limine_parsed_data.kernel_file_data = kernel_file->address;
@@ -286,11 +266,7 @@ void kstart(void) {
             .limine_memory_map[limine_parsed_data.memmap_entry_count - 1]
             ->length;
 
-    if (hhdm_request.response == NULL) {
-        debugf_panic("Couldn't get Higher Half Direct Map Offset!\n");
-        _hcf();
-    }
-
+    assert(hhdm_request.response);
     hhdm_response = hhdm_request.response;
 
     limine_parsed_data.hhdm_offset = hhdm_response->offset;
@@ -300,10 +276,7 @@ void kstart(void) {
     pmm_init(memmap_response);
     kprintf_ok("Initialized PMM\n");
 
-    if (paging_mode_request.response == NULL) {
-        kprintf_panic("We've got no paging!\n");
-        _hcf();
-    }
+    assert(paging_mode_request.response);
     paging_mode_response = paging_mode_request.response;
 
     if (paging_mode_response->mode < paging_mode_request.min_mode ||
@@ -346,10 +319,7 @@ void kstart(void) {
     kfree(ptr1);
     kprintf_ok("kheap init done\n");
 
-    if (rsdp_request.response == NULL) {
-        kprintf_panic("Couldn't get RSDP address!\n");
-        _hcf();
-    }
+    assert(rsdp_request.response);
     rsdp_response                         = rsdp_request.response;
     limine_parsed_data.rsdp_table_address = (uint64_t *)rsdp_response->address;
     debugf_debug("Address of RSDP: %p\n",
@@ -409,10 +379,13 @@ void kstart(void) {
             limine_parsed_data.memory_usable_total,
             limine_parsed_data.memory_usable_total / 0x100000);
 
-    // first scheduler, then FS
+    assert(smp_request.response);
 
     limine_parsed_data.cpu_count = smp_request.response->cpu_count;
     limine_parsed_data.cpus      = smp_request.response->cpus;
+
+    // first scheduler, then FS
+    init_scheduler();
 
     if (!module_request.response) {
         kprintf_warn("No modules loaded.\n");
@@ -433,27 +406,13 @@ void kstart(void) {
         }
     }
 
-    if (!initrd) {
-        kprintf_panic("No initrd.cpio file found.");
-        _hcf();
-    }
+    assert(initrd);
 
     kprintf_info("Initrd loaded at address %p\n", initrd->address);
 
-    cpio_fs_t fs;
-    memset(&fs, 0, sizeof(cpio_fs_t));
-
-    int ret = cpio_fs_parse(&fs, initrd->address, initrd->size);
-    if (ret < 0) {
-        kprintf_panic("Failed to parse initrd.cpio file.");
-        _hcf();
-    }
-
-    // create the RAMFS
-    /*ramfs_t *cpio_ramfs = ramfs_create();
-    if (cpio_ramfs_init(&fs, cpio_ramfs) != 0) {
-        kprintf_warn("CPIO to RAMFS conversion failed!\n");
-    }*/
+    cpio_t cpio;
+    memset(&cpio, 0, sizeof(cpio_t));
+    assert(cpio_fs_parse(&cpio, initrd->address, initrd->size) == 0);
 
     // register file system types
     ramfs_init();
@@ -504,17 +463,6 @@ void kstart(void) {
 
     print_pcie_list();
 
-    /*mod_t *mbr = load_module("/initrd/modules/mbr.km");
-    start_module(mbr);
-
-    mod_t *ahci = load_module("/initrd/modules/ahci.km");
-    if (!ahci) {
-        debugf_warn("Couldn't find AHCI driver!\n");
-    }
-    start_module(ahci);*/
-
-    vfs_mount(NULL, "procfs", "/proc", NULL);
-
     fileio_t *f = open(INITRD_MOUNT "/test2.txt", O_CREATE);
     assert(f);
 
@@ -530,7 +478,16 @@ void kstart(void) {
     read(f, 30, buf);
     kprintf("Reading contents: %s\n", buf);
 
-    init_scheduler();
+    /*
+    mod_t *mbr = load_module("/initrd/modules/mbr.km");
+    start_module(mbr);
+
+    mod_t *ahci = load_module("/initrd/modules/ahci.km");
+    if (!ahci) {
+        debugf_warn("Couldn't find AHCI driver!\n");
+    }
+    start_module(ahci);
+    */
 
     /*
         IDEA:

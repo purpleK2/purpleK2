@@ -22,6 +22,8 @@
 #include <fs/procfs/procfs.h>
 #include <fs/vfs/vfs.h>
 
+#include <util/assert.h>
+
 static cpu_queue_t *thread_queues;
 static tcb_t **current_threads;
 static int cpu_count;
@@ -36,6 +38,10 @@ int init_scheduler() {
     current_threads = kmalloc(sizeof(tcb_t *) * cpu_count);
     memset(thread_queues, 0, sizeof(cpu_queue_t) * cpu_count);
     memset(current_threads, 0, sizeof(tcb_t *) * cpu_count);
+
+    assert(thread_queues);
+    assert(current_threads);
+
     procfs_init();
     vfs_mkdir("/proc", 0755);
     vfs_mount(NULL, "procfs", "/proc", NULL);
@@ -89,7 +95,7 @@ int proc_create(void (*entry)(), int flags, char *name) {
 
     thread_create(proc, entry, flags);
 
-	procfs_add_process(proc);
+    procfs_add_process(proc);
 
     return proc->pid;
 }
@@ -176,7 +182,9 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
 
     spinlock_acquire(&SCHEDULER_LOCK);
 
-    int cpu                 = get_cpu();
+    int cpu = get_cpu();
+    assert(thread_queues);
+
     thread->next            = thread_queues[cpu].head;
     thread_queues[cpu].head = thread;
     thread_queues[cpu].count++;
@@ -258,7 +266,7 @@ int pcb_destroy(int pid) {
     }
 
     // also remove it from the queue in the next yield just like the thread
-	procfs_remove_process(p);	
+    procfs_remove_process(p);
 
     return EOK;
 }
@@ -326,7 +334,8 @@ int proc_exit() {
 
     int ret = pcb_destroy(current->parent->pid);
 
-    debugf("Process %d (%s) killed!\n", current->parent->pid, current->parent->name ? current->parent->name : "no-name");
+    debugf("Process %d (%s) killed!\n", current->parent->pid,
+           current->parent->name ? current->parent->name : "no-name");
 
     return ret;
 }
