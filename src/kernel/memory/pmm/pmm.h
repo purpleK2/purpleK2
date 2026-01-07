@@ -4,6 +4,8 @@
 #include <kernel.h>
 #include <memory/pmm/freelist.h>
 
+#include <spinlock.h>
+
 #include <stddef.h>
 
 #define PFRAME_SIZE 0x1000 // each page frame is 4KB wide
@@ -18,6 +20,20 @@ extern struct bootloader_data limine_parsed_data;
     (((uint64_t)(ADDR)) < limine_parsed_data.hhdm_offset                       \
          ? ((uint64_t)(ADDR))                                                  \
          : ((uint64_t)(ADDR)) - limine_parsed_data.hhdm_offset)
+
+typedef struct pmm {
+    flnode_t *head;
+
+    uint64_t total_memory;
+    uint64_t used_memory;
+
+    int pmm_allocs;
+    int pmm_frees;
+
+    int usable_entry_count;
+
+    atomic_flag PMM_LOCK;
+} pmm_t;
 
 void pmm_init(LIMINE_PTR(struct limine_memmap_response *) memmap_response);
 

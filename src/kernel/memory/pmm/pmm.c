@@ -9,7 +9,6 @@
 #include <autoconf.h>
 #include <kernel.h>
 #include <limine.h>
-#include <spinlock.h>
 #include <util/util.h>
 
 #include <stdbool.h>
@@ -19,19 +18,20 @@
 
 #include <stdatomic.h>
 
-atomic_flag PMM_LOCK = ATOMIC_FLAG_INIT;
-
 extern void _hcf();
 
-flnode_t *pmm_headnode = NULL;
-int usable_entry_count = 0;
+pmm_t pmm = {0};
 
 void pmm_init(LIMINE_PTR(struct limine_memmap_response *) memmap_response) {
     if (!memmap_response) {
         kprintf_panic("No memmap response given!\n");
     }
 
-    usable_entry_count = 0;
+    spinlock_release(&pmm.PMM_LOCK);
+    pmm.total_memory = 0;
+    pmm.used_memory  = 0;
+
+    pmm.usable_entry_count = 0;
     for (uint64_t i = 0; i < memmap_response->entry_count; i++) {
         struct limine_memmap_entry *memmap_entry = memmap_response->entries[i];
 
@@ -40,16 +40,18 @@ void pmm_init(LIMINE_PTR(struct limine_memmap_response *) memmap_response) {
 
         flnode_t *fl_node = pmm_node_create(memmap_entry);
 
-        fl_append(&pmm_headnode, fl_node);
+        fl_append(&pmm.head, fl_node);
 
-        usable_entry_count++;
+        pmm.total_memory += fl_node->length;
+
+        pmm.usable_entry_count++;
     }
 
-    kprintf_info("Found %d usable regions\n", usable_entry_count);
+    kprintf_info("Found %d usable regions\n", pmm.usable_entry_count);
 
 #ifdef CONFIG_PMM_DEBUG
     // prints all nodes
-    for (flnode_t *fl_node = pmm_headnode; fl_node != NULL;
+    for (flnode_t *fl_node = pmm.head; fl_node != NULL;
          fl_node           = fl_node->next) {
         debugf_debug("ENTRY @ %p\n", fl_node);
         debugf_debug("\tlength: %llx\n", fl_node->length);
@@ -64,7 +66,7 @@ void pmm_init(LIMINE_PTR(struct limine_memmap_response *) memmap_response) {
 
 // Returns the count of the entries.
 int get_freelist_entry_count() {
-    return usable_entry_count;
+    return pmm.usable_entry_count;
 }
 
 /*
@@ -73,28 +75,29 @@ int get_freelist_entry_count() {
         @returns head of nodes
 */
 flnode_t *fl_update_nodes() {
-    usable_entry_count = 0;
-    for (flnode_t *i = pmm_headnode; i != NULL;
-         i           = i->next, usable_entry_count++)
+    pmm.usable_entry_count = 0;
+    for (flnode_t *i = pmm.head; i != NULL;
+         i           = i->next, pmm.usable_entry_count++)
         ;
 
-    return pmm_headnode;
-}
+#ifdef CONFIG_PMM_DEBUG
+    debugf_debug("Used memory: %llu MiB\n", pmm.used_memory / 1024 / 1024);
+#endif
 
-int pmm_allocs = 0; // keeping track of how many times pmm_alloc was called
-int pmm_frees  = 0; // keeping track of how many times pmm_free was called
+    return pmm.head;
+}
 
 // Omar, this is a PAGE FRAME allocator no need for custom <bytes> parameter
 void *pmm_alloc_page() {
-    spinlock_acquire(&PMM_LOCK);
-    pmm_allocs++;
+    spinlock_acquire(&pmm.PMM_LOCK);
+    pmm.pmm_allocs++;
 #ifdef CONFIG_PMM_DEBUG
-    debugf_debug("--- Allocation n.%d ---\n", pmm_allocs);
+    debugf_debug("--- Allocation n.%d ---\n", pmm.pmm_allocs);
 #endif
 
     void *ptr = NULL;
     flnode_t *cur_node;
-    for (cur_node = pmm_headnode; cur_node != NULL; cur_node = cur_node->next) {
+    for (cur_node = pmm.head; cur_node != NULL; cur_node = cur_node->next) {
 #ifdef CONFIG_PMM_DEBUG
         debugf_debug("Looking for available memory at address %p\n", cur_node);
 #endif
@@ -122,25 +125,26 @@ void *pmm_alloc_page() {
     ptr = (void *)(cur_node);
 
     if (cur_node->length - PFRAME_SIZE <= 0) {
-        pmm_headnode = pmm_headnode->next;
+        pmm.head = pmm.head->next;
     } else {
         // shift the node
         flnode_t *new_node = (ptr + PFRAME_SIZE);
         new_node->length   = (cur_node->length - PFRAME_SIZE);
         new_node->next     = cur_node->next;
-        pmm_headnode       = new_node;
+        pmm.head           = new_node;
 
 #ifdef CONFIG_PMM_DEBUG
-        debugf_debug("old head %p is now %p\n", ptr, pmm_headnode);
+        debugf_debug("old head %p is now %p\n", ptr, pmm.head);
 #endif
     }
 
+    pmm.used_memory += PFRAME_SIZE;
     fl_update_nodes();
 
     // zero out the whole allocated region
     memset((void *)ptr, 0, PFRAME_SIZE);
 
-    spinlock_release(&PMM_LOCK);
+    spinlock_release(&pmm.PMM_LOCK);
 
     // we need the physical address of the free entry
     return (void *)VIRT_TO_PHYSICAL(ptr);
@@ -156,10 +160,10 @@ void *pmm_alloc_pages(size_t pages) {
 }
 
 void pmm_free(void *ptr, size_t pages) {
-    spinlock_acquire(&PMM_LOCK);
-    pmm_frees++;
+    spinlock_acquire(&pmm.PMM_LOCK);
+    pmm.pmm_frees++;
 #ifdef CONFIG_PMM_DEBUG
-    debugf_debug("--- Deallocation n.%d ---\n", pmm_frees);
+    debugf_debug("--- Deallocation n.%d ---\n", pmm.pmm_frees);
 
     debugf_debug("deallocating address range %p-%p\n\n", ptr,
                  ptr + (pages * PFRAME_SIZE));
@@ -168,7 +172,7 @@ void pmm_free(void *ptr, size_t pages) {
     flnode_t *deallocated = (flnode_t *)PHYS_TO_VIRTUAL(ptr);
 
     // you can check vmm.c for an explanation of the same behaviour
-    for (flnode_t *f = pmm_headnode; f != NULL; f = f->next) {
+    for (flnode_t *f = pmm.head; f != NULL; f = f->next) {
         flnode_t *next = f->next;
 
         if (next < deallocated) {
@@ -209,5 +213,5 @@ void pmm_free(void *ptr, size_t pages) {
 
     fl_update_nodes();
 
-    spinlock_release(&PMM_LOCK);
+    spinlock_release(&pmm.PMM_LOCK);
 }
