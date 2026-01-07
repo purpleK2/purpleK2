@@ -11,7 +11,7 @@ config DEVFS_ENABLE
 menu "DevFS options"
 depends on DEVFS_ENABLE
 
-config DEVFS_MOUNT_PATH
+config DEVFS_MOUNT
     string "DevFS mount path"
     default "/dev"
     help

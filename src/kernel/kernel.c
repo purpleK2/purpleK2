@@ -487,7 +487,7 @@ void kstart(void) {
 #ifdef CONFIG_DEVFS_ENABLE
     devfs = devfs_create();
 
-    if (vfs_mount(NULL, "devfs", CONFIG_DEVFS_MOUNT_PATH, NULL) == NULL) {
+    if (vfs_mount(NULL, "devfs", CONFIG_DEVFS_MOUNT, NULL) == NULL) {
         kprintf_warn("Failed to initialize DEVFS!\n");
     } else {
         kprintf_ok("DEVFS initialized successfully!\n");
