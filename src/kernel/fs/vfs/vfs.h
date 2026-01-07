@@ -11,7 +11,7 @@
 #include <stddef.h>
 
 #define V_CREATE (1 << 0)
-#define V_EXCL 	 (1 << 1)
+#define V_EXCL   (1 << 1)
 #define V_TRUNC  (1 << 2)
 
 // compiler skill issue
@@ -19,12 +19,13 @@ typedef struct vnode vnode_t;
 typedef struct vfs vfs_t;
 
 typedef struct vfs_fstype {
-	uint16_t id; // unique vfs type id
-	char name[64]; // like "fat32" or "ext4"
-	
-	int (*mount)(void *device, char* mount_point, void* mount_data, vfs_t **out);
+    uint16_t id;   // unique vfs type id
+    char name[64]; // like "fat32" or "ext4"
 
-	struct vfs_fstype *next;
+    int (*mount)(void *device, char *mount_point, void *mount_data,
+                 vfs_t **out);
+
+    struct vfs_fstype *next;
 } vfs_fstype_t;
 
 typedef enum vnode_type {
@@ -57,11 +58,11 @@ typedef struct fid {
 } fid_t;
 
 typedef struct dirent {
-	uint64_t d_ino;
-	uint64_t d_off;
-	uint64_t d_reclen;
-	uint8_t d_type; // same as vnode_type
-	char d_name[256]; // filename !!!
+    uint64_t d_ino;
+    uint64_t d_off;
+    uint64_t d_reclen;
+    uint8_t d_type;   // same as vnode_type
+    char d_name[256]; // filename !!!
 } dirent_t;
 
 typedef struct vfs_ops {
@@ -81,10 +82,10 @@ typedef struct vnode_ops {
     int (*read)(vnode_t *, size_t *, size_t *, void *);
     int (*write)(vnode_t *, void *, size_t *, size_t *);
     int (*ioctl)(vnode_t *, int, void *);
-	int (*lookup)(vnode_t *, const char *, vnode_t **);
+    int (*lookup)(vnode_t *, const char *, vnode_t **);
     int (*readdir)(vnode_t *, dirent_t *, size_t *);
     int (*readlink)(vnode_t *, char *, size_t);
-	int (*mkdir)(vnode_t *, const char *, int);
+    int (*mkdir)(vnode_t *, const char *, int);
     int (*rmdir)(vnode_t *, const char *);
     int (*create)(vnode_t *, const char *, int, vnode_t **);
     int (*remove)(vnode_t *, const char *);
@@ -104,10 +105,10 @@ typedef struct vnode {
 
     vfs_t *vfs_here; // what vfs is mounted in this vnode
     vfs_t *root_vfs; // in what vfs this vnode resides
-	
-	uint32_t refcount;
 
-	atomic_flag vnode_lock;
+    uint32_t refcount;
+
+    atomic_flag vnode_lock;
 } vnode_t;
 
 typedef struct vfs {
@@ -133,11 +134,13 @@ int vfs_unregister_fstype(const char *name);
 vfs_fstype_t *vfs_find_fstype(const char *name);
 
 vfs_t *vfs_create(vfs_fstype_t *fs_type, void *fs_data);
-vfs_t *vfs_mount(void *device, const char *fstype_name, char *path, void *mount_data);
+vfs_t *vfs_mount(void *device, const char *fstype_name, char *path,
+                 void *mount_data);
 int vfs_unmount(const char *path);
 int vfs_append(vfs_t *vfs);
 
-vnode_t *vnode_create(vfs_t *root_vfs, char *path, vnode_type_t type, void *data);
+vnode_t *vnode_create(vfs_t *root_vfs, char *path, vnode_type_t type,
+                      void *data);
 void vnode_ref(vnode_t *vnode);
 void vnode_unref(vnode_t *vnode);
 

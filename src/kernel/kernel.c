@@ -134,11 +134,12 @@ void test_test(void) {
 devfs_t *devfs = NULL;
 
 void pk_init() {
-    //debugf("Hello!\n");
+    // debugf("Hello!\n");
     proc_create(__sched_test, TF_MODE_KERNEL, "__sched_test");
-    //debugf_ok("Starting __sched_test\n");
 
-    //kprintf("Yo we are in a process!\n");
+    // debugf_ok("Starting __sched_test\n");
+
+    // kprintf("Yo we are in a process!\n");
 
     /*fileio_t *f = open("/proc/self/procinfo", 0);
     char buf_test[200];
@@ -455,14 +456,14 @@ void kstart(void) {
     }*/
 
     ramfs_init(); // Register the ramfs filesystem type
-	devfs_init();
-	procfs_init();
+    devfs_init();
+    procfs_init();
 
-	vfs_mount(NULL, "ramfs", "/", NULL);
+    vfs_mount(NULL, "ramfs", "/", NULL);
 
-	vfs_mkdir("/initrd", 0755);
-	vfs_mkdir("/proc", 0755);
-	vfs_mkdir("/dev", 0755);
+    vfs_mkdir("/initrd", 0755);
+    vfs_mkdir("/proc", 0755);
+    vfs_mkdir("/dev", 0755);
 
     ramfs_t *cpio_ramfs         = ramfs_create_fs();
     cpio_ramfs->root_node       = ramfs_create_node(RAMFS_DIRECTORY);
@@ -473,7 +474,7 @@ void kstart(void) {
         kprintf_warn("CPIO to RAMFS conversion failed!\n");
     }
 
-	if (ramfs_vfs_init(cpio_ramfs, INITRD_MOUNT) != 0) {
+    if (ramfs_vfs_init(cpio_ramfs, INITRD_MOUNT) != 0) {
         kprintf_warn("Failed to mount RAMFS!\n");
     }
 
@@ -485,13 +486,12 @@ void kstart(void) {
 
 #ifdef CONFIG_DEVFS_ENABLE
     devfs = devfs_create();
-  	
-	if (vfs_mount(NULL, "devfs", CONFIG_DEVFS_MOUNT_PATH, NULL) == NULL) {
-    	kprintf_warn("Failed to initialize DEVFS!\n");
-	} else {
-    	kprintf_ok("DEVFS initialized successfully!\n");
-	} 
-    // devfs_print(devfs->root_node, 0);
+
+    if (vfs_mount(NULL, "devfs", CONFIG_DEVFS_MOUNT_PATH, NULL) == NULL) {
+        kprintf_warn("Failed to initialize DEVFS!\n");
+    } else {
+        kprintf_ok("DEVFS initialized successfully!\n");
+    }
 
 #endif
 
@@ -524,7 +524,22 @@ void kstart(void) {
     }
     start_module(ahci);*/
 
-	vfs_mount(NULL, "procfs", "/proc", NULL);
+    vfs_mount(NULL, "procfs", "/proc", NULL);
+
+    fileio_t *f = open(INITRD_MOUNT "/test2.txt", O_CREATE);
+    assert(f);
+
+    const char temp[8] = "TUTUTUT";
+    write(f, temp, sizeof(temp));
+    seek(f, 0, SEEK_SET);
+    close(f);
+
+    f = open(INITRD_MOUNT "/test2.txt", 0);
+    assert(f);
+    char *buf = kmalloc(30);
+    assert(buf);
+    read(f, 30, buf);
+    kprintf("Reading contents: %s\n", buf);
 
     init_scheduler();
 
