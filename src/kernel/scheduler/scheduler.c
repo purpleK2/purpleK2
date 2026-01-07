@@ -20,6 +20,7 @@
 #include <stdio.h>
 
 #include <fs/procfs/procfs.h>
+#include <fs/vfs/vfs.h>
 
 static cpu_queue_t *thread_queues;
 static tcb_t **current_threads;
@@ -35,6 +36,9 @@ int init_scheduler() {
     current_threads = kmalloc(sizeof(tcb_t *) * cpu_count);
     memset(thread_queues, 0, sizeof(cpu_queue_t) * cpu_count);
     memset(current_threads, 0, sizeof(tcb_t *) * cpu_count);
+    procfs_init();
+    vfs_mkdir("/proc", 0755);
+    vfs_mount(NULL, "procfs", "/proc", NULL);
 
     return 0;
 }

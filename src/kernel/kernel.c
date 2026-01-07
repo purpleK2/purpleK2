@@ -455,14 +455,12 @@ void kstart(void) {
         kprintf_warn("CPIO to RAMFS conversion failed!\n");
     }*/
 
-    ramfs_init(); // Register the ramfs filesystem type
-    devfs_init();
-    procfs_init();
+    // register file system types
+    ramfs_init();
 
     vfs_mount(NULL, "ramfs", "/", NULL);
 
     vfs_mkdir("/initrd", 0755);
-    vfs_mkdir("/proc", 0755);
     vfs_mkdir("/dev", 0755);
 
     ramfs_t *cpio_ramfs         = ramfs_create_fs();
@@ -475,6 +473,7 @@ void kstart(void) {
     assert(cpio_extract(&cpio, INITRD_MOUNT) == EOK);
 
 #ifdef CONFIG_DEVFS_ENABLE
+    devfs_init();
     devfs = devfs_create();
 
     if (vfs_mount(NULL, "devfs", CONFIG_DEVFS_MOUNT, NULL) == NULL) {
