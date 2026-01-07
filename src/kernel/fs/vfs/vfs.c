@@ -295,9 +295,6 @@ void vnode_unref(vnode_t *vnode) {
 }
 
 int vfs_resolve_mount(const char *path, vfs_t **out, char **remaining_path) {
-    assert(path);
-    assert(out);
-
     vfs_t *best_match = NULL;
     size_t best_len   = 0;
 
@@ -386,9 +383,6 @@ static int vfs_follow_symlink(vnode_t *vnode, vnode_t **out, int depth) {
 
 static int vfs_lookup_internal(const char *path, vnode_t **out, int depth,
                                bool follow_symlinks) {
-    assert(path);
-    assert(out);
-
     if (depth >= MAX_SYMLINK_DEPTH) {
         return -ELOOP;
     }

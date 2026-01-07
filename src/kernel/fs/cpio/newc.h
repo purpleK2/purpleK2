@@ -31,14 +31,15 @@ typedef struct {
     size_t file_count;
     void *archive_data;
     size_t archive_size;
-} cpio_fs_t;
+} cpio_t;
 
-int cpio_fs_parse(cpio_fs_t *fs, void *data, size_t size);
-size_t cpio_fs_read(cpio_fs_t *fs, const char *filename, void *buffer,
+int cpio_fs_parse(cpio_t *fs, void *data, size_t size);
+size_t cpio_fs_read(cpio_t *fs, const char *filename, void *buffer,
                     size_t bufsize);
-void cpio_fs_free(cpio_fs_t *fs);
-cpio_file_t *cpio_fs_get_file(cpio_fs_t *fs, const char *filename);
+void cpio_fs_free(cpio_t *fs);
+cpio_file_t *cpio_fs_get_file(cpio_t *fs, const char *filename);
 
-int cpio_ramfs_init(cpio_fs_t *fs, ramfs_t *ramfs);
+int cpio_extract(cpio_t *cpio, char *dest_path);
+int cpio_ramfs_init(cpio_t *fs, ramfs_t *ramfs);
 
 #endif // NEWC_H

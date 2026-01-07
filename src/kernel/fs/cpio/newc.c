@@ -5,6 +5,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <errors.h>
+
+#include <util/assert.h>
+
 #define align4(x) (((x) + 3) & ~3)
 
 typedef struct {
@@ -114,7 +118,7 @@ static int cpio_reader_next(cpio_reader_t *reader, cpio_file_t *file) {
     return 0;
 }
 
-int cpio_fs_parse(cpio_fs_t *fs, void *data, size_t size) {
+int cpio_fs_parse(cpio_t *fs, void *data, size_t size) {
     cpio_reader_t reader = {
         .pos = (uint8_t *)data,
         .end = (uint8_t *)data + size,
@@ -155,7 +159,7 @@ int cpio_fs_parse(cpio_fs_t *fs, void *data, size_t size) {
     return 0;
 }
 
-size_t cpio_fs_read(cpio_fs_t *fs, const char *filename, void *buffer,
+size_t cpio_fs_read(cpio_t *fs, const char *filename, void *buffer,
                     size_t bufsize) {
     for (size_t i = 0; i < fs->file_count; ++i) {
         if (strcmp(fs->files[i].filename, filename) == 0) {
@@ -169,7 +173,7 @@ size_t cpio_fs_read(cpio_fs_t *fs, const char *filename, void *buffer,
     return 0;
 }
 
-cpio_file_t *cpio_fs_get_file(cpio_fs_t *fs, const char *filename) {
+cpio_file_t *cpio_fs_get_file(cpio_t *fs, const char *filename) {
     for (size_t i = 0; i < fs->file_count; ++i) {
         if (strcmp(fs->files[i].filename, filename) == 0) {
             return &fs->files[i];
@@ -178,7 +182,7 @@ cpio_file_t *cpio_fs_get_file(cpio_fs_t *fs, const char *filename) {
     return NULL;
 }
 
-void cpio_fs_free(cpio_fs_t *fs) {
+void cpio_fs_free(cpio_t *fs) {
     for (size_t i = 0; i < fs->file_count; ++i) {
         kfree(fs->files[i].filename);
         kfree(fs->files[i].data);
@@ -188,78 +192,187 @@ void cpio_fs_free(cpio_fs_t *fs) {
     fs->file_count = 0;
 }
 
+/** Extracts a CPIO archive
+ * @param cpio the CPIO archive struct
+ * @param dest_path the destination path (eg. /)
+ */
+int cpio_extract(cpio_t *cpio, char *dest_path) {
+    if (!cpio || !dest_path) {
+        debugf_warn("Missing CPIO archive, or destination path (%p, %p).\n",
+                    cpio, dest_path);
+        return ENULLPTR;
+    }
+
+    // track the full path of a file
+    size_t s   = 20;
+    char *path = kmalloc(s);
+    memset(path, 0, s);
+    if ((strlen(dest_path) + 1) > s) {
+        path = krealloc(path, (strlen(dest_path) + 1));
+        s    = (strlen(dest_path) + 1);
+    }
+
+    debugf_debug("Extracting CPIO to %s\n", dest_path);
+
+    // Create the directory first
+    // TODO? don't hardcode the mode?
+    vfs_mkdir(dest_path, 0755);
+
+    for (size_t i = 0; i < cpio->file_count; i++) {
+        memset(path, 0, s);
+        strcat(path, dest_path);
+
+        cpio_file_t *file = &cpio->files[i];
+
+        debugf_debug("CPIO path %s\n", file->filename);
+
+        char *name_dup = strdup(file->filename);
+        char *temp     = name_dup;
+        char *dir;
+
+        if (file->namesize + 1 > s) {
+            s    = file->namesize + 1;
+            path = krealloc(path, s);
+        }
+
+        while (*temp) {
+            /*
+            A note for future Omar:
+            this call is laid out like this because:
+            - dir has the first occurrence of "/"
+            - temp will point to AFTER the occurrence,
+              something like, (dir + offset until next occurrence of "/"), if
+              there's any, or else it will simply point to the string terminator
+            (0)
+            */
+            dir = strtok_r(NULL, "/", &temp);
+
+            if (strlen(path) + strlen(dir) + 2 > s) {
+                s    = strlen(path) + strlen(dir) + 1;
+                path = krealloc(path, s);
+            }
+
+            strcat(path, "/");
+            strcat(path, dir);
+
+            debugf_debug("path=%s\n", path);
+
+            int flags = 0;
+
+            vnode_t *v;
+            fileio_t *f;
+
+            // lookup the path
+            if (vfs_lookup(path, &v) == EOK) {
+                // it exists, simply skip
+                continue;
+            }
+
+            // create the file if it doesn't
+            flags |= V_CREATE;
+
+            if (*temp) {
+                // a directory should exist
+                flags |= V_DIR;
+            }
+
+            char *dup = strdup(path);
+            if (vfs_open(dup, flags, &f) != EOK) {
+                debugf_warn("Can't create %s!\n", path);
+                kfree(dup);
+            }
+
+            // go on if this is a directory
+            if ((*temp)) {
+                continue;
+            }
+
+            // if a file has been created
+            if (write(f, file->data, file->filesize) != EOK) {
+                debugf_warn("Couldn't write to %s!\n", path);
+            }
+            close(f);
+        }
+
+        kfree(name_dup);
+    }
+
+    return 0;
+}
+
 // create a RAMFS structure from the given CPIO archive
-int cpio_ramfs_init(cpio_fs_t *fs, ramfs_t *ramfs) {
+int cpio_ramfs_init(cpio_t *fs, ramfs_t *ramfs) {
     if (!fs || !ramfs) {
         debugf_warn("Missing CPIO archive or RAMFS root struct!\n");
         return -1;
     }
-    
+
     if (!ramfs->root_node) {
-        debugf_warn("RAMFS root_node must be created before calling cpio_ramfs_init!\n");
+        debugf_warn("RAMFS root_node must be created before calling "
+                    "cpio_ramfs_init!\n");
         return -1;
     }
-    
+
     ramfs_node_t *cur_node = ramfs->root_node; // Start at the existing root
     ramfs_node_t *next_node;
-    
+
     for (size_t i = 0; i < fs->file_count; i++) {
         cpio_file_t *file = &fs->files[i];
-        
+
         char *name_dup = strdup(file->filename);
         char *temp     = name_dup;
         char *dir;
-        
+
         // Reset to root for each file
         cur_node = ramfs->root_node;
-        
+
         for (int j = 0; *temp; j++) {
             dir = strtok_r(NULL, "/", &temp);
-            
+
             ramfs_ftype_t rt;
             if (*temp) {
                 rt = RAMFS_DIRECTORY;
             } else {
                 rt = RAMFS_FILE;
             }
-            
+
             // Look for existing node in current directory
             ramfs_node_t *found = NULL;
             if (cur_node->type == RAMFS_DIRECTORY) {
-                for (ramfs_node_t *child = cur_node->child; child != NULL; child = child->sibling) {
+                for (ramfs_node_t *child = cur_node->child; child != NULL;
+                     child               = child->sibling) {
                     if (strcmp(child->name, dir) == 0) {
                         found = child;
                         break;
                     }
                 }
             }
-            
+
             if (found) {
                 // Node exists, descend into it
                 cur_node = found;
             } else {
                 // Create new node
-                next_node = ramfs_create_node(rt);
+                next_node       = ramfs_create_node(rt);
                 next_node->name = strdup(dir);
-                
+
                 if (rt == RAMFS_FILE) {
                     next_node->size = file->filesize;
                     next_node->data = file->data;
                 }
-                
+
                 // Add as child of current node
                 ramfs_append_child(cur_node, next_node);
-                
+
                 // Descend into new node if it's a directory
                 if (*temp) {
                     cur_node = next_node;
                 }
             }
         }
-        
+
         kfree(name_dup);
     }
-    
+
     return 0;
 }
-

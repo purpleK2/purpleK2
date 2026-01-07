@@ -13,6 +13,7 @@
 #define V_CREATE (1 << 0)
 #define V_EXCL   (1 << 1)
 #define V_TRUNC  (1 << 2)
+#define V_DIR    (1 << 3)
 
 // compiler skill issue
 typedef struct vnode vnode_t;

@@ -469,20 +469,10 @@ void kstart(void) {
     cpio_ramfs->root_node       = ramfs_create_node(RAMFS_DIRECTORY);
     cpio_ramfs->root_node->name = strdup("/");
 
-    // Populate ramfs from CPIO
-    if (cpio_ramfs_init(&fs, cpio_ramfs) != 0) {
-        kprintf_warn("CPIO to RAMFS conversion failed!\n");
-    }
+    vfs_mount(cpio_ramfs, "ramfs", INITRD_MOUNT, cpio_ramfs);
 
-    if (ramfs_vfs_init(cpio_ramfs, INITRD_MOUNT) != 0) {
-        kprintf_warn("Failed to mount RAMFS!\n");
-    }
-
-    fileio_t *test_file = open(INITRD_MOUNT "/directory/another.txt", 0);
-
-    if (!test_file) {
-        debugf_warn("Couldn't open file!\n");
-    }
+    // extract cpio
+    assert(cpio_extract(&cpio, INITRD_MOUNT) == EOK);
 
 #ifdef CONFIG_DEVFS_ENABLE
     devfs = devfs_create();

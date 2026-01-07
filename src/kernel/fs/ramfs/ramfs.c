@@ -67,14 +67,17 @@ int ramfs_find_node(ramfs_t *ramfs, char *path, ramfs_node_t **out) {
     return 0;
 }
 
-// @param path the path of the node that needs to be created
-// @param out the node that represents the given path
+/**
+ * Create all RAMFS nodes for a given path, if necessary
+ * @param ramfs the ramfs to work with
+ * @param path the path of the node that needs to be created
+ * @param out the node that represents the given path
+ */
 int ramfs_node_add(ramfs_t *ramfs, char *path, ramfs_node_t **out) {
     if (!ramfs || !ramfs->root_node || !path) {
         return ENULLPTR;
     }
 
-    // use this to check for parents, and eventually create them
     if (path[0] == '/') {
         path++;
     }
@@ -103,7 +106,7 @@ int ramfs_node_add(ramfs_t *ramfs, char *path, ramfs_node_t **out) {
                     continue;
                 }
 
-                // we just create the entries
+                // finally, create the entry
                 ramfs_node_t *n = ramfs_create_node(rt);
                 n->name         = strdup(dir);
                 continue;
@@ -279,8 +282,10 @@ int ramfs_open(vnode_t **vnode_r, int flags, bool clone, fileio_t **fio_out) {
                 return EUNFB;
             }
 
-            if (ramfs_node->type == RAMFS_FILE) {
-                ramfs_node->size = 10; // give it a size to start
+            if (flags & V_DIR) {
+                ramfs_node->type = RAMFS_DIRECTORY;
+                ramfs_node->size = 0;
+                ramfs_node->data = NULL;
             }
         }
     }
@@ -695,7 +700,12 @@ int ramfs_create(vnode_t *parent, const char *name, int flags, vnode_t **out) {
         }
     }
 
-    ramfs_node_t *new_file = ramfs_create_node(RAMFS_FILE);
+    ramfs_ftype_t rt = RAMFS_FILE;
+    if (flags & V_DIR) {
+        rt = RAMFS_DIRECTORY;
+    }
+
+    ramfs_node_t *new_file = ramfs_create_node(rt);
     new_file->name         = strdup(name);
     new_file->size         = 0;
     new_file->data         = NULL;

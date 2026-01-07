@@ -17,11 +17,10 @@ int f2vflags(int fio_flags) {
     if (fio_flags & (O_CREATE)) {
         vflags |= V_CREATE;
     }
-    /*  just keep it commented for now
     if (fio_flags & (O_DIRECTORY)) {
         vflags |= V_DIR;
     }
-    */
+
     return vflags;
 }
 
@@ -78,9 +77,7 @@ size_t read(fileio_t *file, size_t size, void *out) {
 }
 
 int write(fileio_t *file, void *buf, size_t size) {
-    assert(file);
     vnode_t *vn = file->private;
-    assert(vn);
 
     if (file->flags & PIPE_WRITE_END) {
         pipe_write(file, buf, &size);
