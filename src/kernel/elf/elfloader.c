@@ -37,9 +37,13 @@ static uint64_t elf_pf_to_page_flags(uint32_t pf_flags) {
         flags |= PMLE_WRITE;
     }
     
-    /*if (!(pf_flags & PF_X)) {
+    if (!(pf_flags & PF_X)) {
         flags |= PMLE_NOT_EXECUTABLE;
-    }*/
+    }
+
+    if ((pf_flags & PF_W) && (pf_flags & PF_X)) {
+        debugf_warn("Warning W+X segment detected!\n");
+    }
     
     return flags;
 }
@@ -135,12 +139,6 @@ int load_elf(const char *path, elf_program_t *out) {
         uint64_t page_flags = elf_pf_to_page_flags(phdr->p_flags);
         map_region(pml4, phys_base, seg_page_start, pages, page_flags);
 
-        debugf_debug("  PRESENT=%d USER=%d WRITE=%d NX=%d\n",
-                     !!(page_flags & PMLE_PRESENT),
-                     !!(page_flags & PMLE_USER),
-                     !!(page_flags & PMLE_WRITE),
-                     !!(page_flags & PMLE_NOT_EXECUTABLE));
-
         if (phdr->p_filesz > 0) {
             seek(elf_file, phdr->p_offset, SEEK_SET);
 
@@ -154,8 +152,6 @@ int load_elf(const char *path, elf_program_t *out) {
                 return -EIO;
             }
 
-            debugf_debug("Loaded %llu bytes at vaddr=0x%llx (phys=0x%llx)\n",
-                         phdr->p_filesz, phdr->p_vaddr, phys_base + offset_in_page);
         }
 
     }
@@ -168,88 +164,11 @@ int load_elf(const char *path, elf_program_t *out) {
         return -EINVAL;
     }
 
-    uint64_t entry_page = eh.e_entry & ~0xFFF;
-    uint64_t entry_phys = pg_virtual_to_phys(pml4, eh.e_entry);
-    uint64_t entry_page_entry = get_page_entry(pml4, eh.e_entry);
-    
-    debugf_debug("Entry point verification:\n");
-    debugf_debug("  Virtual: 0x%llx (page: 0x%llx)\n", eh.e_entry, entry_page);
-    debugf_debug("  Physical: 0x%llx\n", entry_phys);
-    debugf_debug("  Page entry: 0x%llx\n", entry_page_entry);
-    debugf_debug("  Flags: PRESENT=%d WRITE=%d USER=%d NX=%d\n",
-                 !!(entry_page_entry & PMLE_PRESENT),
-                 !!(entry_page_entry & PMLE_WRITE),
-                 !!(entry_page_entry & PMLE_USER),
-                 !!(entry_page_entry & PMLE_NOT_EXECUTABLE));
-
-    uint8_t *code = (uint8_t *)PHYS_TO_VIRTUAL(entry_phys);
-    debugf_debug("  Code at entry: %02x %02x %02x %02x %02x %02x %02x %02x\n",
-                 code[0], code[1], code[2], code[3],
-                 code[4], code[5], code[6], code[7]);
-
-    if (proc->threads[0]->regs) {
-        proc->threads[0]->regs->rip = eh.e_entry;
-        debugf_debug("Thread state before execution:\n");
-        debugf_debug("  RIP: 0x%llx\n", proc->threads[0]->regs->rip);
-        debugf_debug("  RSP: 0x%llx\n", proc->threads[0]->regs->rsp);
-        debugf_debug("  RBP: 0x%llx\n", proc->threads[0]->regs->rbp);
-        debugf_debug("  CS: 0x%llx (expected 0x1B for user)\n", proc->threads[0]->regs->cs);
-        debugf_debug("  SS: 0x%llx (expected 0x23 for user)\n", proc->threads[0]->regs->ss);
-        debugf_debug("  DS: 0x%llx\n", proc->threads[0]->regs->ds);
-        debugf_debug("  RFLAGS: 0x%llx\n", proc->threads[0]->regs->rflags);
-        
-        // Verify stack is mapped
-        uint64_t stack_page = proc->threads[0]->regs->rsp & ~0xFFF;
-        if (is_mapped(pml4, stack_page)) {
-            debugf_debug("  Stack page 0x%llx is mapped\n", stack_page);
-        } else {
-            debugf_warn("  Stack page 0x%llx is NOT mapped!\n", stack_page);
-        }
-        
-        // Show the PML4 being used
-        uint64_t pml4_phys = VIRT_TO_PHYSICAL((uint64_t)proc->vmc->pml4_table);
-        debugf_debug("  VMC PML4 table: 0x%llx\n", proc->vmc->pml4_table);
-        debugf_debug("  After VIRT_TO_PHYSICAL: 0x%llx\n", pml4_phys);
-        
-        // Get current CR3
-        uint64_t current_cr3;
-        __asm__ volatile("mov %%cr3, %0" : "=r"(current_cr3));
-        debugf_debug("  Current CR3: 0x%llx\n", current_cr3);
-        
-        // Test: switch to this PML4 now and verify the mapping
-        debugf_debug("Testing: switching to process PML4...\n");
-        _load_pml4((uint64_t *)pml4_phys);
-        
-        __asm__ volatile("mov %%cr3, %0" : "=r"(current_cr3));
-        debugf_debug("  CR3 after load: 0x%llx\n", current_cr3);
-        
-        // Verify mapping is visible in the new page table
-        if (is_addr_mapped(eh.e_entry)) {
-            uint64_t test_phys = pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(pml4_phys), eh.e_entry);
-            debugf_debug("  Entry 0x%llx IS mapped -> phys 0x%llx\n", eh.e_entry, test_phys);
-        } else {
-            debugf_warn("  Entry 0x%llx is NOT visible in loaded page table!\n", eh.e_entry);
-        }
-        
-        // Also check stack
-        if (is_addr_mapped(stack_page)) {
-            debugf_debug("  Stack 0x%llx IS mapped\n", stack_page);
-        } else {
-            debugf_warn("  Stack 0x%llx is NOT mapped!\n", stack_page);
-        }
-        
-        // Switch back to kernel PML4
-        _load_pml4(get_kernel_pml4());
-        debugf_debug("Switched back to kernel PML4\n");
-    }
-
     if (out) {
         out->pid = pid;
         out->pcb = proc;
-        out->main_thread = proc->threads[0];
+        out->main_thread = proc->main_thread;
         out->entry = eh.e_entry;
-        out->user_stack_top = 0x00007FFFFFFFF000ULL;
-        out->user_stack_pages = SCHEDULER_STACK_PAGES;
     }
 
     debugf_debug("ELF loaded successfully: PID=%d entry=0x%llx", pid, eh.e_entry);

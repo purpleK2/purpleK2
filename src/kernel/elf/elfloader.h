@@ -16,10 +16,7 @@ typedef struct elf_program {
     int     pid;
     pcb_t  *pcb;
     tcb_t  *main_thread;
-
     uint64_t entry;
-    uint64_t user_stack_top;
-    size_t   user_stack_pages;
 } elf_program_t;
 
 

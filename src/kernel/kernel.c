@@ -123,23 +123,16 @@ struct bootloader_data *get_bootloader_data() {
 
 vmc_t *kvmc;
 
-extern void __sched_test(void);
-
-// ffffffff800507b9
-
 devfs_t *devfs = NULL;
 
 void pk_init() {
     kprintf_ok("Hello!\n");
-    //proc_create(__sched_test, TF_MODE_KERNEL, "__sched_test");
     elf_program_t *prog = kmalloc(sizeof(elf_program_t));
     memset(prog, 0, sizeof(elf_program_t));
     if (load_elf("/initrd/sched_test.elf", prog) != 0) {
         debugf_warn("Failed to load /initrd/sched_test.elf\n");
         kfree(prog);
     }
-
-    debugf_ok("Starting __sched_test\n");
 
     // IT IS STILL A BAD IDEA TO JUST LET THE PAGEFAULT HANDLER KILL THE PROC 😭
     proc_exit();
