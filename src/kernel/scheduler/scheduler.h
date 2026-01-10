@@ -131,7 +131,7 @@ pcb_t *get_current_pcb();
 tcb_t *get_current_tcb();
 int thread_destroy(int pid, int tid);
 
-void yield();
+void yield(registers_t *ctx);
 
 void enter_usermode(void (*entry)(), void *user_stack);
 void syscall_return(registers_t *regs);

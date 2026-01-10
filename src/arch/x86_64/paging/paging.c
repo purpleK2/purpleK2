@@ -82,7 +82,7 @@ void pf_handler(registers_t *ctx) {
             PG_IF(pf_error_code) == 1 ? "yes" : "no");
         debugf_debug("CR3: %.16llx\n", cpu_get_cr(3));
         proc_exit();
-        yield();
+        yield(ctx);
         return;
     }
 

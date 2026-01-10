@@ -229,8 +229,6 @@ vmo_t *vmo_init(uint64_t base, size_t length, uint64_t flags) {
 // @note We will not care if `pml4` is 0x0 :^)
 // @param pml4_virt VIRTUAL address
 vmc_t *vmc_init(uint64_t *pml4_virt, uint64_t flags) {
-    spinlock_acquire(&VMM_LOCK);
-
     vmc_t *ctx = vmc_alloc();
 
     if (pml4_virt == NULL) {
@@ -240,18 +238,13 @@ vmc_t *vmc_init(uint64_t *pml4_virt, uint64_t flags) {
     ctx->pml4_table = (uint64_t *)VIRT_TO_PHYSICAL(pml4_virt);
     ctx->root_vmo   = vmo_init(0x1000, 1, flags);
 
-    spinlock_release(&VMM_LOCK);
 
     return ctx;
 }
 
 void vmc_destroy(vmc_t *ctx) {
-
-    spinlock_acquire(&VMM_LOCK);
-
-    if (VIRT_TO_PHYSICAL(ctx->pml4_table) == (uint64_t)cpu_get_cr(3)) {
-        kprintf_warn("Attempted to destroy a pagemap that's currently in use. "
-                     "Skipping\n");
+    if (ctx->pml4_table == (uint64_t *)cpu_get_cr(3)) {
+        debugf_warn("Attempted to destroy a pagemap (%.16llx) that's currently in use\n", VIRT_TO_PHYSICAL(ctx->pml4_table));
         return;
     }
 
@@ -310,8 +303,6 @@ void vmc_destroy(vmc_t *ctx) {
     vmc_free(ctx);
 
     ctx->pml4_table = NULL;
-
-    spinlock_release(&VMM_LOCK);
 }
 
 // @param where after how many pages should we split the VMO
@@ -379,8 +370,6 @@ void vmm_init(vmc_t *ctx) {
 
 // to be used by scheduler
 void process_vmm_init(vmc_t **proc_vmcr, uint64_t flags) {
-    spinlock_acquire(&VMM_LOCK);
-
     if (!proc_vmcr) {
         return;
     }
@@ -406,8 +395,6 @@ void process_vmm_init(vmc_t **proc_vmcr, uint64_t flags) {
     proc_vmc->pml4_table = (uint64_t *)pmm_alloc_page();
     memcpy((void *)PHYS_TO_VIRTUAL(proc_vmc->pml4_table),
            global_vmc->pml4_table, PFRAME_SIZE);
-
-    spinlock_release(&VMM_LOCK);
 }
 
 void *valloc(vmc_t *ctx, size_t pages, uint8_t flags, void *phys) {

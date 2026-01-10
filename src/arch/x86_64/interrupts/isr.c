@@ -59,15 +59,7 @@ static const char *const exceptions[] = {"Divide by zero error",
                                          ""};
 
 void isr_syscall(registers_t *ctx) {
-    long syscall_num = ctx->rax;
-    long arg1        = ctx->rdi;
-    long arg2        = ctx->rsi;
-    long arg3        = ctx->rdx;
-    long arg4        = ctx->r8;
-    long arg5        = ctx->r9;
-    long arg6        = ctx->r10;
-
-    long ret = handle_syscall(syscall_num, arg1, arg2, arg3, arg4, arg5, arg6);
+    long ret = handle_syscall(ctx);
 
     ctx->rax = ret;
 }

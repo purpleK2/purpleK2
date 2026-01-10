@@ -1,3 +1,4 @@
+#include "cpu.h"
 #ifndef SYSCALL_H
 #define SYSCALL_H 1
 
@@ -11,7 +12,7 @@
 #define SYS_fcntl 7
 #define SYS_dup   8
 
-void sys_exit(int status);
+void sys_exit(int status, registers_t *ctx);
 int sys_open(char *path, int mode);
 int sys_read(int fd, char *buf, int count);
 int sys_write(int fd, const char *buf, int count);
@@ -21,7 +22,6 @@ int sys_seek(int fd, int whence, int offset);
 int sys_fcntl(int fd, int op, void *arg);
 int sys_dup(int fd);
 
-long handle_syscall(long num, long arg1, long arg2, long arg3, long arg4,
-                    long arg5, long arg6);
+long handle_syscall(registers_t *ctx);
 
 #endif // SYSCALL_H

@@ -22,5 +22,5 @@ void timer_tick(registers_t *ctx) {
 
 void scheduler_timer_tick(registers_t *ctx) {
     timer_tick(ctx);
-    yield();
+    yield(ctx);
 }

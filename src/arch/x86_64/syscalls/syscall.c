@@ -1,4 +1,5 @@
 #include "syscall.h"
+#include "cpu.h"
 
 #include <fs/file_io.h>
 #include <fs/vfs/vfs.h>
@@ -10,11 +11,11 @@
 #include <string.h>
 #include <util/macro.h>
 
-void sys_exit(int status) {
+void sys_exit(int status, registers_t *ctx) {
     UNUSED(status);
 
     proc_exit();
-    yield();
+    yield(ctx);
 }
 
 int sys_open(char *path, int mode) {
@@ -155,14 +156,21 @@ int sys_dup(int fd) {
     return current->fd_count - 1;
 }
 
-long handle_syscall(long num, long arg1, long arg2, long arg3, long arg4,
-                    long arg5, long arg6) {
+long handle_syscall(registers_t *ctx) {
+    long num = ctx->rax;
+    long arg1        = ctx->rdi;
+    long arg2        = ctx->rsi;
+    long arg3        = ctx->rdx;
+    long arg4        = ctx->r8;
+    long arg5        = ctx->r9;
+    long arg6        = ctx->r10;
+
     UNUSED(arg4);
     UNUSED(arg5);
     UNUSED(arg6);
     switch (num) {
     case SYS_exit:
-        sys_exit(arg1);
+        sys_exit(arg1, ctx);
         break;
     case SYS_open:
         return sys_open((char *)(uintptr_t)arg1, arg2);

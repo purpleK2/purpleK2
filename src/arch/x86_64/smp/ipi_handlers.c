@@ -28,9 +28,6 @@ void ipi_handler_halt(registers_t *ctx) {
 void ipi_handler_tlb_flush(registers_t *ctx) {
     uint64_t cpu = get_cpu();
 
-    debugf_debug("Processor %lu flushed TLB @ %llx\n", cpu,
-                 ((registers_t *)ctx)->rip);
-
     _load_pml4(get_current_vmc()->pml4_table);
     lapic_send_eoi();
 }

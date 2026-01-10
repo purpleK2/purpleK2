@@ -446,8 +446,8 @@ void kstart(void) {
     dev_parallel_init();
     dev_fb_init();
 
-    // smp_init();
-    // limine_parsed_data.smp_enabled = true;
+    //smp_init();
+    //limine_parsed_data.smp_enabled = true;
 
     pci_scan(INITRD_MOUNT "/pci.ids");
     kprintf_ok("PCI devices parsing done\n");
@@ -476,6 +476,8 @@ void kstart(void) {
 
     fs_list(INITRD_MOUNT, -1);
 
+    // ffffffff80045977
+
     /*
     mod_t *mbr = load_module("/initrd/modules/mbr.km");
     start_module(mbr);
@@ -503,10 +505,7 @@ void kstart(void) {
     _disable_interrupts(); // just in case
     irq_registerHandler(0, scheduler_timer_tick);
     kprintf_ok("Scheduler initialized\n");
-    // boom
     _enable_interrupts();
-
-    // fffffff80045215
 
     for (;;)
         ;

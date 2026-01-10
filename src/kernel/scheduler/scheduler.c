@@ -124,11 +124,11 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
 
         uint64_t user_stack_top  = 0x00007FFFFFFFF000ULL + 0x1000;
         uint64_t user_stack_base = user_stack_top - SCHEDULER_STACKSZ;
-uint64_t user_stack_phys = VIRT_TO_PHYSICAL(thread->user_stack);
+        uint64_t user_stack_phys = VIRT_TO_PHYSICAL(thread->user_stack);
 
-map_region((uint64_t *)PHYS_TO_VIRTUAL(parent->vmc->pml4_table),
-           user_stack_phys, user_stack_base,
-           SCHEDULER_STACK_PAGES, PMLE_USER_READ_WRITE);
+        map_region((uint64_t *)PHYS_TO_VIRTUAL(parent->vmc->pml4_table),
+                user_stack_phys, user_stack_base,
+                SCHEDULER_STACK_PAGES, PMLE_USER_READ_WRITE);
 
 
         ctx->rip    = (uint64_t)entry;
@@ -336,22 +336,23 @@ int proc_exit() {
 
     int ret = pcb_destroy(current->parent->pid);
 
-    debugf("Process %d (%s) exitded!\n", current->parent->pid,
+    debugf_debug("Process %d (%s) exited!\n", current->parent->pid,
            current->parent->name ? current->parent->name : "no-name");
 
     return ret;
 }
 
-void yield() {
+void yield(registers_t *ctx) {
     int cpu        = get_cpu();
     tcb_t *current = current_threads[cpu];
     tcb_t *next;
     _load_pml4(get_kernel_pml4());
-    debugf_debug("Switched to kernel pagemap\n");
 
     if (!current) {
         current = pick_next_thread(cpu);
     }
+
+    // ffffffff80051bc3
 
     switch (current->state) {
     case THREAD_READY:
@@ -364,6 +365,7 @@ void yield() {
         }
 
         fpu_save(current->fpu);
+        memcpy(current->regs, ctx, sizeof(*ctx));
 
         current->state      = THREAD_READY;
         current->time_slice = SCHEDULER_THREAD_TS;
@@ -375,8 +377,8 @@ void yield() {
     case THREAD_WAITING:
     case THREAD_DEAD:
         thread_remove_from_queue(current);
-        debugf_debug("Cleaned up thread TID=%d, PID=%d\n", current->tid,
-                     current->parent->pid);
+        int pid = current->parent->pid;
+        int tid = current->tid;
         if (current->parent->state == PROC_DEAD) {
             pmm_free((void *)VIRT_TO_PHYSICAL(current->kernel_stack),
                      SCHEDULER_STACK_PAGES);
@@ -384,14 +386,17 @@ void yield() {
                 pmm_free((void *)VIRT_TO_PHYSICAL(current->user_stack),
                          SCHEDULER_STACK_PAGES);
             }
+            if (current->flags & TF_MODE_USER) {
+                vmc_destroy(current->parent->vmc);
+            }
             kfree(current->fpu);
             kfree(current->regs);
             kfree(current->parent->threads);
             kfree(current->parent->name);
-            vmc_destroy(current->parent->vmc);
             kfree(current->parent);
         }
         next = pick_next_thread(cpu);
+        debugf_debug("Cleaned up thread TID=%d, PID=%d\n", tid, pid);
         break;
     }
 
@@ -414,9 +419,6 @@ void yield() {
         uint64_t kernel_stack_top =
             (uint64_t)next->kernel_stack + SCHEDULER_STACKSZ;
         tss_set_kernel_stack(kernel_stack_top);
-
-        debugf_debug("Switching to usermode thread TID=%d, kernel_stack=%p\n",
-                     next->tid, (void *)kernel_stack_top);
     }
 
     fpu_restore(next->fpu);
