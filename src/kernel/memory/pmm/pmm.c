@@ -5,6 +5,7 @@
 */
 
 #include "pmm.h"
+#include "paging/paging.h"
 
 #include <autoconf.h>
 #include <kernel.h>
@@ -76,9 +77,11 @@ int get_freelist_entry_count() {
 */
 flnode_t *fl_update_nodes() {
     pmm.usable_entry_count = 0;
-    for (flnode_t *i = pmm.head; i != NULL;
-         i           = i->next, pmm.usable_entry_count++)
-        ;
+    flnode_t *i = pmm.head;
+    while (!is_addr_mapped((uint64_t)i)) {
+        pmm.usable_entry_count++;
+        i = i->next; // ffffffff880041449
+    }
 
 #ifdef CONFIG_PMM_DEBUG
     debugf_debug("Used memory: %llu MiB\n", pmm.used_memory / 1024 / 1024);
@@ -172,7 +175,9 @@ void pmm_free(void *ptr, size_t pages) {
     flnode_t *deallocated = (flnode_t *)PHYS_TO_VIRTUAL(ptr);
 
     // you can check vmm.c for an explanation of the same behaviour
-    for (flnode_t *f = pmm.head; f != NULL; f = f->next) {
+    flnode_t *f = pmm.head;
+    while (!is_addr_mapped((uint64_t)f)) {
+        f = f->next;
         flnode_t *next = f->next;
 
         if (next < deallocated) {

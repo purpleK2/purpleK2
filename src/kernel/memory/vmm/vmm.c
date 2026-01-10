@@ -180,6 +180,14 @@ void vmmlist_free(vmm_node_t **root_node, size_t item_size, void *tofree) {
         break; // we don't need to go on with the loop
     }
 
+    if (v_cur == NULL) {
+        v_prev->next = v_tofree;
+        v_tofree->len = item_size;
+        v_tofree->next = NULL;
+        v_cur = v_tofree;
+    }
+
+
     if (v_cur->len % PFRAME_SIZE != 0) {
         return;
     }
@@ -257,9 +265,8 @@ void vmc_destroy(vmc_t *ctx) {
 
         // Only free physical memory if the VMO is mapped
         if (v->flags & VMO_PRESENT) {
-            uint64_t phys = pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(ctx->pml4_table), v->base);
-            if (phys) {
-                pmm_free((void *)PHYS_TO_VIRTUAL(phys), v->len);
+            if (is_addr_mapped_in((uint64_t *)PHYS_TO_VIRTUAL(ctx->pml4_table), v->base)) {
+                pmm_free((void *)PHYS_TO_VIRTUAL(v->base), v->len);
             }
         }
 
@@ -290,15 +297,21 @@ void vmc_destroy(vmc_t *ctx) {
                 uint64_t *pt = (uint64_t *)PHYS_TO_VIRTUAL(pd[pd_idx] & ~0xFFF);
 
                 // Free the page table
-                pmm_free((void *)pt, 1);
+                if (is_addr_mapped((uint64_t)pt)) {
+                    pmm_free((void *)pt, 1);
+                }
             }
 
             // Free the page directory
-            pmm_free((void *)pd, 1);
+            if (is_addr_mapped((uint64_t)pd)) {
+                pmm_free((void *)pd, 1);
+            }
         }
 
         // Free the PDPT
-        pmm_free((void *)pdpt, 1);
+        if (is_addr_mapped((uint64_t)pdpt)) {
+            pmm_free((void *)pdpt, 1);
+        }
     }
 
     // Free the PML4 table and the context
