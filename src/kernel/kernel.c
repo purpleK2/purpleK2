@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "elf/elfloader.h"
 #include "pci/pci.h"
 
 #include <autoconf.h>
@@ -124,15 +125,20 @@ vmc_t *kvmc;
 
 extern void __sched_test(void);
 
-// HBA_MEM *abar_mem = NULL;
-
-// HBA_MEM *mem;
+// ffffffff800507b9
 
 devfs_t *devfs = NULL;
 
 void pk_init() {
     kprintf_ok("Hello!\n");
-    proc_create(__sched_test, TF_MODE_KERNEL, "__sched_test");
+    //proc_create(__sched_test, TF_MODE_KERNEL, "__sched_test");
+    elf_program_t *prog = kmalloc(sizeof(elf_program_t));
+    memset(prog, 0, sizeof(elf_program_t));
+    if (load_elf("/initrd/sched_test.elf", prog) != 0) {
+        debugf_warn("Failed to load /initrd/sched_test.elf\n");
+        kfree(prog);
+    }
+
     debugf_ok("Starting __sched_test\n");
 
     // IT IS STILL A BAD IDEA TO JUST LET THE PAGEFAULT HANDLER KILL THE PROC 😭
@@ -478,6 +484,8 @@ void kstart(void) {
     read(f, 30, buf);
     kprintf("Reading contents: %s\n", buf);
 
+    fs_list(INITRD_MOUNT, -1);
+
     /*
     mod_t *mbr = load_module("/initrd/modules/mbr.km");
     start_module(mbr);
@@ -507,6 +515,8 @@ void kstart(void) {
     kprintf_ok("Scheduler initialized\n");
     // boom
     _enable_interrupts();
+
+    // fffffff80045215
 
     for (;;)
         ;

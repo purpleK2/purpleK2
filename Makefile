@@ -29,8 +29,8 @@ MODULES := $(foreach d,$(MODULE_DIRS),$(wildcard $(d)/*.km))
 QEMU_FLAGS = -m 2G \
     		 -debugcon stdio \
     		 -M q35 \
-    		 -smp 2 \
-    		 -enable-kvm \
+    		 -smp 1 \
+			 -enable-kvm \
     		 -netdev tap,id=net0,ifname=tap0,script=no,downscript=no \
 		 	 -device rtl8139,netdev=net0,mac=52:54:00:12:34:56
 
@@ -245,6 +245,7 @@ libs:
 
 # Create initrd image
 $(BUILD_DIR)/$(INITRD): modules
+		cp apps/init/sched_test.elf $(INITRD_DIR)/sched_test.elf
 		cd $(INITRD_DIR) && \
 		find . -type f | cpio -H newc -o > ../$(BUILD_DIR)/$(INITRD) && \
 		cd ..

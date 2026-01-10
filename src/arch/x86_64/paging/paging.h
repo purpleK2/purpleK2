@@ -121,4 +121,7 @@ bool is_mapped(uint64_t *pml4_table, uint64_t address);
 void pat_init(void);
 void paging_init(uint64_t *kernel_pml4);
 
+bool is_addr_mapped_in(uint64_t *pml4_table, uint64_t address);
+bool is_addr_mapped(uint64_t address);
+
 #endif

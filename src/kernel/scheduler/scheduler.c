@@ -124,10 +124,12 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
 
         uint64_t user_stack_top  = 0x00007FFFFFFFF000ULL + 0x1000;
         uint64_t user_stack_base = user_stack_top - SCHEDULER_STACKSZ;
+uint64_t user_stack_phys = VIRT_TO_PHYSICAL(thread->user_stack);
 
-        map_region((uint64_t *)PHYS_TO_VIRTUAL(parent->vmc->pml4_table),
-                   (uint64_t)thread->user_stack, user_stack_base,
-                   SCHEDULER_STACK_PAGES, PMLE_USER_READ_WRITE);
+map_region((uint64_t *)PHYS_TO_VIRTUAL(parent->vmc->pml4_table),
+           user_stack_phys, user_stack_base,
+           SCHEDULER_STACK_PAGES, PMLE_USER_READ_WRITE);
+
 
         ctx->rip    = (uint64_t)entry;
         ctx->cs     = 0x1B | 3;
@@ -400,10 +402,20 @@ void yield() {
     next->state          = THREAD_RUNNING;
 
     if (next->parent && next->parent->vmc) {
-        uint64_t pml4_phys =
-            VIRT_TO_PHYSICAL((uint64_t)next->parent->vmc->pml4_table);
-        vmc_switch(next->parent->vmc);
-        _load_pml4((uint64_t *)pml4_phys);
+        uint64_t pml4_phys = VIRT_TO_PHYSICAL((uint64_t)next->parent->vmc->pml4_table);
+    
+    debugf_debug("[SCHEDULER] Switching to PID=%d TID=%d\n", 
+                 next->parent->pid, next->tid);
+    debugf_debug("[SCHEDULER] Loading PML4: virt=0x%llx phys=0x%llx\n",
+                 next->parent->vmc->pml4_table, pml4_phys);
+    
+    vmc_switch(next->parent->vmc);
+    _load_pml4((uint64_t *)pml4_phys);
+    
+    uint64_t verify_cr3;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(verify_cr3));
+    debugf_debug("[SCHEDULER] CR3 is now: 0x%llx\n", verify_cr3);
+    debugf_debug("[SCHEDULER] About to jump to RIP=0x%llx\n", next->regs->rip);
     }
 
     if (next && (next->flags & TF_MODE_USER)) {

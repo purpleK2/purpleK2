@@ -138,4 +138,7 @@ void syscall_return(registers_t *regs);
 
 void scheduler_procfs_print();
 
+tcb_t *tcb_lookup(int pid, int tid);
+pcb_t *pcb_lookup(int pid);
+
 #endif // SCHEDULER_H

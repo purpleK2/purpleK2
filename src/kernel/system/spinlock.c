@@ -4,9 +4,9 @@
 #include <types.h>
 
 void spinlock_acquire(atomic_flag *lock) {
-    while (atomic_flag_test_and_set(lock)) {
+    /*while (atomic_flag_test_and_set(lock)) {
         asm("pause");
-    }
+    }*/
 }
 
 void spinlock_force_acquire(atomic_flag *lock) {

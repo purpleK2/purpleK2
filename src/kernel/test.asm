@@ -20,11 +20,7 @@ __sched_test:
     mov rsi, what_to_write
     mov rdx, 20
     int 0x80        ; (3 = write) (rdi, "hello from process\n", 20)
-
-	mov rdi, root
-	mov rsi, -1
-	call fs_list    ; fs_list("/", -1)
-
+    
     mov rax, 0
     mov rdi, 0
     int 0x80        ; (0 = exit) (0)

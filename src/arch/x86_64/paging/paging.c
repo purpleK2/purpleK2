@@ -76,9 +76,13 @@ void pf_handler(registers_t *ctx) {
     uint64_t pf_error_code = (uint64_t)ctx->error;
 
     if (PG_IF(pf_error_code)) {
-        debugf_debug("Killing a process\n");
+        debugf_debug("Killing process %d, because of a page fault from the %d (1 is user, 0 is kernel).ss=%x, cs=%x rip: %.16llx, fault_addr: %.16llx, instr_fetch: %s\n",
+            PG_RING(pf_error_code), 
+            get_current_pcb()->pid, ctx->ss, ctx->cs, ctx->rip, cpu_get_cr(2),
+            PG_IF(pf_error_code) == 1 ? "yes" : "no");
+        debugf_debug("CR3: %.16llx\n", cpu_get_cr(3));
         proc_exit();
-        yield(); // tell scheduler to select another process  427b1
+        yield();
         return;
     }
 
@@ -207,9 +211,9 @@ void map_phys_to_page(uint64_t *pml4_table, uint64_t physical, uint64_t virtual,
     uint64_t *pdp_table =
         get_create_pmlt(pml4_table, pml4_index, (flags & 0b111));
     uint64_t *pdir_table =
-        get_create_pmlt(pdp_table, pdp_index, (flags & ~(PMLE_PAT)));
+        get_create_pmlt(pdp_table, pdp_index, (flags & ~(PMLE_PAT) & 0b111));
     uint64_t *page_table =
-        get_create_pmlt(pdir_table, pdir_index, (flags & ~(PMLE_PAT)));
+        get_create_pmlt(pdir_table, pdir_index, (flags & ~(PMLE_PAT) & 0b111));
 
     page_table[ptab_index] = PG_GET_ADDR(physical) | flags;
 
@@ -439,4 +443,71 @@ void paging_init(uint64_t *kernel_pml4) {
     debugf_debug("Loading pml4 %llp into CR3\n", global_pml4);
     _load_pml4(global_pml4);
     debugf_debug("Guys, we're in.\n");
+}
+
+bool is_addr_mapped(uint64_t address) {
+    uint64_t pml4_index = PML4_INDEX(address);
+    uint64_t pdp_index  = PDP_INDEX(address);
+    uint64_t pdir_index = PDIR_INDEX(address);
+    uint64_t ptab_index = PTAB_INDEX(address);
+
+    uint64_t *pml4_table = _get_pml4();
+    pml4_table = (uint64_t *)PHYS_TO_VIRTUAL(pml4_table);
+
+    if (!(pml4_table[pml4_index] & PMLE_PRESENT)) {
+        return false;
+    }
+
+    uint64_t *pdp_table = (uint64_t *)PHYS_TO_VIRTUAL(
+        PG_GET_ADDR(pml4_table[pml4_index])
+    );
+    
+    if (!(pdp_table[pdp_index] & PMLE_PRESENT)) {
+        return false;
+    }
+
+    uint64_t *pdir_table = (uint64_t *)PHYS_TO_VIRTUAL(
+        PG_GET_ADDR(pdp_table[pdp_index])
+    );
+    
+    if (!(pdir_table[pdir_index] & PMLE_PRESENT)) {
+        return false;
+    }
+
+    uint64_t *page_table = (uint64_t *)PHYS_TO_VIRTUAL(
+        PG_GET_ADDR(pdir_table[pdir_index])
+    );
+    
+    return (page_table[ptab_index] & PMLE_PRESENT) != 0;
+}
+
+bool is_addr_mapped_in(uint64_t *pml4_table, uint64_t address) {
+    uint64_t pml4_index = PML4_INDEX(address);
+    uint64_t pdp_index  = PDP_INDEX(address);
+    uint64_t pdir_index = PDIR_INDEX(address);
+    uint64_t ptab_index = PTAB_INDEX(address);
+
+    if (!(pml4_table[pml4_index] & PMLE_PRESENT)) {
+        return false;
+    }
+
+    uint64_t *pdp_table = (uint64_t *)PHYS_TO_VIRTUAL(
+        PG_GET_ADDR(pml4_table[pml4_index])
+    );
+    if (!(pdp_table[pdp_index] & PMLE_PRESENT)) {
+        return false;
+    }
+
+    uint64_t *pdir_table = (uint64_t *)PHYS_TO_VIRTUAL(
+        PG_GET_ADDR(pdp_table[pdp_index])
+    );
+    if (!(pdir_table[pdir_index] & PMLE_PRESENT)) {
+        return false;
+    }
+
+    uint64_t *page_table = (uint64_t *)PHYS_TO_VIRTUAL(
+        PG_GET_ADDR(pdir_table[pdir_index])
+    );
+    
+    return (page_table[ptab_index] & PMLE_PRESENT) != 0;
 }
