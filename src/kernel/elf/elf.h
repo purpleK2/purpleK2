@@ -4,6 +4,20 @@
 // https://github.com/sasdallas/Ethereal/blob/main/hexahedron/include/kernel/loader/elf.h
 // :^)
 
+// obligatory copyright header (sasdallas told me to add it here)
+/**
+ * @file hexahedron/include/kernel/loader/elf.h
+ * @brief ELF header (NOTE: This does not contain any loading functions, but rather ELF information)
+ * 
+ * 
+ * @copyright
+ * This file is part of the Hexahedron kernel, which is apart of the Ethereal Operating System.
+ * It is released under the terms of the BSD 3-clause license.
+ * Please see the LICENSE file in the main repository for more details.
+ * 
+ * Copyright (C) 2024 Samuel Stuart
+ */
+
 #include <stdint.h>
 
 /* ELF File Types */
