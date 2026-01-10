@@ -129,8 +129,8 @@ void pk_init() {
     kprintf_ok("Hello!\n");
     elf_program_t *prog = kmalloc(sizeof(elf_program_t));
     memset(prog, 0, sizeof(elf_program_t));
-    if (load_elf("/initrd/sched_test.elf", prog) != 0) {
-        debugf_warn("Failed to load /initrd/sched_test.elf\n");
+    if (load_elf("/initrd/bin/init.elf", prog) != 0) {
+        debugf_warn("Failed to load /initrd/bin/init.elf\n");
         kfree(prog);
     }
 

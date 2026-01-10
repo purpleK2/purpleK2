@@ -26,10 +26,12 @@ KCONFIG_AUTOCONF = $(KERNEL_SRC_DIR)/autoconf.h
 MODULE_DIRS := $(shell find modules -mindepth 1 -maxdepth 4 -type d)
 MODULES := $(foreach d,$(MODULE_DIRS),$(wildcard $(d)/*.km))
 
+APPS_DIRS := $(shell find apps -mindepth 1 -maxdepth 1 -type d)
+
 QEMU_FLAGS = -m 2G \
     		 -debugcon stdio \
     		 -M q35 \
-    		 -smp 1 \
+    		 -smp 2 \
 			 -enable-kvm \
     		 -netdev tap,id=net0,ifname=tap0,script=no,downscript=no \
 		 	 -device rtl8139,netdev=net0,mac=52:54:00:12:34:56
@@ -237,6 +239,20 @@ modules:
 		done; \
 	done
 
+.PHONY: apps
+apps:
+	@mkdir -p target/bin
+	@for dir in $(APPS_DIRS); do \
+		echo "--> Building app in $$dir"; \
+		$(MAKE) -C $$dir; \
+		for f in $$dir/*; do \
+			if readelf -h "$$f" >/dev/null 2>&1; then \
+				if [ -f $$f ]; then \
+					cp -v $$f target/bin; \
+				fi; \
+			fi; \
+		done; \
+	done
 	
 libs:
 	@./libs/clone_repos.sh libs/
@@ -244,8 +260,7 @@ libs:
 	@$(MAKE) limine_build
 
 # Create initrd image
-$(BUILD_DIR)/$(INITRD): modules
-		cp apps/init/sched_test.elf $(INITRD_DIR)/sched_test.elf
+$(BUILD_DIR)/$(INITRD): modules apps
 		cd $(INITRD_DIR) && \
 		find . -type f | cpio -H newc -o > ../$(BUILD_DIR)/$(INITRD) && \
 		cd ..

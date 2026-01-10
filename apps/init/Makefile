@@ -10,5 +10,5 @@ all:
   		-Wl,--entry=_start \
   		-Wl,--no-dynamic-linker \
   		-Wl,--build-id=none \
-  		-o sched_test.elf \
+  		-o init.elf \
   		main.c
