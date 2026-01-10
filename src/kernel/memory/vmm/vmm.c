@@ -4,6 +4,7 @@
 #include <cpu.h>
 #include <kernel.h>
 
+#include "memory/pmm/pmm.h"
 #include "vflags.h"
 #include <paging/paging.h>
 
@@ -260,7 +261,7 @@ void vmc_destroy(vmc_t *ctx) {
 
         // Only free physical memory if the VMO is mapped
         if (v->flags & VMO_PRESENT) {
-            uint64_t phys = pg_virtual_to_phys(ctx->pml4_table, v->base);
+            uint64_t phys = pg_virtual_to_phys((uint64_t *)PHYS_TO_VIRTUAL(ctx->pml4_table), v->base);
             if (phys) {
                 pmm_free((void *)PHYS_TO_VIRTUAL(phys), v->len);
             }

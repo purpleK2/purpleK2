@@ -336,7 +336,7 @@ int proc_exit() {
 
     int ret = pcb_destroy(current->parent->pid);
 
-    debugf("Process %d (%s) killed!\n", current->parent->pid,
+    debugf("Process %d (%s) exitded!\n", current->parent->pid,
            current->parent->name ? current->parent->name : "no-name");
 
     return ret;
@@ -346,6 +346,8 @@ void yield() {
     int cpu        = get_cpu();
     tcb_t *current = current_threads[cpu];
     tcb_t *next;
+    _load_pml4(get_kernel_pml4());
+    debugf_debug("Switched to kernel pagemap\n");
 
     if (!current) {
         current = pick_next_thread(cpu);
@@ -386,7 +388,7 @@ void yield() {
             kfree(current->regs);
             kfree(current->parent->threads);
             kfree(current->parent->name);
-            kfree(current->parent->vmc->pml4_table);
+            vmc_destroy(current->parent->vmc);
             kfree(current->parent);
         }
         next = pick_next_thread(cpu);
