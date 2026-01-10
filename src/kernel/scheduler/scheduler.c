@@ -406,18 +406,8 @@ void yield() {
     if (next->parent && next->parent->vmc) {
         uint64_t pml4_phys = VIRT_TO_PHYSICAL((uint64_t)next->parent->vmc->pml4_table);
     
-    debugf_debug("[SCHEDULER] Switching to PID=%d TID=%d\n", 
-                 next->parent->pid, next->tid);
-    debugf_debug("[SCHEDULER] Loading PML4: virt=0x%llx phys=0x%llx\n",
-                 next->parent->vmc->pml4_table, pml4_phys);
-    
-    vmc_switch(next->parent->vmc);
-    _load_pml4((uint64_t *)pml4_phys);
-    
-    uint64_t verify_cr3;
-    __asm__ volatile("mov %%cr3, %0" : "=r"(verify_cr3));
-    debugf_debug("[SCHEDULER] CR3 is now: 0x%llx\n", verify_cr3);
-    debugf_debug("[SCHEDULER] About to jump to RIP=0x%llx\n", next->regs->rip);
+        vmc_switch(next->parent->vmc);
+        _load_pml4((uint64_t *)pml4_phys);
     }
 
     if (next && (next->flags & TF_MODE_USER)) {
