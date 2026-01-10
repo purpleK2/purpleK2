@@ -123,8 +123,6 @@ struct bootloader_data *get_bootloader_data() {
 
 vmc_t *kvmc;
 
-devfs_t *devfs = NULL;
-
 void pk_init() {
     kprintf_ok("Hello!\n");
     elf_program_t *prog = kmalloc(sizeof(elf_program_t));
@@ -432,7 +430,6 @@ void kstart(void) {
 
 #ifdef CONFIG_DEVFS_ENABLE
     devfs_init();
-    devfs = devfs_create();
 
     if (vfs_mount(NULL, "devfs", CONFIG_DEVFS_MOUNT, NULL) == NULL) {
         kprintf_warn("Failed to initialize DEVFS!\n");
