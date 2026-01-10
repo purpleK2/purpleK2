@@ -171,7 +171,7 @@ int load_elf(const char *path, elf_program_t *out) {
         out->entry = eh.e_entry;
     }
 
-    debugf_debug("ELF loaded successfully: PID=%d entry=0x%llx", pid, eh.e_entry);
+    debugf_debug("ELF loaded successfully: PID=%d entry=0x%llx\n", pid, eh.e_entry);
 
     asm volatile("sti");
 
