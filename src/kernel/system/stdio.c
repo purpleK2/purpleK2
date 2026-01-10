@@ -70,12 +70,16 @@ void clearscreen() {
 
 void putc(int c, void *ctx) {
     UNUSED(ctx);
+    spinlock_acquire(&STDIO_FB_LOCK);
     _term_putc(c);
+    spinlock_release(&STDIO_FB_LOCK);
 }
 
 void dputc(int c, void *ctx) {
     UNUSED(ctx);
+    spinlock_acquire(&STDIO_E9_LOCK);
     _outb(0xE9, c);
+    spinlock_release(&STDIO_E9_LOCK);
 }
 
 void mputc(int c, void *ctx) {
