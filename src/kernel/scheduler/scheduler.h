@@ -55,6 +55,8 @@ typedef struct thread {
     registers_t *regs;
     void *fpu; // 512 bytes memory region
 
+    int priority; // for MLFQ
+
     // for usermode
     void *kernel_stack;
     void *user_stack;

@@ -24,7 +24,22 @@
 
 #include <util/assert.h>
 
-static cpu_queue_t *thread_queues;
+#define MLFQ_NUM_QUEUES 4
+#define MLFQ_BOOST_INTERVAL 100
+
+typedef struct mlfq_queue {
+    tcb_t *head;
+    tcb_t *tail;
+    size_t count;
+    int time_quantum;
+} mlfq_queue_t;
+
+typedef struct cpu_mlfq {
+    mlfq_queue_t queues[MLFQ_NUM_QUEUES];
+    uint64_t ticks_since_boost;
+} cpu_mlfq_t;
+
+static cpu_mlfq_t *thread_queues;
 static tcb_t **current_threads;
 static int cpu_count;
 
@@ -34,13 +49,23 @@ atomic_flag SCHEDULER_LOCK = ATOMIC_FLAG_INIT;
 int init_scheduler() {
     cpu_count = get_bootloader_data()->cpu_count;
 
-    thread_queues   = kmalloc(sizeof(cpu_queue_t) * cpu_count);
+    thread_queues   = kmalloc(sizeof(cpu_mlfq_t) * cpu_count);
     current_threads = kmalloc(sizeof(tcb_t *) * cpu_count);
-    memset(thread_queues, 0, sizeof(cpu_queue_t) * cpu_count);
+    memset(thread_queues, 0, sizeof(cpu_mlfq_t) * cpu_count);
     memset(current_threads, 0, sizeof(tcb_t *) * cpu_count);
 
     assert(thread_queues);
     assert(current_threads);
+
+    for (int cpu = 0; cpu < cpu_count; cpu++) {
+        for (int queue = 0; queue < MLFQ_NUM_QUEUES; queue++) {
+            thread_queues[cpu].queues[queue].head       = NULL;
+            thread_queues[cpu].queues[queue].tail       = NULL;
+            thread_queues[cpu].queues[queue].count      = 0;
+            thread_queues[cpu].queues[queue].time_quantum = (1 << queue) * SCHEDULER_THREAD_TS;
+        }
+        thread_queues[cpu].ticks_since_boost = 0;
+    }
 
     procfs_init();
     vfs_mkdir("/proc", 0755);
@@ -49,16 +74,111 @@ int init_scheduler() {
     return 0;
 }
 
-static tcb_t *pick_next_thread(int cpu) {
-    tcb_t *thread = thread_queues[cpu].head;
+static void mlfq_enqueue(int cpu, tcb_t *thread, int priority) {
+    if (priority < 0) priority = 0;
+    if (priority >= MLFQ_NUM_QUEUES) priority = MLFQ_NUM_QUEUES - 1;
 
-    for (; thread != NULL; thread = thread->next) {
-        if (thread->state == THREAD_READY) {
-            return thread;
+    thread->priority = priority;
+    thread->next = NULL;
+
+    mlfq_queue_t *queue = &thread_queues[cpu].queues[priority];
+    
+    if (queue->tail) {
+        queue->tail->next = thread;
+        queue->tail = thread;
+    } else {
+        queue->head = thread;
+        queue->tail = thread;
+    }
+    queue->count++;
+}
+
+static tcb_t *mlfq_dequeue(int cpu, int priority) {
+    mlfq_queue_t *queue = &thread_queues[cpu].queues[priority];
+    
+    if (!queue->head) {
+        return NULL;
+    }
+
+    tcb_t *thread = queue->head;
+    queue->head = thread->next;
+    
+    if (!queue->head) {
+        queue->tail = NULL;
+    }
+    
+    queue->count--;
+    thread->next = NULL;
+    
+    return thread;
+}
+
+static tcb_t *pick_next_thread(int cpu) {
+    for (int priority = 0; priority < MLFQ_NUM_QUEUES; priority++) {
+        mlfq_queue_t *queue = &thread_queues[cpu].queues[priority];
+        tcb_t *thread = queue->head;
+        tcb_t *prev = NULL;
+
+        while (thread != NULL) {
+            if (thread->state == THREAD_READY) {
+                if (prev) {
+                    prev->next = thread->next;
+                } else {
+                    queue->head = thread->next;
+                }
+                
+                if (thread == queue->tail) {
+                    queue->tail = prev;
+                }
+                
+                queue->count--;
+                thread->next = NULL;
+                
+                thread->time_slice = queue->time_quantum;
+                
+                return thread;
+            }
+            prev = thread;
+            thread = thread->next;
         }
     }
 
     return NULL;
+}
+
+static void mlfq_boost_all(int cpu) {
+    for (int priority = 1; priority < MLFQ_NUM_QUEUES; priority++) {
+        mlfq_queue_t *src_queue = &thread_queues[cpu].queues[priority];
+        mlfq_queue_t *dst_queue = &thread_queues[cpu].queues[0];
+        
+        if (src_queue->head) {
+            if (dst_queue->tail) {
+                dst_queue->tail->next = src_queue->head;
+                dst_queue->tail = src_queue->tail;
+            } else {
+                dst_queue->head = src_queue->head;
+                dst_queue->tail = src_queue->tail;
+            }
+            
+            dst_queue->count += src_queue->count;
+            
+            tcb_t *thread = src_queue->head;
+            while (thread) {
+                thread->priority = 0;
+                thread = thread->next;
+            }
+            
+            src_queue->head = NULL;
+            src_queue->tail = NULL;
+            src_queue->count = 0;
+        }
+    }
+    
+    thread_queues[cpu].ticks_since_boost = 0;
+    
+#ifdef CONFIG_SCHED_DEBUG
+    debugf_debug("MLFQ: Boosted all threads on CPU %d\n", cpu);
+#endif
 }
 
 // I WANT ALL OF THE BITS :speaking_head: :fire: :fire:
@@ -78,7 +198,6 @@ int proc_create(void (*entry)(), int flags, char *name) {
     proc->fds      = NULL;
     proc->fd_count = 0;
 
-    // Enhanced VMM context creation with proper permissions
     int vflags = (flags & TF_MODE_USER ? VMO_USER_RW : VMO_KERNEL_RW);
     if (flags & TF_MODE_USER) {
         process_vmm_init(&proc->vmc, vflags);
@@ -107,6 +226,7 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
     thread->flags      = flags;
     thread->state      = THREAD_READY;
     thread->parent     = parent;
+    thread->priority   = 0;
     thread->time_slice = SCHEDULER_THREAD_TS;
 
     thread->fpu = (void *)PHYS_TO_VIRTUAL(pmm_alloc_page());
@@ -155,8 +275,8 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
 
 #ifdef CONFIG_SCHED_DEBUG
         debugf_debug(
-            "Created usermode thread TID=%d entry=%p ustack=%p kstack=%p\n",
-            thread->tid, entry, (void *)ctx->rsp, thread->kernel_stack);
+            "Created usermode thread TID=%d entry=%p ustack=%p kstack=%p priority=%d\n",
+            thread->tid, entry, (void *)ctx->rsp, thread->kernel_stack, thread->priority);
 #endif
     } else {
         thread->kernel_stack =
@@ -171,8 +291,8 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
         ctx->rsp    = (uint64_t)(thread->kernel_stack + SCHEDULER_STACKSZ - 8);
 
 #ifdef CONFIG_SCHED_DEBUG
-        debugf_debug("Created kernel thread TID=%d entry=%p kstack=%p\n",
-                     thread->tid, entry, (void *)ctx->rsp);
+        debugf_debug("Created kernel thread TID=%d entry=%p kstack=%p priority=%d\n",
+                     thread->tid, entry, (void *)ctx->rsp, thread->priority);
 #endif
     }
 
@@ -187,9 +307,7 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
     int cpu = get_cpu();
     assert(thread_queues);
 
-    thread->next            = thread_queues[cpu].head;
-    thread_queues[cpu].head = thread;
-    thread_queues[cpu].count++;
+    mlfq_enqueue(cpu, thread, 0);
 
     if (!current_threads[cpu]) {
         current_threads[cpu] = thread;
@@ -206,46 +324,61 @@ tcb_t *get_current_tcb() {
 }
 
 pcb_t *pcb_lookup(int pid) {
-    int cpu  = get_cpu();
-    tcb_t *t = thread_queues[cpu].head;
-    pcb_t *p = NULL;
-    for (; t != NULL; t = t->next) {
-        p = t->parent;
-        if (!p) { // ...somehow??
-            continue;
-        }
+    int cpu = get_cpu();
+    
+    tcb_t *current = current_threads[cpu];
+    if (current && current->parent && current->parent->pid == pid) {
+        return current->parent;
+    }
+    
+    for (int priority = 0; priority < MLFQ_NUM_QUEUES; priority++) {
+        tcb_t *t = thread_queues[cpu].queues[priority].head;
+        
+        for (; t != NULL; t = t->next) {
+            pcb_t *p = t->parent;
+            if (!p) {
+                continue;
+            }
 
-        if (p->pid == pid) {
-            break;
+            if (p->pid == pid) {
+                return p;
+            }
         }
     }
 
-    return p;
+    return NULL;
 }
 
 tcb_t *tcb_lookup(int pid, int tid) {
-    int cpu  = get_cpu();
-    tcb_t *t = thread_queues[cpu].head;
+    int cpu = get_cpu();
+    
+    tcb_t *current = current_threads[cpu];
+    if (current && current->parent && current->parent->pid == pid && current->tid == tid) {
+        return current;
+    }
+    
+    for (int priority = 0; priority < MLFQ_NUM_QUEUES; priority++) {
+        tcb_t *t = thread_queues[cpu].queues[priority].head;
 
-    for (; t != NULL; t = t->next) {
-        if (!t->parent) {
-            continue;
-        }
+        for (; t != NULL; t = t->next) {
+            if (!t->parent) {
+                continue;
+            }
 
-        pcb_t *parent = t->parent;
-        if (parent->pid != pid) {
-            continue;
-        }
+            pcb_t *parent = t->parent;
+            if (parent->pid != pid) {
+                continue;
+            }
 
-        if (t->tid != tid) {
-            continue;
+            if (t->tid == tid) {
+                return t;
+            }
         }
     }
 
-    return t;
+    return NULL;
 }
 
-// creates the "init process" per-CPU
 int init_cpu_scheduler(void (*p)()) {
     proc_create(p, 0, "initproc");
     return 0;
@@ -254,6 +387,7 @@ int init_cpu_scheduler(void (*p)()) {
 int pcb_destroy(int pid) {
     pcb_t *p = pcb_lookup(pid);
     if (!p) {
+        debugf_warn("pcb_destroy: PID=%d not found\n", pid);
         return ENULLPTR;
     }
 
@@ -267,46 +401,44 @@ int pcb_destroy(int pid) {
         t->state = THREAD_DEAD;
     }
 
-    // also remove it from the queue in the next yield just like the thread
     procfs_remove_process(p);
 
     return EOK;
 }
 
 void thread_push_to_queue(tcb_t *to_push) {
-    int cpu   = get_cpu();
-    tcb_t **p = &thread_queues[cpu].head;
-
-    while (*p && *p != to_push) {
-        p = &(*p)->next;
-    }
-    if (*p == NULL) {
-        return;
-    }
-    *p            = to_push->next;
-    to_push->next = NULL;
-
-    tcb_t **q = &thread_queues[cpu].head;
-    while (*q) {
-        q = &(*q)->next;
-    }
-    *q = to_push;
+    int cpu = get_cpu();
+    
+    mlfq_enqueue(cpu, to_push, to_push->priority);
 }
 
 void thread_remove_from_queue(tcb_t *to_remove) {
-    int cpu   = get_cpu();
-    tcb_t **p = &thread_queues[cpu].head;
+    int cpu = get_cpu();
+    
+    for (int priority = 0; priority < MLFQ_NUM_QUEUES; priority++) {
+        mlfq_queue_t *queue = &thread_queues[cpu].queues[priority];
+        tcb_t **p = &queue->head;
+        tcb_t *prev = NULL;
 
-    while (*p && *p != to_remove) {
-        p = &(*p)->next;
-    }
+        while (*p && *p != to_remove) {
+            prev = *p;
+            p = &(*p)->next;
+        }
 
-    if (*p == NULL) {
+        if (*p == NULL) {
+            continue;
+        }
+
+        *p = to_remove->next;
+        
+        if (to_remove == queue->tail) {
+            queue->tail = prev;
+        }
+        
+        queue->count--;
+        to_remove->next = NULL;
         return;
     }
-
-    *p              = to_remove->next;
-    to_remove->next = NULL;
 }
 
 int thread_destroy(int pid, int tid) {
@@ -316,9 +448,6 @@ int thread_destroy(int pid, int tid) {
     }
 
     t->state = THREAD_DEAD;
-
-    // thread_remove_from_queue(t);
-    // actually cleanup in the next yield
 
     return EOK;
 }
@@ -334,25 +463,37 @@ int proc_exit() {
     int cpu        = get_cpu();
     tcb_t *current = current_threads[cpu];
 
-    int ret = pcb_destroy(current->parent->pid);
+    if (!current || !current->parent) {
+        return ENULLPTR;
+    }
 
-    debugf_debug("Process %d (%s) exited!\n", current->parent->pid,
-           current->parent->name ? current->parent->name : "no-name");
+    int pid = current->parent->pid;
+    char *name = current->parent->name;
+    
+    debugf_debug("Process %d (%s) exiting...\n", pid,
+           name ? name : "no-name");
+
+    int ret = pcb_destroy(pid);
 
     return ret;
 }
 
 void yield(registers_t *ctx) {
+    __asm__ volatile("cli");
+    
     int cpu        = get_cpu();
     tcb_t *current = current_threads[cpu];
     tcb_t *next;
     _load_pml4(get_kernel_pml4());
 
+    thread_queues[cpu].ticks_since_boost++;
+    if (thread_queues[cpu].ticks_since_boost >= MLFQ_BOOST_INTERVAL) {
+        mlfq_boost_all(cpu);
+    }
+
     if (!current) {
         current = pick_next_thread(cpu);
     }
-
-    // ffffffff80051bc3
 
     switch (current->state) {
     case THREAD_READY:
@@ -361,16 +502,28 @@ void yield(registers_t *ctx) {
 
     case THREAD_RUNNING:
         if (--current->time_slice > 0) {
+            __asm__ volatile("sti");
             return;
         }
 
         fpu_save(current->fpu);
         memcpy(current->regs, ctx, sizeof(*ctx));
 
-        current->state      = THREAD_READY;
-        current->time_slice = SCHEDULER_THREAD_TS;
+        current->state = THREAD_READY;
 
-        thread_push_to_queue(current);
+        int new_priority = current->priority + 1;
+        if (new_priority >= MLFQ_NUM_QUEUES) {
+            new_priority = MLFQ_NUM_QUEUES - 1;
+        }
+        
+#ifdef CONFIG_SCHED_DEBUG
+        if (new_priority != current->priority) {
+            debugf_debug("Thread TID=%d demoted from priority %d to %d\n",
+                        current->tid, current->priority, new_priority);
+        }
+#endif
+
+        mlfq_enqueue(cpu, current, new_priority);
         next = pick_next_thread(cpu);
         break;
 
@@ -379,32 +532,42 @@ void yield(registers_t *ctx) {
         thread_remove_from_queue(current);
         int pid = current->parent->pid;
         int tid = current->tid;
-        if (current->parent->state == PROC_DEAD) {
-            pmm_free((void *)VIRT_TO_PHYSICAL(current->kernel_stack),
-                     SCHEDULER_STACK_PAGES);
-            if (current->user_stack) {
-                pmm_free((void *)VIRT_TO_PHYSICAL(current->user_stack),
-                         SCHEDULER_STACK_PAGES);
-            }
-            if (current->flags & TF_MODE_USER) {
-                vmc_destroy(current->parent->vmc);
-            }
-            kfree(current->fpu);
-            kfree(current->regs);
-            kfree(current->parent->threads);
-            kfree(current->parent->name);
-            kfree(current->parent);
-        } else {
-            pmm_free((void *)VIRT_TO_PHYSICAL(current->kernel_stack),
-                     SCHEDULER_STACK_PAGES);
-            if (current->user_stack) {
-                pmm_free((void *)VIRT_TO_PHYSICAL(current->user_stack),
-                         SCHEDULER_STACK_PAGES);
-            }
-            kfree(current->fpu);
-            kfree(current->regs);
-        }
+        
+        void *kernel_stack = current->kernel_stack;
+        void *user_stack = current->user_stack;
+        void *fpu = current->fpu;
+        registers_t *regs = current->regs;
+        pcb_t *parent_proc = current->parent;
+        int is_user_mode = (current->flags & TF_MODE_USER);
+        
         next = pick_next_thread(cpu);
+        
+        if (parent_proc->state == PROC_DEAD) {
+            pmm_free((void *)VIRT_TO_PHYSICAL(kernel_stack),
+                     SCHEDULER_STACK_PAGES);
+            if (user_stack) {
+                pmm_free((void *)VIRT_TO_PHYSICAL(user_stack),
+                         SCHEDULER_STACK_PAGES);
+            }
+            if (is_user_mode && parent_proc->vmc) {
+                vmc_destroy(parent_proc->vmc);
+            }
+            kfree(fpu);
+            kfree(regs);
+            kfree(parent_proc->threads);
+            kfree(parent_proc->name);
+            kfree(parent_proc);
+        } else {
+            pmm_free((void *)VIRT_TO_PHYSICAL(kernel_stack),
+                     SCHEDULER_STACK_PAGES);
+            if (user_stack) {
+                pmm_free((void *)VIRT_TO_PHYSICAL(user_stack),
+                         SCHEDULER_STACK_PAGES);
+            }
+            kfree(fpu);
+            kfree(regs);
+        }
+        
         debugf_debug("Cleaned up thread TID=%d, PID=%d\n", tid, pid);
         break;
     }

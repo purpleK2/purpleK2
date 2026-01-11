@@ -11,4 +11,5 @@ all:
   		-Wl,--no-dynamic-linker \
   		-Wl,--build-id=none \
   		-o init.elf \
+		-g -O0 \
   		main.c
