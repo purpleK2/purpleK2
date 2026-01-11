@@ -394,6 +394,15 @@ void yield(registers_t *ctx) {
             kfree(current->parent->threads);
             kfree(current->parent->name);
             kfree(current->parent);
+        } else {
+            pmm_free((void *)VIRT_TO_PHYSICAL(current->kernel_stack),
+                     SCHEDULER_STACK_PAGES);
+            if (current->user_stack) {
+                pmm_free((void *)VIRT_TO_PHYSICAL(current->user_stack),
+                         SCHEDULER_STACK_PAGES);
+            }
+            kfree(current->fpu);
+            kfree(current->regs);
         }
         next = pick_next_thread(cpu);
         debugf_debug("Cleaned up thread TID=%d, PID=%d\n", tid, pid);
