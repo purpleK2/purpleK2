@@ -24,8 +24,8 @@
 
 #include <util/assert.h>
 
-#define MLFQ_NUM_QUEUES 4
-#define MLFQ_BOOST_INTERVAL 100
+//#define CONFIG_SCHED_NUM_MLFQ_QUEUES 4
+//#define CONFIG_SCHED_MLFQ_BOOST_INTERVAL 100
 
 typedef struct mlfq_queue {
     tcb_t *head;
@@ -35,7 +35,7 @@ typedef struct mlfq_queue {
 } mlfq_queue_t;
 
 typedef struct cpu_mlfq {
-    mlfq_queue_t queues[MLFQ_NUM_QUEUES];
+    mlfq_queue_t queues[CONFIG_SCHED_NUM_MLFQ_QUEUES];
     uint64_t ticks_since_boost;
 } cpu_mlfq_t;
 
@@ -58,7 +58,7 @@ int init_scheduler() {
     assert(current_threads);
 
     for (int cpu = 0; cpu < cpu_count; cpu++) {
-        for (int queue = 0; queue < MLFQ_NUM_QUEUES; queue++) {
+        for (int queue = 0; queue < CONFIG_SCHED_NUM_MLFQ_QUEUES; queue++) {
             thread_queues[cpu].queues[queue].head       = NULL;
             thread_queues[cpu].queues[queue].tail       = NULL;
             thread_queues[cpu].queues[queue].count      = 0;
@@ -76,7 +76,7 @@ int init_scheduler() {
 
 static void mlfq_enqueue(int cpu, tcb_t *thread, int priority) {
     if (priority < 0) priority = 0;
-    if (priority >= MLFQ_NUM_QUEUES) priority = MLFQ_NUM_QUEUES - 1;
+    if (priority >= CONFIG_SCHED_NUM_MLFQ_QUEUES) priority = CONFIG_SCHED_NUM_MLFQ_QUEUES - 1;
 
     thread->priority = priority;
     thread->next = NULL;
@@ -114,7 +114,7 @@ static tcb_t *mlfq_dequeue(int cpu, int priority) {
 }
 
 static tcb_t *pick_next_thread(int cpu) {
-    for (int priority = 0; priority < MLFQ_NUM_QUEUES; priority++) {
+    for (int priority = 0; priority < CONFIG_SCHED_NUM_MLFQ_QUEUES; priority++) {
         mlfq_queue_t *queue = &thread_queues[cpu].queues[priority];
         tcb_t *thread = queue->head;
         tcb_t *prev = NULL;
@@ -147,7 +147,7 @@ static tcb_t *pick_next_thread(int cpu) {
 }
 
 static void mlfq_boost_all(int cpu) {
-    for (int priority = 1; priority < MLFQ_NUM_QUEUES; priority++) {
+    for (int priority = 1; priority < CONFIG_SCHED_NUM_MLFQ_QUEUES; priority++) {
         mlfq_queue_t *src_queue = &thread_queues[cpu].queues[priority];
         mlfq_queue_t *dst_queue = &thread_queues[cpu].queues[0];
         
@@ -331,7 +331,7 @@ pcb_t *pcb_lookup(int pid) {
         return current->parent;
     }
     
-    for (int priority = 0; priority < MLFQ_NUM_QUEUES; priority++) {
+    for (int priority = 0; priority < CONFIG_SCHED_NUM_MLFQ_QUEUES; priority++) {
         tcb_t *t = thread_queues[cpu].queues[priority].head;
         
         for (; t != NULL; t = t->next) {
@@ -357,7 +357,7 @@ tcb_t *tcb_lookup(int pid, int tid) {
         return current;
     }
     
-    for (int priority = 0; priority < MLFQ_NUM_QUEUES; priority++) {
+    for (int priority = 0; priority < CONFIG_SCHED_NUM_MLFQ_QUEUES; priority++) {
         tcb_t *t = thread_queues[cpu].queues[priority].head;
 
         for (; t != NULL; t = t->next) {
@@ -415,7 +415,7 @@ void thread_push_to_queue(tcb_t *to_push) {
 void thread_remove_from_queue(tcb_t *to_remove) {
     int cpu = get_cpu();
     
-    for (int priority = 0; priority < MLFQ_NUM_QUEUES; priority++) {
+    for (int priority = 0; priority < CONFIG_SCHED_NUM_MLFQ_QUEUES; priority++) {
         mlfq_queue_t *queue = &thread_queues[cpu].queues[priority];
         tcb_t **p = &queue->head;
         tcb_t *prev = NULL;
@@ -487,7 +487,7 @@ void yield(registers_t *ctx) {
     _load_pml4(get_kernel_pml4());
 
     thread_queues[cpu].ticks_since_boost++;
-    if (thread_queues[cpu].ticks_since_boost >= MLFQ_BOOST_INTERVAL) {
+    if (thread_queues[cpu].ticks_since_boost >= CONFIG_SCHED_MLFQ_BOOST_INTERVAL) {
         mlfq_boost_all(cpu);
     }
 
@@ -512,8 +512,8 @@ void yield(registers_t *ctx) {
         current->state = THREAD_READY;
 
         int new_priority = current->priority + 1;
-        if (new_priority >= MLFQ_NUM_QUEUES) {
-            new_priority = MLFQ_NUM_QUEUES - 1;
+        if (new_priority >= CONFIG_SCHED_NUM_MLFQ_QUEUES) {
+            new_priority = CONFIG_SCHED_NUM_MLFQ_QUEUES - 1;
         }
         
 #ifdef CONFIG_SCHED_DEBUG
