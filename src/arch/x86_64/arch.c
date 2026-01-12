@@ -39,12 +39,12 @@ void arch_base_init() {
     pic_config(PIC_REMAP_OFFSET, PIC_REMAP_OFFSET + 8);
     kprintf_ok("Enabled PIC\n");
 
+    irq_registerHandler(0, timer_tick);
+
     init_fpu();
     kprintf_ok("Initialized FPU\n");
     init_sse();
     kprintf_ok("Initialized SSE1 + SSE2\n");
-
-    irq_registerHandler(0, timer_tick);
 
     pit_init(PIT_TICKS);
     pit = true;
@@ -66,7 +66,7 @@ void sleep(unsigned long ms) {
     if (pit) {
         pit_sleep(ms);
     } else {
-        tsc_sleep(ms);
+        tsc_sleep(ms * 1000); // microseconds = milliseconds * 1000
     }
 }
 

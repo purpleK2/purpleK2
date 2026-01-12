@@ -7,6 +7,8 @@
 
 #include <io.h>
 
+#include <util/assert.h>
+
 #include <autoconf.h>
 
 #include <pci/pci_ids.h>
@@ -106,12 +108,12 @@ void pci_config_write(uint8_t bus, uint8_t device, uint8_t function,
 }
 
 pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
-                             const char *pciids_path) {
+                             fileio_t *pci_ids) {
     uint32_t vendor_device = pci_config_read(bus, device, function, 0);
     if ((vendor_device & 0xFFFF) == 0xFFFF)
         return NULL;
 
-    if (!pciids_path) {
+    if (!pci_ids) {
         return NULL;
     }
 
@@ -129,10 +131,8 @@ pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
     new_dev->prog_if     = (class_info >> 8) & 0xFF;
     new_dev->header_type = pci_config_read(bus, device, function, 0x0C) & 0xFF;
 
-    fileio_t *pci_ids = open(pciids_path, 0);
     get_pcix_vendor_device_name(new_dev->vendor_id, new_dev->device_id, pci_ids,
                                 new_dev->vendor_str, new_dev->device_str);
-    close(pci_ids);
 
     // Initialize BARs and BAR types to zero
     for (int i = 0; i < 6; i++) {
@@ -181,13 +181,18 @@ pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
 }
 
 void pci_scan(const char *pciids_path) {
+    fileio_t *pci_ids = open(pciids_path, 0);
+    assert(pci_ids);
+
     for (uint16_t bus = 0; bus < 256; bus++) {
         for (uint8_t device = 0; device < 32; device++) {
             for (uint8_t function = 0; function < 8; function++) {
-                pci_add_device(bus, device, function, pciids_path);
+                pci_add_device(bus, device, function, pci_ids);
             }
         }
     }
+
+    close(pci_ids);
 }
 
 void pci_print_info(uint8_t bus, uint8_t device, uint8_t function) {

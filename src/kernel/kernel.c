@@ -132,7 +132,12 @@ void pk_init() {
         kfree(prog);
     }
 
-    // IT IS STILL A BAD IDEA TO JUST LET THE PAGEFAULT HANDLER KILL THE PROC 😭
+    fs_list("/", -1);
+
+    sleep(2000);
+
+    // IT IS STILL A BAD IDEA TO JUST LET THE PAGEFAULT HANDLER KILL THE
+    // PROC 😭
     proc_exit();
 }
 
@@ -446,8 +451,8 @@ void kstart(void) {
     dev_parallel_init();
     dev_fb_init();
 
-    //smp_init();
-    //limine_parsed_data.smp_enabled = true;
+    // smp_init();
+    // limine_parsed_data.smp_enabled = true;
 
     pci_scan(INITRD_MOUNT "/pci.ids");
     kprintf_ok("PCI devices parsing done\n");

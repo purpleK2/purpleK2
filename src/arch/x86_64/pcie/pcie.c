@@ -7,6 +7,8 @@
 #include <acpi/uacpi/tables.h>
 #include <acpi/uacpi/uacpi.h>
 
+#include <util/assert.h>
+
 #include <stdio.h>
 #include <string.h>
 
@@ -78,12 +80,12 @@ pcie_status pcie_append_to_list(pcie_device_t **list, pcie_device_t *dev) {
 // @param pcie_cfgaddr the PHYSICAL address to the actual PCIe configuration
 // space
 pcie_status add_pcie_device(pcie_header_t *header, void *pcie_cfgaddr,
-                            uint8_t bus_range, const char *pciids_path) {
+                            uint8_t bus_range, fileio_t *pci_ids) {
     if (!header || !pcie_cfgaddr) {
         return PCIE_STATUS_NULLPTR;
     }
 
-    if (!pciids_path) {
+    if (!pci_ids) {
         debugf_warn("No pci.ids path given!\n");
         return PCIE_STATUS_NULLPTR;
     }
@@ -107,10 +109,8 @@ pcie_status add_pcie_device(pcie_header_t *header, void *pcie_cfgaddr,
     dev->vendor_str = kmalloc(PCIE_MAX_VENDOR_NAME);
     dev->device_str = kmalloc(PCIE_MAX_DEVICE_NAME);
 
-    fileio_t *pci_ids = open(pciids_path, 0);
     get_pcix_vendor_device_name(dev->vendor_id, dev->device_id, pci_ids,
                                 dev->vendor_str, dev->device_str);
-    close(pci_ids);
 
     dev->revision = header->revision_id;
 
@@ -171,6 +171,9 @@ pcie_status pcie_parse_ecam(struct acpi_mcfg_allocation *ecam,
     uint8_t bus_start = ecam->start_bus;
     uint8_t bus_end   = ecam->end_bus;
 
+    fileio_t *pci_ids = open(pciids_path, 0);
+    assert(pci_ids);
+
     for (uint16_t bus = bus_start; bus < bus_end + 1; bus++) {
         for (uint8_t device = 0; device < 32; device++) {
             for (uint8_t function = 0; function < 8; function++) {
@@ -218,7 +221,7 @@ pcie_status pcie_parse_ecam(struct acpi_mcfg_allocation *ecam,
 #endif
 
                 if (add_pcie_device(header, (void *)addr, bus_end - bus_start,
-                                    pciids_path) != PCIE_STATUS_OK) {
+                                    pci_ids) != PCIE_STATUS_OK) {
                     debugf_warn(
                         "Couldn't parse device [%.02hhx:%.02hhx.%.01hhx]\n",
                         bus, device, function);
@@ -228,6 +231,8 @@ pcie_status pcie_parse_ecam(struct acpi_mcfg_allocation *ecam,
             }
         }
     }
+
+    close(pci_ids);
 
     return PCIE_STATUS_OK;
 }
