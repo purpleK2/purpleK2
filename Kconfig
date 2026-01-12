@@ -86,4 +86,11 @@ config SCHED_MLFQ_BOOST_INTERVAL
 	help
 		Specifies the interval (in ticks) at which all threads are boosted to the highest
 
+config SCHED_TIMER_INTERVAL_MS
+	int "Scheduler timer interval (ms)"
+	default 10
+	range 1 100
+	help
+		Specifies the timer interrupt interval for the scheduler in milliseconds
+
 endmenu # Scheduling

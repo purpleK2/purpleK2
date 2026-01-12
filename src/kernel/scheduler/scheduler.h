@@ -77,6 +77,7 @@ typedef struct process {
     struct process **children;
 
     pcb_state_t state;
+    uint64_t wakeup_tick;
 
     int thread_count;
     tcb_t **threads;
