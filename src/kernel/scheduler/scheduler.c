@@ -45,6 +45,37 @@ static int cpu_count;
 
 atomic_flag SCHEDULER_LOCK = ATOMIC_FLAG_INIT;
 
+static void cleanup_dead_thread(tcb_t *thread) {
+    if (!thread || !thread->parent) return;
+
+    int pid = thread->parent->pid;
+    int tid = thread->tid;
+    void *kernel_stack = thread->kernel_stack;
+    void *user_stack   = thread->user_stack;
+    void *fpu          = thread->fpu;
+    registers_t *regs  = thread->regs;
+    pcb_t *parent_proc  = thread->parent;
+    int is_user_mode = thread->flags & TF_MODE_USER;
+
+    if (parent_proc->state == PROC_DEAD) {
+        pmm_free((void *)VIRT_TO_PHYSICAL(kernel_stack), SCHEDULER_STACK_PAGES);
+        if (user_stack) pmm_free((void *)VIRT_TO_PHYSICAL(user_stack), SCHEDULER_STACK_PAGES);
+        if (is_user_mode && parent_proc->vmc) vmc_destroy(parent_proc->vmc);
+        kfree(fpu);
+        kfree(regs);
+        kfree(parent_proc->threads);
+        kfree(parent_proc->name);
+        kfree(parent_proc);
+    } else {
+        pmm_free((void *)VIRT_TO_PHYSICAL(kernel_stack), SCHEDULER_STACK_PAGES);
+        if (user_stack) pmm_free((void *)VIRT_TO_PHYSICAL(user_stack), SCHEDULER_STACK_PAGES);
+        kfree(fpu);
+        kfree(regs);
+    }
+
+    debugf_debug("Cleaned up thread TID=%d, PID=%d\n", tid, pid);
+}
+
 // SHOULD BE CALLED **ONLY ONCE** IN KSTART. NOWHERE ELSE.
 int init_scheduler() {
     cpu_count = get_bootloader_data()->cpu_count;
@@ -507,7 +538,7 @@ void yield(registers_t *ctx) {
         }
 
         fpu_save(current->fpu);
-        memcpy(current->regs, ctx, sizeof(*ctx));
+        current->regs = ctx;
 
         current->state = THREAD_READY;
 
@@ -528,47 +559,27 @@ void yield(registers_t *ctx) {
         break;
 
     case THREAD_WAITING:
-    case THREAD_DEAD:
-        thread_remove_from_queue(current);
-        int pid = current->parent->pid;
-        int tid = current->tid;
-        
-        void *kernel_stack = current->kernel_stack;
-        void *user_stack = current->user_stack;
-        void *fpu = current->fpu;
-        registers_t *regs = current->regs;
-        pcb_t *parent_proc = current->parent;
-        int is_user_mode = (current->flags & TF_MODE_USER);
-        
-        next = pick_next_thread(cpu);
-        
-        if (parent_proc->state == PROC_DEAD) {
-            pmm_free((void *)VIRT_TO_PHYSICAL(kernel_stack),
-                     SCHEDULER_STACK_PAGES);
-            if (user_stack) {
-                pmm_free((void *)VIRT_TO_PHYSICAL(user_stack),
-                         SCHEDULER_STACK_PAGES);
-            }
-            if (is_user_mode && parent_proc->vmc) {
-                vmc_destroy(parent_proc->vmc);
-            }
-            kfree(fpu);
-            kfree(regs);
-            kfree(parent_proc->threads);
-            kfree(parent_proc->name);
-            kfree(parent_proc);
-        } else {
-            pmm_free((void *)VIRT_TO_PHYSICAL(kernel_stack),
-                     SCHEDULER_STACK_PAGES);
-            if (user_stack) {
-                pmm_free((void *)VIRT_TO_PHYSICAL(user_stack),
-                         SCHEDULER_STACK_PAGES);
-            }
-            kfree(fpu);
-            kfree(regs);
+        // TODO :^)
+
+        new_priority = current->priority + 1;
+        if (new_priority >= CONFIG_SCHED_NUM_MLFQ_QUEUES) {
+            new_priority = CONFIG_SCHED_NUM_MLFQ_QUEUES - 1;
         }
         
-        debugf_debug("Cleaned up thread TID=%d, PID=%d\n", tid, pid);
+#ifdef CONFIG_SCHED_DEBUG
+        if (new_priority != current->priority) {
+            debugf_debug("Thread TID=%d demoted from priority %d to %d\n",
+                        current->tid, current->priority, new_priority);
+        }
+#endif
+
+        mlfq_enqueue(cpu, current, new_priority);
+        next = pick_next_thread(cpu);
+        break;
+    case THREAD_DEAD:
+        thread_remove_from_queue(current);
+        next = pick_next_thread(cpu);
+        cleanup_dead_thread(current);
         break;
     }
 
