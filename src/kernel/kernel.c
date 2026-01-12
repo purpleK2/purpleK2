@@ -442,14 +442,13 @@ void kstart(void) {
         kprintf_ok("DEVFS initialized successfully!\n");
     }
 
-#endif
-
     register_std_devices();
     dev_initrd_init(initrd->address);
     dev_e9_init();
     dev_serial_init();
     dev_parallel_init();
     dev_fb_init();
+#endif
 
     // smp_init();
     // limine_parsed_data.smp_enabled = true;
