@@ -24,9 +24,6 @@
 
 #include <util/assert.h>
 
-//#define CONFIG_SCHED_NUM_MLFQ_QUEUES 4
-//#define CONFIG_SCHED_MLFQ_BOOST_INTERVAL 100
-
 typedef struct mlfq_queue {
     tcb_t *head;
     tcb_t *tail;
@@ -490,7 +487,7 @@ pcb_t *get_current_pcb() {
 }
 
 // destroys current process
-int proc_exit() {
+int proc_exit(int exit_code) {
     int cpu        = get_cpu();
     tcb_t *current = current_threads[cpu];
 
@@ -501,8 +498,8 @@ int proc_exit() {
     int pid = current->parent->pid;
     char *name = current->parent->name;
     
-    debugf_debug("Process %d (%s) exiting...\n", pid,
-           name ? name : "no-name");
+    debugf_debug("Process %d (%s) exited with code %d\n", pid,
+           name ? name : "no-name", exit_code);
 
     int ret = pcb_destroy(pid);
 

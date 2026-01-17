@@ -112,7 +112,7 @@ extern __attribute__((noreturn)) void scheduler_idle();
 
 int pcb_destroy(int pid);
 int thread_destroy(int pid, int tid);
-int proc_exit();
+int proc_exit(int exit_code);
 
 // inits the scheduler on every CPU
 // with an "init" process

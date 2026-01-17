@@ -4,7 +4,7 @@ section '.text' executable
 
 public context_load
 
-; void context_load(task_regs_t *ctx)
+; void context_load(registers_t *ctx)
 context_load:
     mov r15, [rdi + 0x08]
     mov r14, [rdi + 0x10]

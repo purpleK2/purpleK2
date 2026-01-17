@@ -62,7 +62,7 @@ static char *buffer_ptr = buffer;
 void _start(void) {
     uint64_t fd = syscall2(SYS_OPEN, (uint64_t)filename, 0);
     syscall3(SYS_WRITE, fd, (uint64_t)buffer_ptr, sizeof(buffer)-1);
-    syscall1(SYS_EXIT, 0);
+    syscall1(SYS_EXIT, 69);
 
     for(;;) __asm__("hlt");
 }

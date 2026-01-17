@@ -133,7 +133,7 @@ void pk_init() {
     }
 
     // IT IS STILL A BAD IDEA TO JUST LET THE PAGEFAULT HANDLER KILL THE PROC 😭
-    proc_exit();
+    proc_exit(0);
 }
 
 // kernel main function
