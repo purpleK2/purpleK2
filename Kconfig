@@ -69,3 +69,28 @@ config PCIE_DEBUG
 		Outputs detailed info about PCIe initialization and PCIe devices operations
 	
 endmenu # Advanced debugging
+
+menu "Scheduling"
+
+config SCHED_NUM_MLFQ_QUEUES
+	int "Number of MLFQ queues"
+	default 4
+	range 2 10
+	help
+		Specifies the number of priority levels (queues) in the Multi-Level Feedback Queue scheduler
+
+config SCHED_MLFQ_BOOST_INTERVAL
+	int "MLFQ boost interval (ticks)"
+	default 100
+	range 10 1000
+	help
+		Specifies the interval (in ticks) at which all threads are boosted to the highest
+
+config SCHED_TIMER_INTERVAL_MS
+	int "Scheduler timer interval (ms)"
+	default 10
+	range 1 100
+	help
+		Specifies the timer interrupt interval for the scheduler in milliseconds
+
+endmenu # Scheduling

@@ -55,6 +55,8 @@ typedef struct thread {
     registers_t *regs;
     void *fpu; // 512 bytes memory region
 
+    int priority; // for MLFQ
+
     // for usermode
     void *kernel_stack;
     void *user_stack;
@@ -75,6 +77,7 @@ typedef struct process {
     struct process **children;
 
     pcb_state_t state;
+    uint64_t wakeup_tick;
 
     int thread_count;
     tcb_t **threads;
@@ -109,7 +112,7 @@ extern __attribute__((noreturn)) void scheduler_idle();
 
 int pcb_destroy(int pid);
 int thread_destroy(int pid, int tid);
-int proc_exit();
+int proc_exit(int exit_code);
 
 // inits the scheduler on every CPU
 // with an "init" process

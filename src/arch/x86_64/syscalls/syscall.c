@@ -12,9 +12,8 @@
 #include <util/macro.h>
 
 void sys_exit(int status, registers_t *ctx) {
-    UNUSED(status);
 
-    proc_exit();
+    proc_exit(status);
     yield(ctx);
 }
 

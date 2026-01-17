@@ -1,4 +1,5 @@
 #include "paging.h"
+#include "errors.h"
 
 #include <autoconf.h>
 #include <kernel.h>
@@ -81,7 +82,7 @@ void pf_handler(registers_t *ctx) {
             get_current_pcb()->pid, ctx->ss, ctx->cs, ctx->rip, cpu_get_cr(2),
             PG_IF(pf_error_code) == 1 ? "yes" : "no");
         debugf_debug("CR3: %.16llx\n", cpu_get_cr(3));
-        proc_exit();
+        proc_exit(ENOMEM);
         yield(ctx);
         return;
     }
