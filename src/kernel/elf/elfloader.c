@@ -77,6 +77,14 @@ int load_elf(const char *path, elf_program_t *out) {
 
     debugf_debug("ELF: entry=0x%llx phnum=%d\n", eh.e_entry, eh.e_phnum);
 
+    uint64_t load_bias = 0;
+
+    if (eh.e_type == ET_DYN) {
+        load_bias = choose_et_dyn_base();
+        debugf_debug("ET_DYN detected, load bias = 0x%llx\n", load_bias);
+    }
+
+
     Elf64_Phdr *phdrs = kmalloc(sizeof(Elf64_Phdr) * eh.e_phnum);
     if (!phdrs) {
         close(elf_file);
@@ -93,7 +101,7 @@ int load_elf(const char *path, elf_program_t *out) {
     }
 
     char *proc_name = strdup(path);
-    int pid = proc_create((void (*)(void))eh.e_entry, TF_MODE_USER, proc_name);
+    int pid = proc_create((void (*)(void))eh.e_entry + load_bias, TF_MODE_USER, proc_name);
     if (pid < 0) {
         debugf_warn("Failed to create process for ELF %s\n", path);
         kfree(phdrs);
@@ -122,8 +130,10 @@ int load_elf(const char *path, elf_program_t *out) {
                      i, phdr->p_vaddr, phdr->p_memsz, phdr->p_filesz, phdr->p_flags);
 
 
-        uint64_t seg_page_start = ROUND_DOWN(phdr->p_vaddr, PFRAME_SIZE);
-        uint64_t seg_page_end = ROUND_UP(phdr->p_vaddr + phdr->p_memsz, PFRAME_SIZE);
+        uint64_t seg_vaddr = phdr->p_vaddr + load_bias;
+        uint64_t seg_page_start = ROUND_DOWN(seg_vaddr, PFRAME_SIZE);
+        uint64_t seg_page_end   = ROUND_UP(seg_vaddr + phdr->p_memsz, PFRAME_SIZE);
+
         uint64_t pages = (seg_page_end - seg_page_start) / PFRAME_SIZE;
 
         uint64_t phys_base = (uint64_t)pmm_alloc_pages(pages);
@@ -142,7 +152,7 @@ int load_elf(const char *path, elf_program_t *out) {
         if (phdr->p_filesz > 0) {
             seek(elf_file, phdr->p_offset, SEEK_SET);
 
-            uint64_t offset_in_page = phdr->p_vaddr - seg_page_start;
+            uint64_t offset_in_page = seg_vaddr - seg_page_start;
             void *dest = (void *)(PHYS_TO_VIRTUAL(phys_base) + offset_in_page);
 
             if (read(elf_file, phdr->p_filesz, dest) != phdr->p_filesz) {
@@ -159,8 +169,8 @@ int load_elf(const char *path, elf_program_t *out) {
     close(elf_file);
     kfree(phdrs);
 
-    if (!is_mapped(pml4, eh.e_entry)) {
-        debugf_warn("Entry point 0x%llx is not mapped!\n", eh.e_entry);
+    if (!is_mapped(pml4, eh.e_entry + load_bias)) {
+        debugf_warn("Entry point 0x%llx is not mapped!\n", eh.e_entry + load_bias);
         return -EINVAL;
     }
 
