@@ -56,6 +56,9 @@ int load_elf(const char *path, elf_program_t *out) {
 
     debugf_debug("Loading ELF binary from %s\n", path);
 
+    uint64_t dynamic_vaddr = 0;
+    uint64_t dynamic_size  = 0;
+
     fileio_t *elf_file = open(path, 0);
     if (!elf_file || (int64_t)elf_file < 0) {
         debugf_warn("Failed to open ELF file %s: %d\n", path, (int64_t)elf_file);
@@ -122,6 +125,32 @@ int load_elf(const char *path, elf_program_t *out) {
     for (int i = 0; i < eh.e_phnum; i++) {
         Elf64_Phdr *phdr = &phdrs[i];
 
+        if (phdr->p_type == PT_DYNAMIC) {
+            uint64_t dyn_start = ROUND_DOWN(phdr->p_vaddr + load_bias, PFRAME_SIZE);
+            uint64_t dyn_end   = ROUND_UP(phdr->p_vaddr + load_bias + phdr->p_memsz, PFRAME_SIZE);
+            uint64_t pages     = (dyn_end - dyn_start) / PFRAME_SIZE;
+
+            uint64_t phys = (uint64_t)(uintptr_t)pmm_alloc_pages(pages);
+            map_region(pml4, phys, dyn_start, pages, PMLE_USER | PMLE_PRESENT | PMLE_WRITE);
+        
+            if (phdr->p_filesz > 0) {
+                seek(elf_file, phdr->p_offset, SEEK_SET);
+                uint64_t offset_in_page = (phdr->p_vaddr + load_bias) - dyn_start;
+                void *dest = (void *)(PHYS_TO_VIRTUAL(phys) + offset_in_page);
+        
+                if (read(elf_file, phdr->p_filesz, dest) != phdr->p_filesz) {
+                    debugf_warn("Failed to read PT_DYNAMIC data\n");
+                    kfree(phdrs);
+                    close(elf_file);
+                    return -EIO;
+                }
+            }
+    
+            dynamic_vaddr = PHYS_TO_VIRTUAL(phys) + ((phdr->p_vaddr + load_bias) - dyn_start);
+            dynamic_size = phdr->p_memsz;
+        }
+
+
         if (phdr->p_type != PT_LOAD) {
             continue;
         }
@@ -164,6 +193,56 @@ int load_elf(const char *path, elf_program_t *out) {
 
         }
 
+    }
+
+    Elf64_Rela *rela      = NULL;
+    uint64_t    rela_sz   = 0;
+    uint64_t    rela_ent  = sizeof(Elf64_Rela);
+
+    if (dynamic_vaddr) {
+        Elf64_Dyn *dyn = (Elf64_Dyn *)dynamic_vaddr;
+
+        for (; dyn->d_tag != DT_NULL; dyn++) {
+            switch (dyn->d_tag) {
+            case DT_RELA:
+                rela = (Elf64_Rela *)(dyn->d_un.d_ptr + load_bias);
+                break;
+            case DT_RELASZ:
+                rela_sz = dyn->d_un.d_val;
+                break;
+            case DT_RELAENT:
+                rela_ent = dyn->d_un.d_val;
+                break;
+            default:
+                break;
+            }
+        }
+    }
+
+    if (rela && rela_sz) {
+        size_t count = rela_sz / rela_ent;
+
+        debugf_debug("Applying %llu RELA relocations\n", count);
+
+        for (size_t i = 0; i < count; i++) {
+            Elf64_Rela *r = &rela[i];
+            uint64_t *reloc_vaddr = (uint64_t *)(r->r_offset + load_bias);
+            uint64_t phys_addr = pg_virtual_to_phys(pml4, (uint64_t)(uintptr_t)reloc_vaddr);
+            uint64_t *reloc_addr = (uint64_t *)PHYS_TO_VIRTUAL(phys_addr);
+            *reloc_addr = load_bias + r->r_addend;
+
+            switch (ELF64_R_TYPE(r->r_info)) {
+            case R_X86_64_RELATIVE:
+                *reloc_addr = load_bias + r->r_addend;
+                break;
+            default:
+                debugf_warn("Unsupported relocation type %llu at index %llu\n",
+                            ELF64_R_TYPE(r->r_info), i);
+                kfree(phdrs);
+                close(elf_file);
+                return -EINVAL;
+            }
+        }
     }
 
     close(elf_file);

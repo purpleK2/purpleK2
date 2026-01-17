@@ -55,31 +55,14 @@ static inline uint64_t syscall1(
     return ret;
 }
 
-/* data */
-static const char filename[]      = "/dev/com1";
-static const char what_to_write[] = "hello from process\n";
+static const char filename[] = "/dev/com1";
+static char buffer[] = "RELA test OK\n";
+static char *buffer_ptr = buffer;
 
-/* entry point */
 void _start(void) {
-    /* fd = open("/dev/com1", 0) */
-    uint64_t fd = syscall2(
-        SYS_OPEN,
-        (uint64_t)filename,
-        0
-    );
-
-    /* write(fd, "hello from process\n", 20) */
-    syscall3(
-        SYS_WRITE,
-        fd,
-        (uint64_t)what_to_write,
-        20
-    );
-
-    /* exit(0) */
+    uint64_t fd = syscall2(SYS_OPEN, (uint64_t)filename, 0);
+    syscall3(SYS_WRITE, fd, (uint64_t)buffer_ptr, sizeof(buffer)-1);
     syscall1(SYS_EXIT, 0);
 
-    /* should never return */
-    for (;;)
-        __asm__ volatile ("hlt");
+    for(;;) __asm__("hlt");
 }
