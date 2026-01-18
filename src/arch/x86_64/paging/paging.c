@@ -73,15 +73,29 @@ unrelated to ordinary paging.
         Simply gives information about a page fault error code
         (C) RepubblicaTech 2024
 */
+
+bool is_in_proc(registers_t *ctx) {
+    bool is_cpl_3 = (ctx->cs & 0x3) == 0x3;
+    bool is_user_stack =
+        is_cpl_3 && (ctx->ss & 0x3) == 0x3;
+    bool is_rip_kernel_virt = get_bootloader_data()->kernel_base_virtual >
+                             ctx->rip;
+
+    return is_cpl_3 && is_user_stack && !is_rip_kernel_virt;
+}
+
 void pf_handler(registers_t *ctx) {
     uint64_t pf_error_code = (uint64_t)ctx->error;
 
-    if (PG_IF(pf_error_code)) {
-        debugf_debug("Killing process %d, because of a page fault from the %d (1 is user, 0 is kernel).ss=%x, cs=%x rip: %.16llx, fault_addr: %.16llx, instr_fetch: %s\n",
-            PG_RING(pf_error_code), 
-            get_current_pcb()->pid, ctx->ss, ctx->cs, ctx->rip, cpu_get_cr(2),
+    if (is_in_proc(ctx) || PG_IF(pf_error_code)) {
+        uint64_t cr2 = cpu_get_cr(2);
+
+        debugf_debug(
+            "Killing process %d, because of a page fault from the %d (1 is user, 0 is kernel).ss=%x, cs=%x rip: %.16llx, fault_addr: %.16llx, instr_fetch: %s\n",
+            PG_RING(pf_error_code), get_current_pcb()->pid, ctx->ss, ctx->cs,
+            ctx->rip, cr2,
             PG_IF(pf_error_code) == 1 ? "yes" : "no");
-        debugf_debug("CR3: %.16llx\n", cpu_get_cr(3));
+
         proc_exit(ENOMEM);
         yield(ctx);
         return;
@@ -511,4 +525,16 @@ bool is_addr_mapped_in(uint64_t *pml4_table, uint64_t address) {
     );
     
     return (page_table[ptab_index] & PMLE_PRESENT) != 0;
+}
+
+
+bool is_region_mapped_in(uint64_t *pml4_table, uint64_t virtual_start,
+                         uint64_t pages) {
+    for (uint64_t i = 0; i < pages; i++) {
+        uint64_t virt = virtual_start + (i * PFRAME_SIZE);
+        if (!is_addr_mapped_in(pml4_table, virt)) {
+            return false;
+        }
+    }
+    return true;
 }

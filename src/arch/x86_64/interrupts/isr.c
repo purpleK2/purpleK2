@@ -1,6 +1,7 @@
 #include "isr.h"
 #include "elf/sym.h"
 #include "loader/module/module_loader.h"
+#include "scheduler/scheduler.h"
 #include "syscalls/syscall.h"
 
 #include <apic/lapic/lapic.h>
@@ -62,6 +63,11 @@ void isr_syscall(registers_t *ctx) {
     long ret = handle_syscall(ctx);
 
     ctx->rax = ret;
+
+    tcb_t *current = get_current_tcb();
+    if (current && (current->flags & TF_MODE_USER) && current->tls.base_virt) {
+        _cpu_set_msr(0xC0000100, (uint64_t)current->tls.base_virt);
+    }
 }
 
 static void isr_debug(registers_t *ctx) {

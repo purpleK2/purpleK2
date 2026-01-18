@@ -4,6 +4,7 @@
 #include <autoconf.h>
 #include <errors.h>
 #include <kernel.h>
+#include <cpu.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -57,7 +58,11 @@ int load_elf(const char *path, elf_program_t *out) {
     debugf_debug("Loading ELF binary from %s\n", path);
 
     uint64_t dynamic_vaddr = 0;
-    uint64_t dynamic_size  = 0;
+    uint64_t tls_vaddr = 0;
+    uint64_t tls_offset = 0;
+    uint64_t tls_filesz = 0;
+    uint64_t tls_memsz = 0;
+    uint64_t tls_align = 8;
 
     fileio_t *elf_file = open(path, 0);
     if (!elf_file || (int64_t)elf_file < 0) {
@@ -101,6 +106,22 @@ int load_elf(const char *path, elf_program_t *out) {
         kfree(phdrs);
         close(elf_file);
         return -EIO;
+    }
+
+    for (int i = 0; i < eh.e_phnum; i++) {
+        Elf64_Phdr *phdr = &phdrs[i];
+        
+        if (phdr->p_type == PT_TLS) {
+            tls_filesz = phdr->p_filesz;
+            tls_memsz = phdr->p_memsz;
+            tls_vaddr = phdr->p_vaddr;
+            tls_offset = phdr->p_offset;
+            tls_align = phdr->p_align > 0 ? phdr->p_align : 8;
+            
+            debugf_debug("Found PT_TLS: vaddr=0x%llx offset=0x%llx filesz=%llu memsz=%llu align=%llu\n",
+                         tls_vaddr, tls_offset, tls_filesz, tls_memsz, tls_align);
+            break;
+        }
     }
 
     char *proc_name = strdup(path);
@@ -147,9 +168,11 @@ int load_elf(const char *path, elf_program_t *out) {
             }
     
             dynamic_vaddr = PHYS_TO_VIRTUAL(phys) + ((phdr->p_vaddr + load_bias) - dyn_start);
-            dynamic_size = phdr->p_memsz;
         }
 
+        if (phdr->p_type == PT_TLS) {
+            continue;
+        }
 
         if (phdr->p_type != PT_LOAD) {
             continue;
@@ -157,7 +180,6 @@ int load_elf(const char *path, elf_program_t *out) {
 
         debugf_debug("Loading segment %d: vaddr=0x%llx memsz=0x%llx filesz=0x%llx flags=0x%x\n",
                      i, phdr->p_vaddr, phdr->p_memsz, phdr->p_filesz, phdr->p_flags);
-
 
         uint64_t seg_vaddr = phdr->p_vaddr + load_bias;
         uint64_t seg_page_start = ROUND_DOWN(seg_vaddr, PFRAME_SIZE);
@@ -245,13 +267,74 @@ int load_elf(const char *path, elf_program_t *out) {
         }
     }
 
-    close(elf_file);
-    kfree(phdrs);
-
     if (!is_mapped(pml4, eh.e_entry + load_bias)) {
         debugf_warn("Entry point 0x%llx is not mapped!\n", eh.e_entry + load_bias);
+        kfree(phdrs);
+        close(elf_file);
         return -EINVAL;
     }
+    
+    if (tls_memsz > 0) {
+        size_t tcb_size = sizeof(user_tls_t);
+        size_t total_size = tcb_size + tls_memsz;
+        total_size = ROUND_UP(total_size, PFRAME_SIZE);
+        
+        debugf_debug("Allocating TLS: TCB=%zu + data=%llu = %zu bytes\n",
+                 tcb_size, tls_memsz, total_size);
+        
+        if (find_new_tls_base(proc->main_thread, total_size) != EOK) {
+            debugf_warn("Failed to allocate TLS\n");
+            kfree(phdrs);
+            close(elf_file);
+            return -ENOMEM;
+        }
+        
+        user_tls_t *tcb = proc->main_thread->tls_ptr;
+        uint64_t    fs_base = (uint64_t)proc->main_thread->tls.base_virt;
+
+        uint64_t tls_data_virt = fs_base - tls_memsz;
+        (void)tls_data_virt;
+
+        void *tls_data_kern = (void *)((uint64_t)tcb - tls_memsz);
+
+        if (tls_filesz > 0) {
+            seek(elf_file, tls_offset, SEEK_SET);
+            if (read(elf_file, tls_filesz, tls_data_kern) != tls_filesz) {
+                debugf_warn("Failed to read TLS init data\n");
+                kfree(phdrs);
+                close(elf_file);
+                return -EIO;
+            }
+            debugf_debug("Copied %llu bytes of TLS init data to %p\n", 
+                         tls_filesz, tls_data_kern);
+        }
+
+        if (tls_memsz > tls_filesz) {
+            memset((void *)((uint64_t)tls_data_kern + tls_filesz), 0,
+                   tls_memsz - tls_filesz);
+        }
+
+        tcb->self = (user_tls_t *)fs_base;
+        
+    } else {
+        if (find_new_tls_base(proc->main_thread, TLS_MIN_SIZE) != EOK) {
+            debugf_warn("Failed to allocate basic TLS\n");
+            kfree(phdrs);
+            close(elf_file);
+            return -ENOMEM;
+        }
+        
+        user_tls_t *tcb = proc->main_thread->tls_ptr;
+        uint64_t    fs_base = (uint64_t)proc->main_thread->tls.base_virt;
+        tcb->self = (user_tls_t *)fs_base;
+    }
+
+    if (proc->main_thread && proc->main_thread->tls.base_virt) {
+        _cpu_set_msr(0xC0000100, (uint64_t)proc->main_thread->tls.base_virt);
+    }
+
+    close(elf_file);
+    kfree(phdrs);
 
     if (out) {
         out->pid = pid;
@@ -263,6 +346,5 @@ int load_elf(const char *path, elf_program_t *out) {
     debugf_debug("ELF loaded successfully: PID=%d entry=0x%llx\n", pid, eh.e_entry);
 
     asm volatile("sti");
-
     return EOK;
 }

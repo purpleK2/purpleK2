@@ -56,13 +56,18 @@ static inline uint64_t syscall1(
 }
 
 static const char filename[] = "/dev/com1";
-static char buffer[] = "RELA test OK\n";
+static char buffer[] = "RELA test OK\r\n";
+static char buffer2[] = "\r\n";
 static char *buffer_ptr = buffer;
+
+__thread uint64_t thread_local_var = 67;
 
 void _start(void) {
     uint64_t fd = syscall2(SYS_OPEN, (uint64_t)filename, 0);
     syscall3(SYS_WRITE, fd, (uint64_t)buffer_ptr, sizeof(buffer)-1);
-    syscall1(SYS_EXIT, 69);
+    syscall3(SYS_WRITE, fd, (uint64_t)buffer2, sizeof(buffer2)-1);
+    thread_local_var += 33;
+    syscall1(SYS_EXIT, thread_local_var);
 
     for(;;) __asm__("hlt");
 }

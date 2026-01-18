@@ -93,4 +93,11 @@ config SCHED_TIMER_INTERVAL_MS
 	help
 		Specifies the timer interrupt interval for the scheduler in milliseconds
 
+config SCHED_TLS_MAX_SIZE_PAGES
+	int "Maximum TLS size (in pages)"
+	default 16
+	range 1 64
+	help
+		Specifies the maximum size of Thread-Local Storage (TLS) in pages
+
 endmenu # Scheduling

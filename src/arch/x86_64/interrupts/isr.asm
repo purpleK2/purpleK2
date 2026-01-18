@@ -26,8 +26,6 @@ isr_common:
     mov bx, 0x10
     mov ds, bx
     mov es, bx
-    mov fs, bx
-    mov gs, bx
     
     mov rdi, rsp
     call isr_handler
@@ -36,8 +34,6 @@ isr_common:
     mov bx, bp
     mov ds, bx
     mov es, bx
-    mov fs, bx
-    mov gs, bx
     
     pop r15
     pop r14
