@@ -1,5 +1,5 @@
 #include "scheduler.h"
-#include "elf/elfloader.h"
+#include "loader/elf/elfloader.h"
 
 #include <gdt/gdt.h>
 

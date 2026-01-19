@@ -1,5 +1,5 @@
 #include "kernel.h"
-#include "elf/elfloader.h"
+#include "loader/elf/elfloader.h"
 #include "karg.h"
 #include "pci/pci.h"
 
