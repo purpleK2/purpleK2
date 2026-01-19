@@ -267,7 +267,7 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
     memset(thread, 0, sizeof(tcb_t));
     thread->tid        = __sync_fetch_and_add(&parent->thread_count, 1);
     thread->flags      = flags;
-    thread->state      = THREAD_READY;
+    thread->state      = THREAD_WAITING;
     thread->parent     = parent;
     thread->priority   = 0;
     thread->time_slice = SCHEDULER_THREAD_TS;
@@ -376,6 +376,30 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
     spinlock_release(&SCHEDULER_LOCK);
 
     return thread->tid;
+}
+
+// marks all threads as READY
+int proc_engage(pcb_t *proc) {
+    if (!proc) {
+        return -EINVAL;
+    }
+
+    spinlock_acquire(&SCHEDULER_LOCK);
+
+    for (int i = 0; i < proc->thread_count; i++) {
+        tcb_t *thread = proc->threads[i];
+        if (!thread) {
+            continue;
+        }
+
+        if (thread->state == THREAD_WAITING) {
+            thread->state = THREAD_READY;
+        }
+    }
+
+    spinlock_release(&SCHEDULER_LOCK);
+
+    return EOK;
 }
 
 int allocate_tls(tcb_t *thread, size_t requested_size) {
