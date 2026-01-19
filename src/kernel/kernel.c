@@ -498,6 +498,8 @@ void kstart(void) {
 
     fs_list(INITRD_MOUNT, -1);
 
+    binfmt_register_loader(&elf_binfmt_loader);
+
     // ffffffff80045977
 
     /*

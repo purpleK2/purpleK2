@@ -1,6 +1,7 @@
 #ifndef ELFLOADER_H
 #define ELFLOADER_H
 
+#include "loader/binfmt.h"
 #include "scheduler/scheduler.h"
 #include "tsc/tsc.h"
 #include <elf/elf.h>
@@ -31,7 +32,9 @@ static inline uint64_t choose_et_dyn_base(void) {
     return ROUND_DOWN(base, PFRAME_SIZE);
 }
 
+extern binfmt_loader_t elf_binfmt_loader;
+
 int elf_validate(const Elf64_Ehdr *eh);
-int load_elf(const char *path, elf_program_t *out);
+int load_elf(const char *path, binfmt_program_t *out);
 
 #endif // ELFLOADER_H

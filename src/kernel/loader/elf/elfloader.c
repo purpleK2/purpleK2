@@ -1,4 +1,6 @@
 #include "elfloader.h"
+#include "elf/elf.h"
+#include "loader/binfmt.h"
 #include "util/macro.h"
 
 #include <autoconf.h>
@@ -17,6 +19,13 @@
 #include <scheduler/scheduler.h>
 
 #include <util/assert.h>
+
+binfmt_loader_t elf_binfmt_loader = {
+    .name       = "ELF64",
+    .magic      = (const uint8_t[4]){ELFMAG0, ELFMAG1, ELFMAG2, ELFMAG3},
+    .magic_size = 4,
+    .load       = load_elf,
+};
 
 int elf_validate(const Elf64_Ehdr *eh) {
     if (eh->e_ident[EI_MAG0] != ELFMAG0) return -1;
@@ -49,7 +58,7 @@ static uint64_t elf_pf_to_page_flags(uint32_t pf_flags) {
     return flags;
 }
 
-int load_elf(const char *path, elf_program_t *out) {
+int load_elf(const char *path, binfmt_program_t *out) {
     asm volatile("cli");
     if (!path || !out) {
         return -ENULLPTR;
@@ -339,8 +348,10 @@ int load_elf(const char *path, elf_program_t *out) {
     if (out) {
         out->pid = pid;
         out->pcb = proc;
-        out->main_thread = proc->main_thread;
-        out->entry = eh.e_entry;
+        out->path = path;
+        out->vmc = proc->vmc;
+        out->entry = eh.e_entry + load_bias;
+        out->rsp = proc->main_thread->regs->rsp;
     }
 
     debugf_debug("ELF loaded successfully: PID=%d entry=0x%llx\n", pid, eh.e_entry);

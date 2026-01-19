@@ -1,4 +1,5 @@
 #include "scheduler.h"
+#include "loader/binfmt.h"
 #include "loader/elf/elfloader.h"
 
 #include <gdt/gdt.h>
@@ -573,12 +574,11 @@ int init_cpu_scheduler() {
     int cpu = get_cpu();
 
     if (cpu == get_bootloader_data()->bootstrap_cpu_id) {
-        elf_program_t init;
         if (get_bootloader_data()->init_exec == NULL) {
             debugf_warn("No init executable specified, starting idle process instead.\n");
-            load_elf("/initrd/bin/init.elf", &init);
+            binfmt_exec("/initrd/bin/init.elf");
         } else {
-            load_elf(get_bootloader_data()->init_exec, &init);
+            binfmt_exec(get_bootloader_data()->init_exec);
         }
     } else {
         proc_create(def_idle_proc, TF_MODE_KERNEL, "idle");
