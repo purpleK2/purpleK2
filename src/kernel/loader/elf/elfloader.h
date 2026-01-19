@@ -32,9 +32,16 @@ static inline uint64_t choose_et_dyn_base(void) {
     return ROUND_DOWN(base, PFRAME_SIZE);
 }
 
+typedef struct Elf64_auxv {
+    uint64_t a_type;
+    union {
+        uint64_t a_val;
+    } a_un;
+} Elf64_auxv_t;
+
 extern binfmt_loader_t elf_binfmt_loader;
 
 int elf_validate(const Elf64_Ehdr *eh);
-int load_elf(const char *path, binfmt_program_t *out);
+int load_elf(const char *path, const char **argv, const char **envp, binfmt_program_t *out);
 
 #endif // ELFLOADER_H

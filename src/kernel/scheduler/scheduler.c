@@ -1,6 +1,6 @@
 #include "scheduler.h"
+#include "karg.h"
 #include "loader/binfmt.h"
-#include "loader/elf/elfloader.h"
 
 #include <gdt/gdt.h>
 
@@ -286,7 +286,7 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
         thread->user_stack =
             (void *)PHYS_TO_VIRTUAL(pmm_alloc_pages(SCHEDULER_STACK_PAGES));
 
-        uint64_t user_stack_top  = 0x00007FFFFFFFF000ULL + 0x1000;
+        uint64_t user_stack_top  = USER_STACK_TOP;
         uint64_t user_stack_base = user_stack_top - SCHEDULER_STACKSZ;
         uint64_t user_stack_phys = VIRT_TO_PHYSICAL(thread->user_stack);
 
@@ -300,7 +300,7 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
         ctx->ds     = 0x23 | 3;
         ctx->rflags = 0x202;
         ctx->rbp    = 0;
-        ctx->rsp    = user_stack_top - 16;
+        ctx->rsp    = user_stack_top;
 
         if (allocate_tls(thread, TLS_MIN_SIZE) != EOK) {
             debugf_warn("Failed to allocate TLS for thread TID=%d\n", thread->tid);
@@ -570,15 +570,44 @@ static void def_idle_proc() {
     }
 }
 
+// new array that has init path at the beginning and then the cmdline speicified arguments
+const char **get_init_argv() {
+    const char *init_path = get_bootloader_data()->init_exec;
+
+    static char *argv_buffer[CONFIG_KERNEL_INIT_PROC_MAX_ARGS];
+    memset(argv_buffer, 0, sizeof(argv_buffer));
+
+    argv_buffer[0] = init_path;
+
+    for (int i = 0; i < cmdline_init_argc; i++) {
+        argv_buffer[i + 1] = cmdline_init_argv[i];
+    }
+
+    return (const char **)argv_buffer;
+}
+
+const char **get_init_argv_no_init_exec_arg(const char *init_path) {
+    static char *argv_buffer[CONFIG_KERNEL_INIT_PROC_MAX_ARGS];
+    memset(argv_buffer, 0, sizeof(argv_buffer));
+
+    argv_buffer[0] = init_path;
+
+    for (int i = 0; i < cmdline_init_argc; i++) {
+        argv_buffer[i + 1] = cmdline_init_argv[i];
+    }
+
+    return (const char **)argv_buffer;
+}
+
 int init_cpu_scheduler() {
     int cpu = get_cpu();
 
     if (cpu == get_bootloader_data()->bootstrap_cpu_id) {
         if (get_bootloader_data()->init_exec == NULL) {
             debugf_warn("No init executable specified, starting idle process instead.\n");
-            binfmt_exec("/initrd/bin/init.elf");
+            binfmt_exec("/initrd/bin/init.elf", get_init_argv_no_init_exec_arg("/initrd/bin/init.elf"), NULL);
         } else {
-            binfmt_exec(get_bootloader_data()->init_exec);
+            binfmt_exec(get_bootloader_data()->init_exec, get_init_argv(), NULL);
         }
     } else {
         proc_create(def_idle_proc, TF_MODE_KERNEL, "idle");

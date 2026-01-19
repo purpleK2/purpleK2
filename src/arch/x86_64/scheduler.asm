@@ -14,9 +14,9 @@ context_load:
     mov rbp, [rdi + 0x48]
     mov rbx, [rdi + 0x70]
 
-    mov rsp, rdi
-    add rsp, 0x90
+    lea rsp, [rdi + 0x90]
 
+    swapgs
     iretq
 
 public fpu_save

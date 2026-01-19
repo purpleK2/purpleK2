@@ -20,7 +20,7 @@ typedef struct binfmt_loader {
     const uint8_t *magic;
     size_t magic_size;
 
-    int (*load)(const char *path, binfmt_program_t *out);
+    int (*load)(const char *path, const char **argv, const char **envp, binfmt_program_t *out);
 } binfmt_loader_t;
 
 extern binfmt_loader_t **binfmt_loaders;
@@ -28,9 +28,9 @@ extern int binfmt_loader_count;
 extern int binfmt_loader_capacity;
 
 int binfmt_register_loader(binfmt_loader_t *loader);
-int binfmt_load(const char *path, binfmt_program_t *out);
+int binfmt_load(const char *path, const char **argv, const char **envp, binfmt_program_t *out);
 int binfmt_run(binfmt_program_t *prog);
 
-int binfmt_exec(const char *path);
+int binfmt_exec(const char *path, const char **argv, const char **envp);
 
 #endif // BINFMT_H

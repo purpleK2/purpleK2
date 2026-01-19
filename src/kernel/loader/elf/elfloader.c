@@ -1,4 +1,5 @@
 #include "elfloader.h"
+#include "auxv.h"
 #include "elf/elf.h"
 #include "loader/binfmt.h"
 #include "util/macro.h"
@@ -58,7 +59,172 @@ static uint64_t elf_pf_to_page_flags(uint32_t pf_flags) {
     return flags;
 }
 
-int load_elf(const char *path, binfmt_program_t *out) {
+static int count_strings(const char **arr) {
+    if (!arr) return 0;
+    int count = 0;
+    while (arr[count] != NULL) {
+        count++;
+    }
+    return count;
+}
+
+static inline void *user_va_to_kernel_va(const tcb_t *thread,
+                                        uint64_t user_va,
+                                        uint64_t user_stack_bottom_va,
+                                        uint64_t user_stack_top_va)
+{
+    if (user_va < user_stack_bottom_va || user_va >= user_stack_top_va) {
+        debugf_warn("Invalid user VA 0x%llx for stack [0x%llx - 0x%llx]\n",
+                    user_va, user_stack_bottom_va, user_stack_top_va);
+        return NULL;
+    }
+
+    uint64_t offset = user_va - user_stack_bottom_va;
+    return (char *)thread->user_stack + offset;
+}
+
+static int setup_initial_stack(pcb_t *proc,
+                               const char **argv, int argc,
+                               const char **envp, int envc,
+                               Elf64_auxv_t *auxv, int auxc,
+                               uint64_t load_bias, uint64_t phdr_vaddr)
+{
+    tcb_t *thread = proc->main_thread;
+    if (!thread || !thread->user_stack)
+        return -EINVAL;
+    uint64_t user_stack_bottom_va = USER_STACK_TOP - SCHEDULER_STACKSZ;
+
+
+    size_t argv_strings_bytes = 0;
+    for (int i = 0; i < argc; i++) {
+        if (argv[i]) argv_strings_bytes += strlen(argv[i]) + 1;
+    }
+
+    size_t env_strings_bytes = 0;
+    for (int i = 0; i < envc; i++) {
+        if (envp[i]) env_strings_bytes += strlen(envp[i]) + 1;
+    }
+
+    size_t strings_total = argv_strings_bytes + env_strings_bytes;
+    size_t strings_aligned = (strings_total + 15) & ~0xF;
+
+    size_t argv_array_bytes = (argc + 1) * sizeof(uint64_t);
+    size_t envp_array_bytes = (envc + 1) * sizeof(uint64_t);
+
+    size_t auxv_bytes = (auxc + 1) * sizeof(Elf64_auxv_t);
+
+    size_t argc_bytes = sizeof(uint64_t);
+
+    size_t total_needed = strings_aligned +
+                          argv_array_bytes +
+                          envp_array_bytes +
+                          auxv_bytes +
+                          argc_bytes;
+
+    total_needed = (total_needed + 15) & ~0xF;
+
+    uint64_t rsp = USER_STACK_TOP & ~0xF;
+    rsp -= total_needed;
+
+    if (rsp < user_stack_bottom_va) {
+        debugf_warn("User stack overflow: needed %zu bytes, only %llu bytes available "
+                    "(top=0x%llx, bottom=0x%llx, rsp=0x%llx)\n",
+                    total_needed,
+                    USER_STACK_TOP - user_stack_bottom_va,
+                    USER_STACK_TOP,
+                    user_stack_bottom_va,
+                    rsp);
+        return -ENOMEM;
+    }
+
+    uint64_t pos = rsp;
+
+    uint64_t *k_argc = (uint64_t *) user_va_to_kernel_va(thread, pos,
+                                                     user_stack_bottom_va,
+                                                     USER_STACK_TOP);
+    if (!k_argc) return -ENOMEM;
+    *k_argc = (uint64_t) argc;
+    pos += sizeof(uint64_t);
+
+    uint64_t *k_argv = (uint64_t *) user_va_to_kernel_va(thread, pos,
+                                                     user_stack_bottom_va,
+                                                     USER_STACK_TOP);
+    if (!k_argv) return -ENOMEM;
+    pos += argv_array_bytes;
+
+    uint64_t *k_envp = (uint64_t *) user_va_to_kernel_va(thread, pos,
+                                                     user_stack_bottom_va,
+                                                     USER_STACK_TOP);
+    if (!k_envp) return -ENOMEM;
+    pos += envp_array_bytes;
+
+    Elf64_auxv_t *k_auxv = (Elf64_auxv_t *) user_va_to_kernel_va(thread, pos,
+                                                     user_stack_bottom_va,
+                                                     USER_STACK_TOP);
+    if (!k_auxv) return -ENOMEM;
+    pos += auxv_bytes;
+
+    char *k_str_area = (char *) user_va_to_kernel_va(thread, pos,
+                                                     user_stack_bottom_va,
+                                                     USER_STACK_TOP);
+    if (!k_str_area) return -ENOMEM;
+    char *k_str_write = k_str_area;
+
+    uint64_t str_area_user_va = pos;
+    char *str_write_user_va   = (char *) str_area_user_va;
+
+    for (int i = 0; i < argc; i++) {
+        if (argv[i]) {
+            size_t len = strlen(argv[i]) + 1;
+            memcpy(k_str_write, argv[i], len);
+            k_argv[i] = (uint64_t) str_write_user_va;
+            k_str_write      += len;
+            str_write_user_va += len;
+        } else {
+            k_argv[i] = 0;
+        }
+    }
+    k_argv[argc] = 0;
+
+    for (int i = 0; i < envc; i++) {
+        if (envp[i]) {
+            size_t len = strlen(envp[i]) + 1;
+            memcpy(k_str_write, envp[i], len);
+            k_envp[i] = (uint64_t) str_write_user_va;
+            k_str_write      += len;
+            str_write_user_va += len;
+        } else {
+            k_envp[i] = 0;
+        }
+    }
+    k_envp[envc] = 0;
+
+    memcpy(k_auxv, auxv, auxc * sizeof(Elf64_auxv_t));
+    k_auxv[auxc].a_type = AT_NULL;
+    k_auxv[auxc].a_un.a_val = 0;
+
+    thread->regs->rsp = rsp;
+
+    debugf_debug("User stack prepared:\n"
+                 "  rsp        = 0x%016llx (0x%016llx)  ← argc lives here\n"
+                 "  argv[]     @ 0x%016llx\n"
+                 "  envp[]     @ 0x%016llx\n"
+                 "  auxv[]     @ 0x%016llx\n"
+                 "  strings    @ 0x%016llx – 0x%016llx\n"
+                 "  argc       = %llu\n",
+                 rsp, thread->regs->rsp,
+                 rsp + argc_bytes,
+                 rsp + argc_bytes + argv_array_bytes,
+                 rsp + argc_bytes + argv_array_bytes + envp_array_bytes,
+                 str_area_user_va,
+                 (uint64_t)str_write_user_va,
+                 (unsigned long long)argc);
+
+    return EOK;
+}
+
+
+int load_elf(const char *path, const char **argv, const char **envp, binfmt_program_t *out) {
     asm volatile("cli");
     if (!path || !out) {
         return -ENULLPTR;
@@ -342,6 +508,69 @@ int load_elf(const char *path, binfmt_program_t *out) {
         _cpu_set_msr(0xC0000100, (uint64_t)proc->main_thread->tls.base_virt);
     }
 
+    int argc = 0;
+    int envc = 0;
+
+    if (argv) {
+        argc = count_strings(argv);
+    }
+    if (envp) {
+        envc = count_strings(envp);
+    }
+
+    const char *default_argv[] = {path, NULL};
+    if (!argv || argc == 0) {
+        argv = default_argv;
+        argc = 1;
+    }
+
+    const char *default_envp[] = {
+        "PATH=/bin:/usr/bin",
+        NULL
+    };
+    if (!envp || envc == 0) {
+        envp = default_envp;
+        envc = 1;
+    }
+
+    uint64_t phdr_vaddr = 0;
+    for (int i = 0; i < eh.e_phnum; i++) {
+        if (phdrs[i].p_type == PT_LOAD && phdrs[i].p_offset == 0) {
+            phdr_vaddr = phdrs[i].p_vaddr + load_bias + eh.e_phoff;
+            break;
+        }
+    }
+    if (phdr_vaddr == 0) {
+        phdr_vaddr = load_bias + eh.e_phoff;
+    }
+
+    Elf64_auxv_t auxv[32];
+    int auxc = 0;
+
+    auxv[auxc++] = (Elf64_auxv_t){AT_PHDR, {phdr_vaddr}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_PHENT, {sizeof(Elf64_Phdr)}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_PHNUM, {eh.e_phnum}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_PAGESZ, {PFRAME_SIZE}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_BASE, {eh.e_type == ET_DYN ? load_bias : 0}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_ENTRY, {eh.e_entry + load_bias}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_UID, {0}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_EUID, {0}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_GID, {0}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_EGID, {0}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_SECURE, {0}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_RANDOM, {0}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_HWCAP, {0}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_CLKTCK, {100}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_EXECFN, {(uint64_t)(uintptr_t)path}};
+
+    if (setup_initial_stack(proc, argv, argc, envp, envc, auxv, auxc, 
+                            load_bias, phdr_vaddr) != EOK) {
+        debugf_warn("Failed to setup initial stack\n");
+        kfree(phdrs);
+        close(elf_file);
+        return -ENOMEM;
+    }
+
     close(elf_file);
     kfree(phdrs);
 
@@ -354,7 +583,7 @@ int load_elf(const char *path, binfmt_program_t *out) {
         out->rsp = proc->main_thread->regs->rsp;
     }
 
-    debugf_debug("ELF loaded successfully: PID=%d entry=0x%llx\n", pid, eh.e_entry);
+    debugf_debug("ELF loaded successfully: PID=%d entry=0x%llx\n", pid, eh.e_entry + load_bias);
 
     asm volatile("sti");
     return EOK;

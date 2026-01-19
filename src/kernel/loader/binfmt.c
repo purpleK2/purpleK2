@@ -21,7 +21,7 @@ int binfmt_register_loader(binfmt_loader_t *loader) {
     return 0;
 }
 
-int binfmt_load(const char *path, binfmt_program_t *out) {
+int binfmt_load(const char *path, const char **argv, const char **envp, binfmt_program_t *out) {
     if (!path || !out) {
         return -ENULLPTR;
     }
@@ -44,7 +44,7 @@ int binfmt_load(const char *path, binfmt_program_t *out) {
 
         if (memcmp(magic, loader->magic, loader->magic_size) == 0) {
             debugf_debug("BINFMT: using loader %s for %s\n", loader->name, path);
-            return loader->load(path, out);
+            return loader->load(path, argv, envp, out);
         }
     }
 
@@ -63,11 +63,11 @@ int binfmt_run(binfmt_program_t *prog) {
     return proc_engage(prog->pcb);
 }
 
-int binfmt_exec(const char *path) {
+int binfmt_exec(const char *path, const char **argv, const char **envp) {
     binfmt_program_t prog;
     memset(&prog, 0, sizeof(prog));
 
-    int ret = binfmt_load(path, &prog);
+    int ret = binfmt_load(path, argv, envp, &prog);
     if (ret < 0) {
         debugf_warn("BINFMT: failed to load %s: %d\n", path, ret);
         return ret;
