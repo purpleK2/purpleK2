@@ -160,7 +160,7 @@ int init_scheduler();
     every CPU), whatever.
 */
 
-int init_cpu_scheduler(void (*p)()); // inits the scheduler for a specific CPU
+int init_cpu_scheduler(); // inits the scheduler for a specific CPU
                                      // with a custom process and a thread queue
 
 int proc_create(void (*entry)(), int flags, char *name);

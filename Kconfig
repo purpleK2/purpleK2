@@ -101,3 +101,17 @@ config SCHED_TLS_MAX_SIZE_PAGES
 		Specifies the maximum size of Thread-Local Storage (TLS) in pages
 
 endmenu # Scheduling
+
+config KERNEL_CMDLINE_MAX_OPS
+	int "Maximum amount of kernel commandline arguments"
+	default 64
+	range 8 128
+	help
+		Specifies the maximum amount of kernel commandline arguments that can be used in the kernel (like init_proc="...")
+
+config KERNEL_INIT_PROC_MAX_ARGS
+	int "Maximum amount of arguments that can be passed to init process"
+	default 64
+	range 8 128
+	help
+		Specifies the maximum amount of arguments that can be passed to the init process

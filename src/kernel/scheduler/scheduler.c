@@ -1,4 +1,5 @@
 #include "scheduler.h"
+#include "elf/elfloader.h"
 
 #include <gdt/gdt.h>
 
@@ -538,11 +539,28 @@ tcb_t *tcb_lookup(int pid, int tid) {
     return NULL;
 }
 
-int init_cpu_scheduler(void (*p)()) {
-    proc_create(p, 0, "initproc");
+static void def_idle_proc() {
+    while (1) {
+        __asm__ volatile("nop");
+    }
+}
+
+int init_cpu_scheduler() {
+    int cpu = get_cpu();
+
+    if (cpu == get_bootloader_data()->bootstrap_cpu_id) {
+        elf_program_t init;
+        if (get_bootloader_data()->init_exec == NULL) {
+            debugf_warn("No init executable specified, starting idle process instead.\n");
+            load_elf("/initrd/bin/init.elf", &init);
+        } else {
+            load_elf(get_bootloader_data()->init_exec, &init);
+        }
+    } else {
+        proc_create(def_idle_proc, TF_MODE_KERNEL, "idle");
+    }
 
     _cpu_set_msr(0xC0000102, (uint64_t)&cpu_locals[get_cpu()]); // IA32_KERNEL_GS_BASE
-    return 0;
 }
 
 int pcb_destroy(int pid) {
