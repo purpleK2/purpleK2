@@ -356,8 +356,6 @@ int load_elf(const char *path, binfmt_program_t *out) {
 
     debugf_debug("ELF loaded successfully: PID=%d entry=0x%llx\n", pid, eh.e_entry);
 
-    proc_engage(proc);
-
     asm volatile("sti");
     return EOK;
 }
