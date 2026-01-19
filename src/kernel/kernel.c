@@ -1,5 +1,6 @@
 #include "kernel.h"
-#include "elf/elfloader.h"
+#include "loader/elf/elfloader.h"
+#include "karg.h"
 #include "pci/pci.h"
 
 #include <autoconf.h>
@@ -99,6 +100,11 @@ USED SECTION(".requests") static volatile struct limine_executable_file_request
     kernel_file_request = {.id       = LIMINE_EXECUTABLE_FILE_REQUEST_ID,
                            .revision = 0};
 
+USED SECTION(".requests") static volatile struct limine_executable_cmdline_request
+    kernel_cmdline_request = {
+        .id       = LIMINE_EXECUTABLE_CMDLINE_REQUEST_ID,
+        .revision = 0};
+
 USED SECTION(".requests_start_marker") static volatile uint64_t
     limine_requests_start_marker[] = LIMINE_REQUESTS_START_MARKER;
 
@@ -114,6 +120,7 @@ struct limine_paging_mode_response *paging_mode_response;
 struct limine_rsdp_response *rsdp_response;
 struct limine_module_response *module_response;
 struct limine_file *kernel_file;
+struct limine_executable_cmdline_response *kernel_cmdline_response;
 
 struct bootloader_data limine_parsed_data;
 
@@ -123,17 +130,16 @@ struct bootloader_data *get_bootloader_data() {
 
 vmc_t *kvmc;
 
-void pk_init() {
-    kprintf_ok("Hello!\n");
-    elf_program_t *prog = kmalloc(sizeof(elf_program_t));
-    memset(prog, 0, sizeof(elf_program_t));
-    if (load_elf("/initrd/bin/init.elf", prog) != 0) {
-        debugf_warn("Failed to load /initrd/bin/init.elf\n");
-        kfree(prog);
+static int karg_init_exec(const char *value) {
+    if (value == NULL) {
+        limine_parsed_data.init_exec = NULL;
+        return -1;
     }
 
-    // IT IS STILL A BAD IDEA TO JUST LET THE PAGEFAULT HANDLER KILL THE PROC 😭
-    proc_exit();
+    debugf_debug("Init Executable Path: %s\n", value);
+
+    limine_parsed_data.init_exec = (char *)value;
+    return 0;
 }
 
 // kernel main function
@@ -165,6 +171,22 @@ void kstart(void) {
         kernel_file_request.response->executable_file->address;
     limine_parsed_data.kernel_file_size =
         kernel_file_request.response->executable_file->size;
+
+    limine_parsed_data.karg_cmdline =
+        kernel_cmdline_request.response
+            ? kernel_cmdline_request.response->cmdline
+            : NULL;
+
+    limine_parsed_data.bootstrap_cpu_id =
+        smp_request.response
+            ? smp_request.response->bsp_lapic_id
+            : 0;
+
+    karg_register("init", karg_init_exec, 0);
+
+    if (limine_parsed_data.karg_cmdline) {
+        karg_parse(limine_parsed_data.karg_cmdline);
+    }
 
     arch_base_init();
 
@@ -476,6 +498,8 @@ void kstart(void) {
 
     fs_list(INITRD_MOUNT, -1);
 
+    binfmt_register_loader(&elf_binfmt_loader);
+
     // ffffffff80045977
 
     /*
@@ -500,7 +524,7 @@ void kstart(void) {
 
     global_vmc_init(kvmc);
 
-    init_cpu_scheduler(pk_init);
+    init_cpu_scheduler();
 
     _disable_interrupts(); // just in case
     irq_registerHandler(0, scheduler_timer_tick);
