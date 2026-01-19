@@ -8,6 +8,7 @@
 #include <errors.h>
 #include <kernel.h>
 #include <cpu.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -105,7 +106,9 @@ static int setup_initial_stack(pcb_t *proc,
         if (envp[i]) env_strings_bytes += strlen(envp[i]) + 1;
     }
 
-    size_t strings_total = argv_strings_bytes + env_strings_bytes;
+    size_t platform_len = sizeof("x86_64");
+
+    size_t strings_total = platform_len + argv_strings_bytes + env_strings_bytes;
     size_t strings_aligned = (strings_total + 15) & ~0xF;
 
     size_t argv_array_bytes = (argc + 1) * sizeof(uint64_t);
@@ -173,6 +176,12 @@ static int setup_initial_stack(pcb_t *proc,
     uint64_t str_area_user_va = pos;
     char *str_write_user_va   = (char *) str_area_user_va;
 
+    uint64_t platform_user_va = (uint64_t)str_write_user_va;
+
+    memcpy(k_str_write, "x86_64", platform_len);
+    k_str_write += platform_len;
+    str_write_user_va += platform_len;
+
     for (int i = 0; i < argc; i++) {
         if (argv[i]) {
             size_t len = strlen(argv[i]) + 1;
@@ -200,17 +209,28 @@ static int setup_initial_stack(pcb_t *proc,
     k_envp[envc] = 0;
 
     memcpy(k_auxv, auxv, auxc * sizeof(Elf64_auxv_t));
+
+    for (int i = 0; i < auxc; i++) {
+        if (k_auxv[i].a_type == AT_PLATFORM ||
+            k_auxv[i].a_type == AT_BASE_PLATFORM) {
+            k_auxv[i].a_un.a_val = platform_user_va;
+        }
+        if (k_auxv[i].a_type == AT_EXECFN) {
+            k_auxv[i].a_un.a_val = k_argv[0];
+        }
+    }
+
     k_auxv[auxc].a_type = AT_NULL;
     k_auxv[auxc].a_un.a_val = 0;
 
     thread->regs->rsp = rsp;
 
     debugf_debug("User stack prepared:\n"
-                 "  rsp        = 0x%016llx (0x%016llx)  ← argc lives here\n"
+                 "  rsp        = 0x%016llx (0x%016llx)  <- argc lives here\n"
                  "  argv[]     @ 0x%016llx\n"
                  "  envp[]     @ 0x%016llx\n"
                  "  auxv[]     @ 0x%016llx\n"
-                 "  strings    @ 0x%016llx – 0x%016llx\n"
+                 "  strings    @ 0x%016llx - 0x%016llx\n"
                  "  argc       = %llu\n",
                  rsp, thread->regs->rsp,
                  rsp + argc_bytes,
@@ -560,6 +580,8 @@ int load_elf(const char *path, const char **argv, const char **envp, binfmt_prog
     auxv[auxc++] = (Elf64_auxv_t){AT_SECURE, {0}};
     auxv[auxc++] = (Elf64_auxv_t){AT_RANDOM, {0}};
     auxv[auxc++] = (Elf64_auxv_t){AT_HWCAP, {0}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_PLATFORM, {0}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_BASE_PLATFORM, {0}};
     auxv[auxc++] = (Elf64_auxv_t){AT_CLKTCK, {100}};
     auxv[auxc++] = (Elf64_auxv_t){AT_EXECFN, {(uint64_t)(uintptr_t)path}};
 

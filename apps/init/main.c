@@ -32,6 +32,7 @@ typedef unsigned int   uint32_t;
 #define AT_HWCAP        16
 #define AT_CLKTCK       17
 #define AT_SECURE       23
+#define AT_BASE_PLATFORM 24
 #define AT_RANDOM       25
 #define AT_HWCAP2       26
 #define AT_EXECFN       31
@@ -145,6 +146,7 @@ static const char *auxv_type_name(uint64_t type) {
         case AT_RANDOM:   return "AT_RANDOM";
         case AT_HWCAP2:   return "AT_HWCAP2";
         case AT_EXECFN:   return "AT_EXECFN";
+        case AT_BASE_PLATFORM: return "AT_BASE_PLATFORM";
         default:          return "AT_UNKNOWN";
     }
 }
@@ -205,7 +207,8 @@ void main(uintptr_t *stack_ptr) {
             print(fd, "\"");
             print(fd, execfn);
             print(fd, "\"");
-        } else if (auxv[i].a_type == AT_PLATFORM) {
+        } else if (auxv[i].a_type == AT_PLATFORM ||
+                   auxv[i].a_type == AT_BASE_PLATFORM) {
             print(fd, "\"");
             print(fd, (const char *)auxv[i].a_un.a_val);
             print(fd, "\"");
