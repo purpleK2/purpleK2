@@ -21,11 +21,6 @@ extern struct limine_hhdm_request *hhdm_request;
 
 isrHandler isr_handlers[IDT_MAX_DESCRIPTORS];
 
-struct stackFrame {
-    struct stackFrame *rbp;
-    uint64_t rip;
-};
-
 static const char *const exceptions[] = {"Divide by zero error",
                                          "Debug",
                                          "Non-maskable Interrupt",
@@ -171,6 +166,24 @@ static void print_symbol(int frame, uintptr_t addr) {
 
 static uint8_t stack_failed_count = -1;
 
+void print_stack_trace(uint64_t rbp, uint64_t rip) {
+    struct stackFrame *stack = (struct stackFrame *)rbp;
+    int frame                = 0;
+
+    if (rip != 0) {
+        print_symbol(frame, rip);
+    } 
+
+    while (stack) {
+        if (is_addr_mapped(stack->rip)) {
+            print_symbol(frame++, stack->rip);
+        } else {
+            mprintf("Failed to get symbol at address 0x%.16llx\n", (uint64_t)(uintptr_t)stack->rip);
+        }
+        stack = (struct stackFrame *)stack->rbp;
+    }
+}
+
 void panic_common(registers_t *ctx) {
 
     print_reg_dump(ctx);
@@ -187,15 +200,7 @@ void panic_common(registers_t *ctx) {
 
     // stacktrace
     mprintf("\n\n --- STACK TRACE ---\n");
-    struct stackFrame *stack = (struct stackFrame *)ctx->rbp;
-    int frame                = 0;
-
-    print_symbol(frame++, ctx->rip);
-
-    while (stack) {
-        print_symbol(frame++, stack->rip);
-        stack = (struct stackFrame *)stack->rbp;
-    }
+    print_stack_trace(ctx->rbp, ctx->rip);
 
     mprintf("\nPANIC LOG END --- HALTING ---\n");
     debugf(ANSI_COLOR_RESET);

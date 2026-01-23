@@ -46,6 +46,8 @@ int kprintf(const char *fmt, ...);
 int debugf(const char *fmt, ...);
 int mprintf(const char *fmt, ...);
 
+int kpanic(const char *cause, ...);
+
 // snprintf and such are copied from nanoprintf directly
 
 #define sprintf(buf, fmt, ...)                                                 \
