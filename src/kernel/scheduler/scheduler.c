@@ -280,20 +280,24 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
     memset(ctx, 0, sizeof(registers_t));
 
     if (flags & TF_MODE_USER) {
-
-        thread->kernel_stack =
-            (void *)PHYS_TO_VIRTUAL(pmm_alloc_pages(SCHEDULER_STACK_PAGES));
-        thread->user_stack =
-            (void *)PHYS_TO_VIRTUAL(pmm_alloc_pages(SCHEDULER_STACK_PAGES));
-
         uint64_t user_stack_top  = USER_STACK_TOP;
         uint64_t user_stack_base = user_stack_top - SCHEDULER_STACKSZ;
-        uint64_t user_stack_phys = VIRT_TO_PHYSICAL(thread->user_stack);
 
-        map_region((uint64_t *)PHYS_TO_VIRTUAL(parent->vmc->pml4_table),
-                user_stack_phys, user_stack_base,
-                SCHEDULER_STACK_PAGES, PMLE_USER_READ_WRITE);
+        thread->user_stack = valloc_at(parent->vmc, (void *)(uintptr_t)user_stack_base,
+                  SCHEDULER_STACK_PAGES, VMO_USER_RW,
+                  NULL);
 
+        thread->user_stack = (void *)(uintptr_t)PHYS_TO_VIRTUAL(
+            pg_virtual_to_phys((uint64_t*)(uintptr_t)PHYS_TO_VIRTUAL(parent->vmc->pml4_table), (uint64_t)(uintptr_t)thread->user_stack)
+        );
+
+        thread->kernel_stack = valloc(parent->vmc, SCHEDULER_STACK_PAGES,
+                  VMO_KERNEL_RW, NULL);
+
+        thread->kernel_stack = (void *)(uintptr_t)PHYS_TO_VIRTUAL(
+            pg_virtual_to_phys((uint64_t*)(uintptr_t)PHYS_TO_VIRTUAL(parent->vmc->pml4_table), (uint64_t)(uintptr_t)thread->kernel_stack)
+        );
+        
         ctx->rip    = (uint64_t)entry;
         ctx->cs     = 0x1B | 3;
         ctx->ss     = 0x23 | 3;
@@ -336,8 +340,13 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
             thread->tls.base_virt, thread->priority);
 #endif
     } else {
-        thread->kernel_stack =
-            (void *)PHYS_TO_VIRTUAL(pmm_alloc_pages(SCHEDULER_STACK_PAGES));
+        thread->kernel_stack = valloc(parent->vmc, SCHEDULER_STACK_PAGES,
+                  VMO_KERNEL_RW, NULL);
+
+        thread->kernel_stack = (void *)(uintptr_t)PHYS_TO_VIRTUAL(
+            pg_virtual_to_phys((uint64_t*)(uintptr_t)PHYS_TO_VIRTUAL(parent->vmc->pml4_table), (uint64_t)(uintptr_t)thread->kernel_stack)
+        );
+        
         thread->user_stack = NULL;
 
         ctx->rip    = (uint64_t)entry;

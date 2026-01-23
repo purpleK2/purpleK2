@@ -125,6 +125,14 @@ void *vmmlist_alloc(vmm_node_t **root_node, size_t item_size) {
     return item;
 }
 
+static bool vmo_overlaps(vmo_t *v, uint64_t base, size_t pages) {
+    uint64_t len_bytes = pages * PFRAME_SIZE;
+    uint64_t v_end = v->base + v->len * PFRAME_SIZE;
+    uint64_t r_end = base + len_bytes;
+
+    return !(r_end <= v->base || base >= v_end);
+}
+
 void vmmlist_free(vmm_node_t **root_node, size_t item_size, void *tofree) {
     // cases:
     // it was the first VMO allocated
@@ -482,6 +490,73 @@ void *valloc(vmc_t *ctx, size_t pages, uint8_t flags, void *phys) {
     spinlock_release(&VMM_LOCK);
 
     return (ptr + offset);
+}
+
+void *valloc_at(vmc_t *ctx, void *addr, size_t pages, uint8_t flags, void *phys) {
+    spinlock_acquire(&VMM_LOCK);
+
+    uint64_t base = (uint64_t)(uintptr_t)addr;
+
+    if (base & (PFRAME_SIZE - 1)) {
+        debugf_warn("valloc_at: Address %p is not page-aligned\n", addr);
+        spinlock_release(&VMM_LOCK);
+        return NULL;
+    }
+
+    vmo_t *prev_vmo = NULL;
+    vmo_t *cur_vmo  = ctx->root_vmo;
+
+    for (; cur_vmo; prev_vmo = cur_vmo, cur_vmo = cur_vmo->next) {
+        if (vmo_overlaps(cur_vmo, base, pages)) {
+            debugf_warn("valloc_at: Requested region %p - %p overlaps with "
+                        "existing VMO %p (%p - %p)\n",
+                        (void *)base, (void *)(base + pages * PFRAME_SIZE),
+                        cur_vmo, (void *)cur_vmo->base,
+                        (void *)(cur_vmo->base + cur_vmo->len * PFRAME_SIZE));
+            spinlock_release(&VMM_LOCK);
+            return NULL;
+        }
+        if (cur_vmo->base > base) {
+            break;
+        }
+    }
+
+    vmo_t *vmo = vmo_alloc();
+    vmo->base  = base;
+    vmo->len   = pages;
+    vmo->flags = flags | VMO_ALLOCATED;
+
+    if (!prev_vmo) {
+        vmo->next = ctx->root_vmo;
+        ctx->root_vmo = vmo;
+    } else {
+        vmo->next = prev_vmo->next;
+        prev_vmo->next = vmo;
+    }
+
+    void *phys_al = NULL;
+    size_t offset = 0;
+
+    if (phys) {
+        phys_al = (void *)ROUND_DOWN((size_t)phys, PFRAME_SIZE);
+        offset  = (size_t)(phys - phys_al);
+    }
+
+    void *phys_to_map = phys_al ? phys_al : pmm_alloc_pages(pages);
+    map_region(
+        (uint64_t *)PHYS_TO_VIRTUAL(ctx->pml4_table),
+        (uint64_t)phys_to_map,
+        base,
+        pages,
+        vmo_to_page_flags(flags)
+    );
+
+    // add a lot of debugging
+    debugf_debug("Created VMO %p at requested address %p (%zu pages) (range %p - %p)\n",
+                 vmo, (void *)base, pages, (void *)base, (void *)(base + pages * PFRAME_SIZE));
+
+    spinlock_release(&VMM_LOCK);
+    return (void *)(base + offset);
 }
 
 // @param free do you want to give back the physical address of `ptr` back to

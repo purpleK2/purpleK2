@@ -58,6 +58,7 @@ void vmm_init(vmc_t *ctx);
 void process_vmm_init(vmc_t **proc_vmcr, uint64_t flags);
 
 void *valloc(vmc_t *ctx, size_t pages, uint8_t flags, void *phys);
+void *valloc_at(vmc_t *ctx, void *addr, size_t pages, uint8_t flags, void *phys);
 void vfree(vmc_t *ctx, void *ptr, bool free);
 
 void global_vmc_init(vmc_t *kernel_vmc);
