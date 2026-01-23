@@ -794,7 +794,7 @@ void yield(registers_t *ctx) {
     }
 
     if (!next) {
-        mprintf_warn("No more processes. System idle.\n");
+        kpanic("Initprocess was killed!");
         scheduler_idle();
     }
 

@@ -526,8 +526,6 @@ void kstart(void) {
 
     init_cpu_scheduler();
 
-    kpanic("Yes %s\n", "no");
-
     _disable_interrupts(); // just in case
     irq_registerHandler(0, scheduler_timer_tick);
     kprintf_ok("Scheduler initialized\n");
