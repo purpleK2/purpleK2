@@ -435,20 +435,12 @@ void kstart(void) {
 
     // register file system types
     ramfs_init();
-
     vfs_mount(NULL, "ramfs", "/", NULL);
 
-    vfs_mkdir("/initrd", 0755);
     vfs_mkdir("/dev", 0755);
 
-    ramfs_t *cpio_ramfs         = ramfs_create_fs();
-    cpio_ramfs->root_node       = ramfs_create_node(RAMFS_DIRECTORY);
-    cpio_ramfs->root_node->name = strdup("/");
-
-    vfs_mount(cpio_ramfs, "ramfs", INITRD_MOUNT, cpio_ramfs);
-
     // extract cpio
-    assert(cpio_extract(&cpio, INITRD_MOUNT) == EOK);
+    assert(cpio_extract(&cpio, "/") == EOK);
 
 #ifdef CONFIG_DEVFS_ENABLE
     devfs_init();
@@ -471,9 +463,9 @@ void kstart(void) {
     //smp_init();
     //limine_parsed_data.smp_enabled = true;
 
-    pci_scan(INITRD_MOUNT "/pci.ids");
+    pci_scan("/etc/pci.ids");
     kprintf_ok("PCI devices parsing done\n");
-    if (pcie_init(INITRD_MOUNT "/pci.ids") != PCIE_STATUS_OK) {
+    if (pcie_init("/etc/pci.ids") != PCIE_STATUS_OK) {
         kprintf_warn("Failed to parse PCIe devices!\n");
     } else {
         kprintf_ok("PCIe devices parsing done\n");
@@ -481,7 +473,7 @@ void kstart(void) {
 
     print_pcie_list();
 
-    fileio_t *f = open(INITRD_MOUNT "/test2.txt", O_CREATE);
+    fileio_t *f = open("/test2.txt", O_CREATE);
     assert(f);
 
     const char temp[8] = "TUTUTUT";
@@ -489,14 +481,14 @@ void kstart(void) {
     seek(f, 0, SEEK_SET);
     close(f);
 
-    f = open(INITRD_MOUNT "/test2.txt", 0);
+    f = open("/test2.txt", 0);
     assert(f);
     char *buf = kmalloc(30);
     assert(buf);
     read(f, 30, buf);
     kprintf("Reading contents: %s\n", buf);
 
-    fs_list(INITRD_MOUNT, -1);
+    fs_list("/", -1);
 
     binfmt_register_loader(&elf_binfmt_loader);
 

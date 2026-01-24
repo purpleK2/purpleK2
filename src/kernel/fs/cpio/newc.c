@@ -192,6 +192,13 @@ void cpio_fs_free(cpio_t *fs) {
     fs->file_count = 0;
 }
 
+static const char *normalize_dest(const char *dest) {
+    if (strcmp(dest, "/") == 0)
+        return "";   // root mount: no prefix
+    return dest;
+}
+
+
 /** Extracts a CPIO archive
  * @param cpio the CPIO archive struct
  * @param dest_path the destination path (eg. /)
@@ -202,6 +209,8 @@ int cpio_extract(cpio_t *cpio, char *dest_path) {
                     cpio, dest_path);
         return ENULLPTR;
     }
+
+    const char *base = normalize_dest(dest_path);
 
     // track the full path of a file
     size_t s   = 20;
@@ -216,26 +225,35 @@ int cpio_extract(cpio_t *cpio, char *dest_path) {
 
     // Create the directory first
     // TODO? don't hardcode the mode?
-    vfs_mkdir(dest_path, 0755);
+    if (strcmp(dest_path, "/") != 0) {
+        vfs_mkdir(dest_path, 0755);
+    }
+
 
     for (size_t i = 0; i < cpio->file_count; i++) {
         memset(path, 0, s);
-        strcat(path, dest_path);
+        strcat(path, base);
 
         cpio_file_t *file = &cpio->files[i];
 
         debugf_debug("CPIO path %s\n", file->filename);
 
-        char *name_dup = strdup(file->filename);
-        char *temp     = name_dup;
-        char *dir;
+        char *fname = file->filename;
+        if (fname[0] == '/')
+            fname++;
+
+        char *name_dup = strdup(fname);
 
         if (file->namesize + 1 > s) {
             s    = file->namesize + 1;
             path = krealloc(path, s);
         }
 
-        while (*temp) {
+
+        char *save;
+        char *dir = strtok_r(name_dup, "/", &save);
+
+        while (dir) {
             /*
             A note for future Omar:
             this call is laid out like this because:
@@ -245,53 +263,38 @@ int cpio_extract(cpio_t *cpio, char *dest_path) {
               there's any, or else it will simply point to the string terminator
             (0)
             */
-            dir = strtok_r(NULL, "/", &temp);
+
+            if (*dir == '\0') {
+                dir = strtok_r(NULL, "/", &save);
+                continue;
+            }
 
             if (strlen(path) + strlen(dir) + 2 > s) {
-                s    = strlen(path) + strlen(dir) + 1;
+                s = strlen(path) + strlen(dir) + 2;
                 path = krealloc(path, s);
             }
 
             strcat(path, "/");
             strcat(path, dir);
 
-            debugf_debug("path=%s\n", path);
-
-            int flags = 0;
+            int flags = V_CREATE;
+            if (save && *save)
+                flags |= V_DIR;
 
             vnode_t *v;
             fileio_t *f;
 
-            // lookup the path
-            if (vfs_lookup(path, &v) == EOK) {
-                // it exists, simply skip
-                continue;
+            if (vfs_lookup(path, &v) != EOK) {
+                char *dup = strdup(path);
+                if (vfs_open(dup, flags, &f) == EOK) {
+                    if (!(flags & V_DIR)) {
+                        write(f, file->data, file->filesize);
+                        close(f);
+                    }
+                }
             }
 
-            // create the file if it doesn't
-            flags |= V_CREATE;
-
-            if (*temp) {
-                // a directory should exist
-                flags |= V_DIR;
-            }
-
-            char *dup = strdup(path);
-            if (vfs_open(dup, flags, &f) != EOK) {
-                debugf_warn("Can't create %s!\n", path);
-                kfree(dup);
-            }
-
-            // go on if this is a directory
-            if ((*temp)) {
-                continue;
-            }
-
-            // if a file has been created
-            if (write(f, file->data, file->filesize) != EOK) {
-                debugf_warn("Couldn't write to %s!\n", path);
-            }
-            close(f);
+            dir = strtok_r(NULL, "/", &save);
         }
 
         kfree(name_dup);
