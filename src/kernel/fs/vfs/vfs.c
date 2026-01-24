@@ -1,6 +1,9 @@
 #include "vfs.h"
 #include "fs/file_io.h"
 #include "stdio.h"
+#include "time.h"
+#include "user/access.h"
+#include "user/user.h"
 
 #include <util/assert.h>
 
@@ -432,6 +435,12 @@ static int vfs_lookup_internal(const char *path, vnode_t **out, int depth,
             return -ENOTDIR;
         }
 
+        if (get_current_cred() && vnode_permission(get_current_cred(), current, X_OK) != 0) {
+            vnode_unref(current);
+            kfree(rel_path);
+            return -EACCESS;
+        }
+
         if (!current->ops || !current->ops->lookup) {
             vnode_unref(current);
             kfree(rel_path);
@@ -527,8 +536,18 @@ int vfs_open(const char *path, int flags, fileio_t **out) {
     if (!path || !out)
         return -EINVAL;
 
+    int required_perms = 0;
+    if (flags & V_READ)
+        required_perms |= R_OK;
+    if (flags & V_WRITE)
+        required_perms |= W_OK;
+
     vnode_t *vnode = NULL;
     int ret        = vfs_lookup(path, &vnode);
+
+    if (get_current_cred() && vnode_permission(get_current_cred(), vnode, required_perms) != 0) {
+        return -EACCESS;
+    }
 
     if (ret == ENOENT && (flags & V_CREATE)) {
         vnode_t *parent;
@@ -666,6 +685,12 @@ int vfs_mkdir(const char *path, int mode) {
         return -ENOSYS;
     }
 
+    if (get_current_cred() && vnode_permission(get_current_cred(), parent, W_OK) != 0) {
+        vnode_unref(parent);
+        kfree(dirname);
+        return -EACCESS;
+    }
+
     ret = parent->ops->mkdir(parent, dirname, mode);
     kfree(dirname);
     vnode_unref(parent);
@@ -688,6 +713,12 @@ int vfs_rmdir(const char *path) {
         vnode_unref(parent);
         kfree(dirname);
         return -ENOSYS;
+    }
+
+    if (get_current_cred() && vnode_permission(get_current_cred(), parent, W_OK | X_OK) != 0) {
+        vnode_unref(parent);
+        kfree(dirname);
+        return -EACCESS;
     }
 
     ret = parent->ops->rmdir(parent, dirname);

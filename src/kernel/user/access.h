@@ -19,6 +19,14 @@
 #define S_IWOTH 0002
 #define S_IXOTH 0001
 
+#define	S_IFDIR	 0040000	/* Directory.  */
+#define	S_IFCHR	 0020000	/* Character device.  */
+#define	S_IFBLK	 0060000	/* Block device.  */
+#define	S_IFREG	 0100000	/* Regular file.  */
+#define	S_IFIFO	 0010000	/* FIFO.  */
+#define	S_IFLNK	 0120000	/* Symbolic link.  */
+#define	S_IFSOCK 0140000	/* Socket.  */
+
 int vnode_permission(const user_cred_t *cred, const vnode_t *vnode, int mask);
 
 #endif // ACCESS_H

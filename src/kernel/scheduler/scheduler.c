@@ -1,6 +1,8 @@
 #include "scheduler.h"
 #include "karg.h"
 #include "loader/binfmt.h"
+#include "user/group.h"
+#include "user/user.h"
 
 #include <gdt/gdt.h>
 
@@ -250,6 +252,36 @@ int proc_create(void (*entry)(), int flags, char *name) {
     }
 
     proc->cwd = NULL;
+
+    proc->cred = kmalloc(sizeof(user_cred_t));
+    assert(proc->cred != NULL);
+    memset(proc->cred, 0, sizeof(user_cred_t));
+
+    user_cred_t *current_cred = get_current_cred();
+    if (current_cred) {
+        memcpy(proc->cred, current_cred, sizeof(user_cred_t));
+    } else {
+        if (flags & TF_MODE_USER) {
+            proc->cred->uid    = UID_ROOT;
+            proc->cred->euid   = UID_ROOT;
+            proc->cred->suid   = UID_ROOT;
+            proc->cred->gid    = GID_ROOT;
+            proc->cred->egid   = GID_ROOT;
+            proc->cred->sgid   = GID_ROOT;
+            proc->cred->ngroups = 1;
+            proc->cred->groups[0] = GID_ROOT;
+        } else {
+            proc->cred->uid    = UID_INVALID;
+            proc->cred->euid   = UID_INVALID;
+            proc->cred->suid   = UID_INVALID;
+            proc->cred->gid    = GID_INVALID;
+            proc->cred->egid   = GID_INVALID;
+            proc->cred->sgid   = GID_INVALID;
+            proc->cred->ngroups = 0;
+        }
+    }
+
+    
 
 #ifdef CONFIG_SCHED_DEBUG
     debugf_debug("Created process PID=%d flags=0x%x mode=%s\n", proc->pid,

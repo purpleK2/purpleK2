@@ -16,6 +16,9 @@ typedef struct ramfs_node {
     ramfs_ftype_t type;
     size_t size;
     void *data;
+
+    int mode;
+
     struct ramfs_node *sibling;
     struct ramfs_node *child;
 } ramfs_node_t;

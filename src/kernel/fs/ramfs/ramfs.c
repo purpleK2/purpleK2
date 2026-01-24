@@ -1,4 +1,5 @@
 #include "ramfs.h"
+#include "user/access.h"
 #include <errors.h>
 #include <fs/file_io.h>
 #include <memory/heap/kheap.h>
@@ -16,6 +17,20 @@ ramfs_node_t *ramfs_create_node(ramfs_ftype_t ftype) {
     ramfs_node_t *node = kmalloc(sizeof(ramfs_node_t));
     memset(node, 0, sizeof(ramfs_node_t));
     node->type = ftype;
+
+    switch (ftype) {
+    case RAMFS_DIRECTORY:
+        node->mode = S_IFDIR | 0755;
+        break;
+    case RAMFS_FILE:
+        node->mode = S_IFREG | 0644;
+        break;
+    case RAMFS_SYMLINK:
+        node->mode = S_IFLNK | 0777;
+        break;
+    }
+
+
     return node;
 }
 
@@ -492,6 +507,7 @@ int ramfs_lookup(vnode_t *parent, const char *name, vnode_t **out) {
 
             vnode_t *child_vnode =
                 vnode_create(parent->root_vfs, child_path, vtype, child);
+            child_vnode->mode = child->mode;
             memcpy(child_vnode->ops, parent->ops, sizeof(vnops_t));
 
             *out = child_vnode;
@@ -618,6 +634,7 @@ int ramfs_mkdir(vnode_t *parent, const char *name, int mode) {
 
     ramfs_node_t *new_dir = ramfs_create_node(RAMFS_DIRECTORY);
     new_dir->name         = strdup(name);
+    new_dir->mode         = S_IFDIR | (mode & 0777);
 
     ramfs_append_child(parent_node, new_dir);
     return EOK;
@@ -709,6 +726,7 @@ int ramfs_create(vnode_t *parent, const char *name, int flags, vnode_t **out) {
     new_file->name         = strdup(name);
     new_file->size         = 0;
     new_file->data         = NULL;
+    new_file->mode         = S_IFREG | (flags & 0777);
 
     ramfs_append_child(parent_node, new_file);
 
@@ -724,6 +742,7 @@ int ramfs_create(vnode_t *parent, const char *name, int flags, vnode_t **out) {
     vnode_t *file_vnode =
         vnode_create(parent->root_vfs, file_path, VNODE_REGULAR, new_file);
     memcpy(file_vnode->ops, parent->ops, sizeof(vnops_t));
+    file_vnode->mode = new_file->mode;
 
     *out = file_vnode;
     return EOK;
@@ -928,7 +947,9 @@ static int ramfs_fstype_mount(void *device, char *mount_point, void *mount_data,
         kfree(vfs);
         return ENOMEM;
     }
+
     memcpy(vfs->root_vnode->ops, &ramfs_vnops, sizeof(vnops_t));
+    vfs->root_vnode->mode = ramfs->root_node->mode;
     *out = vfs;
     return EOK;
 }
