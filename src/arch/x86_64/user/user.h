@@ -5,6 +5,7 @@
 #include "user/group.h"
 
 #define UID_INVALID ((uid_t)-1)
+#define UID_ROOT 0
 
 typedef struct user_cred {
     uid_t uid;

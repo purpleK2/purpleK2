@@ -3,7 +3,8 @@
 
 #include <autoconf.h>
 
-#define UID_INVALID ((uid_t)-1)
+#define GID_INVALID ((gid_t)-1)
+#define GID_ROOT
 
 #define MAX_GROUPS CONFIG_KERNEL_MAX_GROUPS
 
