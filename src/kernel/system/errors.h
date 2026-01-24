@@ -22,6 +22,7 @@
 #define ENOTEMPTY 18
 #define EISDIR    19
 #define ENOEXEC   20
+#define EACCESS   21 // no permission (haha couldnt imagine)
 
 #define EPCIENOENT 101 // special
 #endif                 // ERRORS_H

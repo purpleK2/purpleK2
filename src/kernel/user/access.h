@@ -1,6 +1,8 @@
 #ifndef ACCESS_H
 #define ACCESS_H
 
+#include "fs/vfs/vfs.h"
+#include "user/user.h"
 #define R_OK 0x4
 #define W_OK 0x2
 #define X_OK 0x1
@@ -16,5 +18,7 @@
 #define S_IROTH 0004
 #define S_IWOTH 0002
 #define S_IXOTH 0001
+
+int vnode_permission(const user_cred_t *cred, const vnode_t *vnode, int mask);
 
 #endif // ACCESS_H
