@@ -270,6 +270,7 @@ int proc_create(void (*entry)(), int flags, char *name) {
             proc->cred->sgid   = GID_ROOT;
             proc->cred->ngroups = 1;
             proc->cred->groups[0] = GID_ROOT;
+            debugf_debug("Created process PID=%d in user mode with root credentials, since it doesnt have parent\n", proc->pid);
         } else {
             proc->cred->uid    = UID_INVALID;
             proc->cred->euid   = UID_INVALID;
