@@ -115,3 +115,10 @@ config KERNEL_INIT_PROC_MAX_ARGS
 	range 8 128
 	help
 		Specifies the maximum amount of arguments that can be passed to the init process
+
+config KERNEL_MAX_GROUPS
+	int "Maximum amount of groups a user can be in"
+	default 32
+	range 8 128
+	help
+		Specifies the maximum amount of groups a user can be in
