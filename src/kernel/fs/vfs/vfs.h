@@ -1,14 +1,15 @@
-#include <stdatomic.h>
 #ifndef VFS_H
 #define VFS_H 1
 
 #include <fs/file_io.h>
 #include <fs/fsid.h>
+#include "types.h"
 
 #include <spinlock.h>
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdatomic.h>
 
 #define V_CREATE (1 << 0)
 #define V_EXCL   (1 << 1)
@@ -101,6 +102,10 @@ typedef struct vnode {
     char *path;
     vnode_type_t vtype;
     void *node_data; // FS-specific structure about the file
+
+    uid_t uid;
+    gid_t gid;
+    mode_t mode;
 
     vnops_t *ops;
 
