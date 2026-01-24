@@ -2,6 +2,7 @@
 #define SCHEDULER_H
 
 #include "tsc/tsc.h"
+#include "user/user.h"
 #include <types.h>
 
 #include <ipc/signals.h>
@@ -114,10 +115,7 @@ typedef struct process {
 
     vmc_t *vmc;
 
-    struct owner {
-        int gid;
-        int uid;
-    } owner;
+    user_cred_t *cred;
 
     void (*signal_handler)(int);
 } pcb_t;

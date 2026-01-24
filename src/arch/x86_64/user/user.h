@@ -35,5 +35,7 @@ static inline int in_group(const struct user_cred *cred, gid_t gid) {
     return 0;
 }
 
+uid_t get_current_uid(void);
+
 
 #endif // USER_H

@@ -4,7 +4,7 @@
 #include <autoconf.h>
 
 #define GID_INVALID ((gid_t)-1)
-#define GID_ROOT
+#define GID_ROOT 0
 
 #define MAX_GROUPS CONFIG_KERNEL_MAX_GROUPS
 
