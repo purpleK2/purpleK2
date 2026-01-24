@@ -1,4 +1,5 @@
 #include "devfs.h"
+#include "user/access.h"
 #include <errors.h>
 #include <memory/heap/kheap.h>
 #include <stdio.h>
@@ -24,9 +25,23 @@ devfs_node_t *devfs_create_node(devfs_ftype_t ftype) {
     memset(node, 0, sizeof(devfs_node_t));
     node->type = ftype;
 
+    switch (ftype) {
+    case DEVFS_TYPE_DIR:
+        node->mode = S_IFDIR | 0755;
+        break;
+    case DEVFS_TYPE_CHAR:
+        node->mode = S_IFCHR | 0666;
+        break;
+    case DEVFS_TYPE_BLOCK:
+        node->mode = S_IFBLK | 0666;
+        break;
+    case DEVFS_TYPE_FILE:
+        node->mode = S_IFREG | 0644;
+        break;
+    }
+
     return node;
 }
-
 
 int devfs_find_node(devfs_t *devfs, char *path, devfs_node_t **out) {
     if (!devfs || !devfs->root_node || !path || !out) {
@@ -436,6 +451,7 @@ int devfs_lookup(vnode_t *parent, const char *name, vnode_t **out) {
 
             vnode_t *vn = vnode_create(parent->root_vfs, path, t, c);
             memcpy(vn->ops, parent->ops, sizeof(vnops_t));
+            vn->mode = c->mode;
 
             *out = vn;
             return EOK;
@@ -601,6 +617,7 @@ static int devfs_fstype_mount(void *device, char *mount_point, void *mount_data,
         return ENOMEM;
     }
 	vfs->root_vnode->node_data = root_node;
+    vfs->root_vnode->mode = root_node->mode;
     
     memcpy(vfs->root_vnode->ops, &devfs_vnops, sizeof(vnops_t));
     

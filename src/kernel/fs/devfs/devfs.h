@@ -16,6 +16,9 @@ typedef struct devfs_node {
     char *name;
     devfs_ftype_t type;
     device_t *device;
+
+    mode_t mode;
+
     struct devfs_node *sibling;
     struct devfs_node *child;
 } devfs_node_t;
