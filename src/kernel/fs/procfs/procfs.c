@@ -1,4 +1,5 @@
 #include "procfs.h"
+#include "user/access.h"
 #include <memory/heap/kheap.h>
 #include <stdio.h>
 #include <string.h>
@@ -623,6 +624,7 @@ int procfs_lookup(vnode_t *parent, const char *name, vnode_t **out) {
     
     	vnode_t *child_vnode = vnode_create(parent->root_vfs, child_path, VNODE_DIR, proc);
     	memcpy(child_vnode->ops, parent->ops, sizeof(vnops_t));
+    	child_vnode->mode = S_IFDIR | 0555;  // Add mode for /fds directory
     
     	*out = child_vnode;
     	return EOK;
@@ -663,6 +665,7 @@ int procfs_lookup(vnode_t *parent, const char *name, vnode_t **out) {
         
         vnode_t *child_vnode = vnode_create(parent->root_vfs, child_path, VNODE_LINK, proc->pcb->fds[fd_num]);
         memcpy(child_vnode->ops, parent->ops, sizeof(vnops_t));
+        child_vnode->mode = S_IFLNK | 0777;
         
         *out = child_vnode;
         return EOK;
@@ -677,14 +680,19 @@ int procfs_lookup(vnode_t *parent, const char *name, vnode_t **out) {
     }
 
     vnode_type_t vtype = VNODE_REGULAR;
+    mode_t mode = S_IFREG | 0444;  // Default: regular file, read-only
+    
     if (ftype == PROCFS_FILE_PROC || ftype == PROCFS_FILE_THREAD) {
         vtype = VNODE_DIR;
+        mode = S_IFDIR | 0555;
     } else if (ftype == PROCFS_FILE_FDS) {
         vtype = VNODE_DIR;
+        mode = S_IFDIR | 0555;
 	}
 
     vnode_t *child_vnode = vnode_create(parent->root_vfs, child_path, vtype, file);
     memcpy(child_vnode->ops, parent->ops, sizeof(vnops_t));
+    child_vnode->mode = mode;  // Set the mode
     
     *out = child_vnode;
     return EOK;
@@ -946,6 +954,7 @@ static int procfs_fstype_mount(void *device, char *mount_point, void *mount_data
     }
     
     memcpy(vfs->root_vnode->ops, &procfs_vnops, sizeof(vnops_t));
+    vfs->root_vnode->mode = S_IFDIR | 0555;
     
     *out = vfs;
     return EOK;
