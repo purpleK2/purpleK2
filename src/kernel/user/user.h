@@ -4,6 +4,8 @@
 #include "types.h"
 #include "user/group.h"
 
+#include <stdint.h>
+
 #define UID_INVALID ((uid_t)-1)
 #define UID_ROOT 0
 
