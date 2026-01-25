@@ -8,7 +8,7 @@
 #include <graphical/framebuffer.h>
 
 void load_tga_to_framebuffer(const char *filename) {
-    fileio_t *tga = open(filename, 0);
+    fileio_t *tga = open(filename, 0, 0);
     if (!tga) {
         kprintf_warn("Failed to open TGA file!\n");
         return;

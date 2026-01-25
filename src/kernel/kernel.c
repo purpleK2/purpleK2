@@ -477,7 +477,7 @@ void kstart(void) {
 
     print_pcie_list();
 
-    fileio_t *f = open("/test2.txt", O_CREATE);
+    fileio_t *f = open("/test2.txt", O_CREATE, 0644);
     assert(f);
 
     const char temp[8] = "TUTUTUT";
@@ -485,7 +485,7 @@ void kstart(void) {
     seek(f, 0, SEEK_SET);
     close(f);
 
-    f = open("/test2.txt", 0);
+    f = open("/test2.txt", 0, 0);
     assert(f);
     char *buf = kmalloc(30);
     assert(buf);

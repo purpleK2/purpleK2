@@ -179,7 +179,7 @@ pci_device_t *pci_add_device(uint8_t bus, uint8_t device, uint8_t function,
 }
 
 void pci_scan(const char *pciids_path) {
-    fileio_t *pciids = open(pciids_path, 0);
+    fileio_t *pciids = open(pciids_path, 0, 0);
     for (uint16_t bus = 0; bus < 256; bus++) {
         for (uint8_t device = 0; device < 32; device++) {
             for (uint8_t function = 0; function < 8; function++) {

@@ -54,7 +54,7 @@ static int mbr_probe(disk_device_t *disk, partition_t **out) {
 
         char buf[64];
         snprintf(buf, 64, "/dev/%s", part->dev_path);
-        fileio_t *fd = open(buf, 0);
+        fileio_t *fd = open(buf, 0, 0);
         assert(fd != 0);
 
         char rdbuf[512];

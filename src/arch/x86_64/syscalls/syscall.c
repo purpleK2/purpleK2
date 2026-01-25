@@ -27,7 +27,7 @@ int sys_open(char *path, int mode) {
     current->fds =
         krealloc(current->fds, sizeof(fileio_t *) * (++current->fd_count));
 
-    current->fds[current->fd_count - 1] = open(path, mode);
+    current->fds[current->fd_count - 1] = open(path, 0, mode); // TODO: get flags
     if (current->fds[current->fd_count - 1] == NULL) {
         return -1;
     }

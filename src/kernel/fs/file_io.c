@@ -31,10 +31,17 @@ fileio_t *fio_create() {
     return fio;
 }
 
-fileio_t *open(const char *path, int flags) {
-    UNUSED(flags);
-
+fileio_t *open(const char *path, int flags, mode_t mode) {
     fileio_t *f = NULL;
+
+    if (flags & O_CREATE) {
+        int ret = vfs_create(path, mode);
+        if (ret != 0) {
+            return (fileio_t *)-ret; // most hackey thing ever ffs
+        } else {
+            open(path, flags & ~O_CREATE, mode); // technically mode is ignored but still :^)
+        }
+    }
 
     int ret = vfs_open(path, f2vflags(flags), &f);
     if (ret != 0) {
@@ -234,7 +241,7 @@ static void fs_list_internal(vnode_t *dir, int depth, int max_depth,
             char mode_buf[11];
             char *path_buf = kmalloc(strlen(dir->path) + strlen(entries[i].d_name));
             snprintf(path_buf, strlen(dir->path) + strlen(entries[i].d_name) + 2, "%s/%s", dir->path, entries[i].d_name);
-            fileio_t *f = open(path_buf, 0);
+            fileio_t *f = open(path_buf, 0, 0);
             vnode_t *vnode = (vnode_t*)f->private;
             mode_to_string(vnode->mode, mode_buf);
             close(f);
@@ -244,7 +251,7 @@ static void fs_list_internal(vnode_t *dir, int depth, int max_depth,
             char mode_buf[11];
             char *path_buf = kmalloc(strlen(dir->path) + strlen(entries[i].d_name));
             snprintf(path_buf, strlen(dir->path) + strlen(entries[i].d_name) + 2, "%s/%s", dir->path, entries[i].d_name);
-            fileio_t *f = open(path_buf, 0);
+            fileio_t *f = open(path_buf, 0, 0);
             vnode_t *vnode = (vnode_t*)f->private;
             mode_to_string(vnode->mode, mode_buf);
             close(f);
@@ -270,7 +277,7 @@ static void fs_list_internal(vnode_t *dir, int depth, int max_depth,
             char mode_buf[11];
             char *path_buf = kmalloc(strlen(dir->path) + strlen(entries[i].d_name));
             snprintf(path_buf, strlen(dir->path) + strlen(entries[i].d_name) + 2, "%s/%s", dir->path, entries[i].d_name);
-            fileio_t *f = open(path_buf, 0);
+            fileio_t *f = open(path_buf, 0, 0);
             vnode_t *vnode = (vnode_t*)f->private;
             mode_to_string(vnode->mode, mode_buf);
             close(f);

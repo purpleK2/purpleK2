@@ -259,7 +259,7 @@ int load_elf(const char *path, const char **argv, const char **envp, binfmt_prog
     uint64_t tls_memsz = 0;
     uint64_t tls_align = 8;
 
-    fileio_t *elf_file = open(path, 0);
+    fileio_t *elf_file = open(path, 0, 0);
     if (!elf_file || (int64_t)elf_file < 0) {
         debugf_warn("Failed to open ELF file %s: %d\n", path, (int64_t)elf_file);
         return -ENOENT;

@@ -29,7 +29,7 @@ int binfmt_load(const char *path, const char **argv, const char **envp, binfmt_p
     for (int i = 0; i < binfmt_loader_count; i++) {
         binfmt_loader_t *loader = binfmt_loaders[i];
 
-        fileio_t *file = open(path, 0);
+        fileio_t *file = open(path, 0, 0);
         if (!file || (int64_t)file < 0) {
             continue;
         }

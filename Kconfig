@@ -2,6 +2,24 @@ mainmenu "Project purpleK2 kernel"
 
 menu "Filesystems"
 
+choice FILE_OWNER_GID_SETTING_TYPE
+	prompt "File owner and group ID setting method"
+	default FILE_OWNER_GID_SETTING_SYSV
+	help
+		Choose the method used to set the owner and group ID of newly created files
+
+config FILE_OWNER_GID_SETTING_SYSV
+	bool "System V style"
+	help
+		Sets the owner and group ID of newly created files to the effective user ID and effective group ID of the creating process
+
+config FILE_OWNER_GID_SETTING_BSD
+	bool "BSD style"
+	help
+		Sets the owner ID of newly created files to the effective user ID of the creating process, and the group ID to that of the parent directory
+
+endchoice # FILE_OWNER_GID_SETTING_TYPE
+
 config DEVFS_ENABLE
     bool "Enable Device Filesystem (DevFS)"
     default y
