@@ -1,6 +1,7 @@
 #include "syscall.h"
 #include "cpu.h"
 #include "stdio.h"
+#include "user/user.h"
 
 #include <fs/file_io.h>
 #include <fs/vfs/vfs.h>
@@ -161,7 +162,6 @@ int sys_getpid(void) {
     if (!current) {
         return -1;
     }
-    debugf("getpid: %d", current->pid);
     return current->pid;
 }
 
@@ -199,6 +199,14 @@ long handle_syscall(registers_t *ctx) {
         return sys_dup(arg1);
     case SYS_getpid:
         return sys_getpid();
+    case SYS_getuid:
+        return get_current_cred()->uid;
+    case SYS_geteuid:
+        return get_current_cred()->euid;
+    case SYS_getgid:
+        return get_current_cred()->gid;
+    case SYS_getegid:
+        return get_current_cred()->egid;
     default:
         return -1;
     }
