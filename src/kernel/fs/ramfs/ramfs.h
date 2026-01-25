@@ -50,7 +50,7 @@ int ramfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count);
 int ramfs_readlink(vnode_t *vnode, char *buf, size_t size);
 int ramfs_mkdir(vnode_t *parent, const char *name, int mode);
 int ramfs_rmdir(vnode_t *parent, const char *name);
-int ramfs_create(vnode_t *parent, const char *name, int flags, vnode_t **out);
+int ramfs_create(vnode_t *parent, const char *name, mode_t mode, vnode_t **out);
 int ramfs_remove(vnode_t *parent, const char *name);
 int ramfs_symlink(vnode_t *parent, const char *name, const char *target);
 

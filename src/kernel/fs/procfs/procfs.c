@@ -939,7 +939,7 @@ static int procfs_fstype_mount(void *device, char *mount_point, void *mount_data
     memset(&fstype, 0, sizeof(vfs_fstype_t));
     strncpy(fstype.name, "procfs", sizeof(fstype.name) - 1);
     
-    vfs_t *vfs = vfs_create(&fstype, procfs);
+    vfs_t *vfs = vfs_create_fs(&fstype, procfs);
     if (!vfs) {
         return ENOMEM;
     }

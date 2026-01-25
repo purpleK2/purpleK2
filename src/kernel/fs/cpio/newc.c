@@ -286,10 +286,14 @@ int cpio_extract(cpio_t *cpio, char *dest_path) {
 
             if (vfs_lookup(path, &v) != EOK) {
                 char *dup = strdup(path);
-                if (vfs_open(dup, flags, &f) == EOK) {
-                    if (!(flags & V_DIR)) {
-                        write(f, file->data, file->filesize);
-                        close(f);
+                if (flags & V_DIR) {
+                    vfs_mkdir(dup, 0755);
+                } else {
+                    if (vfs_create(dup, file->mode) == EOK) {
+                        if (vfs_open(dup, 0, &f) == EOK) {
+                            write(f, file->data, file->filesize);
+                            close(f);
+                        }
                     }
                 }
             }

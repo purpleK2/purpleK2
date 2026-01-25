@@ -91,7 +91,7 @@ typedef struct vnode_ops {
     int (*readlink)(vnode_t *, char *, size_t);
     int (*mkdir)(vnode_t *, const char *, int);
     int (*rmdir)(vnode_t *, const char *);
-    int (*create)(vnode_t *, const char *, int, vnode_t **);
+    int (*create)(vnode_t *, const char *, mode_t, vnode_t **);
     int (*remove)(vnode_t *, const char *);
     int (*symlink)(vnode_t *, const char *, const char *);
 } vnops_t;
@@ -141,7 +141,7 @@ int vfs_register_fstype(vfs_fstype_t *fstype);
 int vfs_unregister_fstype(const char *name);
 vfs_fstype_t *vfs_find_fstype(const char *name);
 
-vfs_t *vfs_create(vfs_fstype_t *fs_type, void *fs_data);
+vfs_t *vfs_create_fs(vfs_fstype_t *fs_type, void *fs_data);
 vfs_t *vfs_mount(void *device, const char *fstype_name, char *path,
                  void *mount_data);
 int vfs_unmount(const char *path);
@@ -164,6 +164,7 @@ int vfs_close(vnode_t *vnode);
 
 int vfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count);
 int vfs_mkdir(const char *path, int mode);
+int vfs_create(const char *path, mode_t mode);
 int vfs_rmdir(const char *path);
 
 int vfs_readlink(const char *path, char *buf, size_t size);

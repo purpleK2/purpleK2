@@ -92,7 +92,7 @@ vfs_fstype_t *vfs_find_fstype(const char *name) {
     return NULL;
 }
 
-vfs_t *vfs_create(vfs_fstype_t *fs_type, void *fs_data) {
+vfs_t *vfs_create_fs(vfs_fstype_t *fs_type, void *fs_data) {
     if (!fs_type)
         return NULL;
 
@@ -530,6 +530,32 @@ int vfs_lookup_parent(const char *path, vnode_t **parent, char **filename) {
     }
 
     return EOK;
+}
+
+int vfs_create(const char *path, mode_t mode) {
+    vnode_t *vnode = NULL;
+
+    vnode_t *parent;
+    char *fname;
+
+    int ret = vfs_lookup_parent(path, &parent, &fname);
+    if (ret != EOK)
+        return ret;
+
+    if (!parent->ops || !parent->ops->create) {
+        vnode_unref(parent);
+        kfree(fname);
+        return -ENOSYS;
+    }
+
+    ret = parent->ops->create(parent, fname, mode, &vnode);
+    kfree(fname);
+    vnode_unref(parent);
+
+    if (ret != EOK)
+        return ret;
+
+    return 0;
 }
 
 int vfs_open(const char *path, int flags, fileio_t **out) {

@@ -685,9 +685,7 @@ int ramfs_rmdir(vnode_t *parent, const char *name) {
     return ENOENT;
 }
 
-int ramfs_create(vnode_t *parent, const char *name, int flags, vnode_t **out) {
-    UNUSED(flags);
-
+int ramfs_create(vnode_t *parent, const char *name, mode_t mode, vnode_t **out) {
     if (!parent || !name || !out) {
         return ENULLPTR;
     }
@@ -718,15 +716,12 @@ int ramfs_create(vnode_t *parent, const char *name, int flags, vnode_t **out) {
     }
 
     ramfs_ftype_t rt = RAMFS_FILE;
-    if (flags & V_DIR) {
-        rt = RAMFS_DIRECTORY;
-    }
 
     ramfs_node_t *new_file = ramfs_create_node(rt);
     new_file->name         = strdup(name);
     new_file->size         = 0;
     new_file->data         = NULL;
-    new_file->mode         = S_IFREG | (flags & 0777);
+    new_file->mode         = S_IFREG | mode;
 
     ramfs_append_child(parent_node, new_file);
 
@@ -933,7 +928,7 @@ static int ramfs_fstype_mount(void *device, char *mount_point, void *mount_data,
     memset(&fstype, 0, sizeof(vfs_fstype_t));
     strncpy(fstype.name, "ramfs", sizeof(fstype.name) - 1);
 
-    vfs_t *vfs = vfs_create(&fstype, ramfs);
+    vfs_t *vfs = vfs_create_fs(&fstype, ramfs);
     if (!vfs) {
         return ENOMEM;
     }

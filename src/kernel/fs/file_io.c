@@ -1,5 +1,6 @@
 #include "file_io.h"
 #include "ipc/pipe.h"
+#include "user/access.h"
 
 #include <fs/vfs/vfs.h>
 
@@ -37,7 +38,7 @@ fileio_t *open(const char *path, int flags) {
 
     int ret = vfs_open(path, f2vflags(flags), &f);
     if (ret != 0) {
-        return NULL; // most hackey thing ever ffs
+        return (fileio_t *)-ret; // most hackey thing ever ffs
     }
 
     f->offset = 0;
@@ -177,6 +178,35 @@ static const char *vtype_to_str(vnode_type_t type) {
     }
 }
 
+const char *file_type_char(mode_t mode) {
+    if (mode & S_IFREG) return "-";
+    if (mode & S_IFDIR) return "d";
+    if (mode & S_IFLNK) return "l";
+    if (mode & S_IFCHR) return "c";
+    if (mode & S_IFBLK) return "b";
+    if (mode & S_IFIFO) return "p";
+    if (mode & S_IFSOCK) return "s";
+    return "?";
+}
+
+void mode_to_string(mode_t mode, char *str) {
+    str[0] = file_type_char(mode)[0];
+
+    str[1] = (mode & S_IRUSR) ? 'r' : '-';
+    str[2] = (mode & S_IWUSR) ? 'w' : '-';
+    str[3] = (mode & S_IRUSR) ? 'x' : '-';
+
+    str[4] = (mode & S_IRGRP) ? 'r' : '-';
+    str[5] = (mode & S_IWGRP) ? 'w' : '-';
+    str[6] = (mode & S_IRGRP) ? 'x' : '-';
+
+    str[7] = (mode & S_IROTH) ? 'r' : '-';
+    str[8] = (mode & S_IWOTH) ? 'w' : '-';
+    str[9] = (mode & S_IROTH) ? 'x' : '-';
+
+    str[10] = '\0';
+}
+
 static void fs_list_internal(vnode_t *dir, int depth, int max_depth,
                              int indent) {
     if (max_depth != -1 && depth > max_depth) {
@@ -200,11 +230,26 @@ static void fs_list_internal(vnode_t *dir, int depth, int max_depth,
             kprintf("  ");
         }
 
-        const char *type_str = vtype_to_str(entries[i].d_type);
-
         if (entries[i].d_type == VNODE_DIR) {
-            kprintf("|- [%s] %s/\n", type_str, entries[i].d_name);
+            char mode_buf[11];
+            char *path_buf = kmalloc(strlen(dir->path) + strlen(entries[i].d_name));
+            snprintf(path_buf, strlen(dir->path) + strlen(entries[i].d_name) + 2, "%s/%s", dir->path, entries[i].d_name);
+            fileio_t *f = open(path_buf, 0);
+            vnode_t *vnode = (vnode_t*)f->private;
+            mode_to_string(vnode->mode, mode_buf);
+            close(f);
+            kfree(path_buf);
+            kprintf("|- [%s] %s/\n", mode_buf, entries[i].d_name); // TODO: idk how to make it work on dirs rn
         } else if (entries[i].d_type == VNODE_LINK) {
+            char mode_buf[11];
+            char *path_buf = kmalloc(strlen(dir->path) + strlen(entries[i].d_name));
+            snprintf(path_buf, strlen(dir->path) + strlen(entries[i].d_name) + 2, "%s/%s", dir->path, entries[i].d_name);
+            fileio_t *f = open(path_buf, 0);
+            vnode_t *vnode = (vnode_t*)f->private;
+            mode_to_string(vnode->mode, mode_buf);
+            close(f);
+            kfree(path_buf);
+
             size_t path_len = strlen(dir->path) + strlen(entries[i].d_name) + 2;
             char *full_path = kmalloc(path_len);
             snprintf(full_path, path_len, "%s/%s", dir->path,
@@ -213,16 +258,24 @@ static void fs_list_internal(vnode_t *dir, int depth, int max_depth,
             char target[256];
             int ret = vfs_readlink(full_path, target, sizeof(target));
             if (ret == EOK) {
-                kprintf("|- [%s] %s -> %s\n", type_str, entries[i].d_name,
+                kprintf("|- [%s] %s -> %s\n", mode_buf, entries[i].d_name,
                         target);
             } else {
-                kprintf("|- [%s] %s -> ??? (%d)\n", type_str, entries[i].d_name,
+                kprintf("|- [%s] %s -> ??? (%d)\n", mode_buf, entries[i].d_name,
                         ret);
             }
 
             kfree(full_path);
         } else {
-            kprintf("|- [%s] %s\n", type_str, entries[i].d_name);
+            char mode_buf[11];
+            char *path_buf = kmalloc(strlen(dir->path) + strlen(entries[i].d_name));
+            snprintf(path_buf, strlen(dir->path) + strlen(entries[i].d_name) + 2, "%s/%s", dir->path, entries[i].d_name);
+            fileio_t *f = open(path_buf, 0);
+            vnode_t *vnode = (vnode_t*)f->private;
+            mode_to_string(vnode->mode, mode_buf);
+            close(f);
+            kfree(path_buf);
+            kprintf("|- [%s] %s\n", mode_buf, entries[i].d_name);
         }
 
         if (entries[i].d_type == VNODE_DIR) {
