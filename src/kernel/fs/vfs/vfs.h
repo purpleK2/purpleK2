@@ -166,6 +166,7 @@ int vfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count);
 int vfs_mkdir(const char *path, int mode);
 int vfs_create(const char *path, mode_t mode);
 int vfs_rmdir(const char *path);
+int vfs_remove(const char *path);
 
 int vfs_readlink(const char *path, char *buf, size_t size);
 int vfs_symlink(const char *target, const char *linkpath);

@@ -754,6 +754,36 @@ int vfs_rmdir(const char *path) {
     return ret;
 }
 
+int vfs_remove(const char *path) {
+    if (!path)
+        return -EINVAL;
+
+    vnode_t *parent;
+    char *filename;
+
+    int ret = vfs_lookup_parent(path, &parent, &filename);
+    if (ret != EOK)
+        return ret;
+
+    if (!parent->ops || !parent->ops->remove) {
+        vnode_unref(parent);
+        kfree(filename);
+        return -ENOSYS;
+    }
+
+    if (get_current_cred() && vnode_permission(get_current_cred(), parent, W_OK | X_OK) != 0) {
+        vnode_unref(parent);
+        kfree(filename);
+        return -EACCESS;
+    }
+
+    ret = parent->ops->remove(parent, filename);
+    kfree(filename);
+    vnode_unref(parent);
+
+    return ret;
+}
+
 int vfs_readlink(const char *path, char *buf, size_t size) {
     if (!path || !buf)
         return -EINVAL;
