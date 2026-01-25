@@ -1,6 +1,8 @@
-#include "cpu.h"
 #ifndef SYSCALL_H
 #define SYSCALL_H 1
+
+#include "cpu.h"
+#include "types.h"
 
 #define SYS_exit  0
 #define SYS_open  1
@@ -13,7 +15,7 @@
 #define SYS_dup   8
 
 void sys_exit(int status, registers_t *ctx);
-int sys_open(char *path, int mode);
+int sys_open(char *path, int flags, mode_t mode);
 int sys_read(int fd, char *buf, int count);
 int sys_write(int fd, const char *buf, int count);
 int sys_close(int fd);

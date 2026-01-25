@@ -153,7 +153,7 @@ static const char *auxv_type_name(uint64_t type) {
 
 void main(uintptr_t *stack_ptr) {
     uint64_t *stack = (uint64_t *)stack_ptr;
-    uint64_t fd = syscall2(SYS_OPEN, (uint64_t)filename, 0);
+    uint64_t fd = syscall3(SYS_OPEN, (uint64_t)filename, 0, 0);
     
     uint64_t argc = stack[0];
     

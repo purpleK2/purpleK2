@@ -17,7 +17,7 @@ void sys_exit(int status, registers_t *ctx) {
     yield(ctx);
 }
 
-int sys_open(char *path, int mode) {
+int sys_open(char *path, int flags, mode_t mode) {
     pcb_t *current = get_current_pcb();
 
     if (!path || !current) {
@@ -27,7 +27,7 @@ int sys_open(char *path, int mode) {
     current->fds =
         krealloc(current->fds, sizeof(fileio_t *) * (++current->fd_count));
 
-    current->fds[current->fd_count - 1] = open(path, 0, mode); // TODO: get flags
+    current->fds[current->fd_count - 1] = open(path, flags, mode); // TODO: get flags
     if (current->fds[current->fd_count - 1] == NULL) {
         return -1;
     }
@@ -172,7 +172,7 @@ long handle_syscall(registers_t *ctx) {
         sys_exit(arg1, ctx);
         break;
     case SYS_open:
-        return sys_open((char *)(uintptr_t)arg1, arg2);
+        return sys_open((char *)(uintptr_t)arg1, arg2, (mode_t)arg3);
     case SYS_read:
         return sys_read(arg1, (char *)(uintptr_t)arg2, arg3);
     case SYS_write:
