@@ -186,13 +186,15 @@ static const char *vtype_to_str(vnode_type_t type) {
 }
 
 const char *file_type_char(mode_t mode) {
-    if (mode & S_IFREG) return "-";
-    if (mode & S_IFDIR) return "d";
-    if (mode & S_IFLNK) return "l";
-    if (mode & S_IFCHR) return "c";
-    if (mode & S_IFBLK) return "b";
-    if (mode & S_IFIFO) return "p";
-    if (mode & S_IFSOCK) return "s";
+    mode_t type = mode & S_IFMT;  // S_IFMT masks the file type bits
+    
+    if (type == S_IFREG)  return "-";
+    if (type == S_IFDIR)  return "d";
+    if (type == S_IFLNK)  return "l";
+    if (type == S_IFCHR)  return "c";
+    if (type == S_IFBLK)  return "b";
+    if (type == S_IFIFO)  return "p";
+    if (type == S_IFSOCK) return "s";
     return "?";
 }
 
