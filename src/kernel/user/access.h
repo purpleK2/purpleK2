@@ -28,5 +28,6 @@
 #define	S_IFSOCK 0140000	/* Socket.  */
 
 int vnode_permission(const user_cred_t *cred, const vnode_t *vnode, int mask);
+bool is_in_group(const user_cred_t *cred, gid_t gid);
 
 #endif // ACCESS_H
