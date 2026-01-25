@@ -234,7 +234,7 @@ static uint64_t global_pid = 0;
 int proc_create(void (*entry)(), int flags, char *name) {
     pcb_t *proc = kmalloc(sizeof(pcb_t));
     memset(proc, 0, sizeof(pcb_t));
-    proc->pid   = __sync_fetch_and_add(&global_pid, 1);
+    proc->pid   = __sync_add_and_fetch(&global_pid, 1);
     proc->state = PROC_READY;
 
     if (name) {
