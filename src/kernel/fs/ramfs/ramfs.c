@@ -1,5 +1,6 @@
 #include "ramfs.h"
 #include "user/access.h"
+#include "user/user.h"
 #include <errors.h>
 #include <fs/file_io.h>
 #include <memory/heap/kheap.h>
@@ -508,6 +509,13 @@ int ramfs_lookup(vnode_t *parent, const char *name, vnode_t **out) {
             vnode_t *child_vnode =
                 vnode_create(parent->root_vfs, child_path, vtype, child);
             child_vnode->mode = child->mode;
+#ifdef CONFIG_FILE_OWNER_GID_SETTING_SYSV
+    child_vnode->uid = get_current_cred()->uid;
+    child_vnode->gid = get_current_cred()->gid;
+#else
+    child_vnode->uid = get_current_cred()->uid;
+    child_vnode->gid = parent->gid;
+#endif // CONFIG_FILE_OWNER_GID_SETTING_SYSV
             memcpy(child_vnode->ops, parent->ops, sizeof(vnops_t));
 
             *out = child_vnode;
@@ -739,6 +747,14 @@ int ramfs_create(vnode_t *parent, const char *name, mode_t mode, vnode_t **out) 
     memcpy(file_vnode->ops, parent->ops, sizeof(vnops_t));
     file_vnode->mode = new_file->mode;
 
+#ifdef CONFIG_FILE_OWNER_GID_SETTING_SYSV
+    file_vnode->uid = get_current_cred()->uid;
+    file_vnode->gid = get_current_cred()->gid;
+#else
+    file_vnode->uid = get_current_cred()->uid;
+    file_vnode->gid = parent->gid;
+#endif // CONFIG_FILE_OWNER_GID_SETTING_SYSV
+
     *out = file_vnode;
     return EOK;
 }
@@ -945,6 +961,8 @@ static int ramfs_fstype_mount(void *device, char *mount_point, void *mount_data,
 
     memcpy(vfs->root_vnode->ops, &ramfs_vnops, sizeof(vnops_t));
     vfs->root_vnode->mode = ramfs->root_node->mode;
+    vfs->root_vnode->uid  = get_current_cred()->uid;
+    vfs->root_vnode->gid  = get_current_cred()->gid;
     *out = vfs;
     return EOK;
 }
