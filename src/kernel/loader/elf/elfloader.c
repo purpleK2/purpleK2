@@ -2,6 +2,7 @@
 #include "auxv.h"
 #include "elf/elf.h"
 #include "loader/binfmt.h"
+#include "user/user.h"
 #include "util/macro.h"
 
 #include <autoconf.h>
@@ -573,10 +574,10 @@ int load_elf(const char *path, const char **argv, const char **envp, binfmt_prog
     auxv[auxc++] = (Elf64_auxv_t){AT_PAGESZ, {PFRAME_SIZE}};
     auxv[auxc++] = (Elf64_auxv_t){AT_BASE, {eh.e_type == ET_DYN ? load_bias : 0}};
     auxv[auxc++] = (Elf64_auxv_t){AT_ENTRY, {eh.e_entry + load_bias}};
-    auxv[auxc++] = (Elf64_auxv_t){AT_UID, {0}};
-    auxv[auxc++] = (Elf64_auxv_t){AT_EUID, {0}};
-    auxv[auxc++] = (Elf64_auxv_t){AT_GID, {0}};
-    auxv[auxc++] = (Elf64_auxv_t){AT_EGID, {0}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_UID, {get_current_cred()->uid}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_EUID, {get_current_cred()->euid}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_GID, {get_current_cred()->gid}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_EGID, {get_current_cred()->egid}};
     auxv[auxc++] = (Elf64_auxv_t){AT_SECURE, {0}};
     auxv[auxc++] = (Elf64_auxv_t){AT_RANDOM, {0}};
     auxv[auxc++] = (Elf64_auxv_t){AT_HWCAP, {0}};
