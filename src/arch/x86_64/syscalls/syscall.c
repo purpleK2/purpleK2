@@ -155,6 +155,14 @@ int sys_dup(int fd) {
     return current->fd_count - 1;
 }
 
+int sys_getpid(void) {
+    pcb_t *current = get_current_pcb();
+    if (!current) {
+        return -1;
+    }
+    return current->pid;
+}
+
 long handle_syscall(registers_t *ctx) {
     long num = ctx->rax;
     long arg1        = ctx->rdi;
@@ -187,6 +195,8 @@ long handle_syscall(registers_t *ctx) {
         return sys_fcntl(arg1, arg2, (void *)(uintptr_t)arg3);
     case SYS_dup:
         return sys_dup(arg1);
+    case SYS_getpid:
+        return sys_getpid();
     default:
         return -1;
     }

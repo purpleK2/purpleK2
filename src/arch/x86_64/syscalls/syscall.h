@@ -4,15 +4,16 @@
 #include "cpu.h"
 #include "types.h"
 
-#define SYS_exit  0
-#define SYS_open  1
-#define SYS_read  2
-#define SYS_write 3
-#define SYS_close 4
-#define SYS_ioctl 5
-#define SYS_seek  6
-#define SYS_fcntl 7
-#define SYS_dup   8
+#define SYS_exit   0
+#define SYS_open   1
+#define SYS_read   2
+#define SYS_write  3
+#define SYS_close  4
+#define SYS_ioctl  5
+#define SYS_seek   6
+#define SYS_fcntl  7
+#define SYS_dup    8
+#define SYS_getpid 9
 
 void sys_exit(int status, registers_t *ctx);
 int sys_open(char *path, int flags, mode_t mode);
@@ -23,6 +24,7 @@ int sys_ioctl(int fd, int request, void *arg);
 int sys_seek(int fd, int whence, int offset);
 int sys_fcntl(int fd, int op, void *arg);
 int sys_dup(int fd);
+int sys_getpid(void);
 
 long handle_syscall(registers_t *ctx);
 
