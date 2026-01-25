@@ -175,10 +175,19 @@ void print_stack_trace(uint64_t rbp, uint64_t rip) {
     } 
 
     while (stack) {
-        if (is_addr_mapped(stack->rip)) {
+        if (is_addr_mapped((uint64_t)(uintptr_t)stack) && is_addr_mapped(stack->rip)) {
             print_symbol(frame++, stack->rip);
         } else {
-            mprintf("Failed to get symbol at address 0x%.16llx\n", (uint64_t)(uintptr_t)stack->rip);
+            if (!is_addr_mapped((uint64_t)(uintptr_t)stack)) {
+                mprintf(
+                    "[%d][%p] <stack frame not mapped, stopping stack trace>\n",
+                    frame, (void *)(uintptr_t)stack);
+            } else {
+                mprintf(
+                    "[%d][%p] <return address not mapped, stopping stack trace>\n",
+                    frame, (void *)(uintptr_t)stack);
+            }
+            break;
         }
         stack = (struct stackFrame *)stack->rbp;
     }
