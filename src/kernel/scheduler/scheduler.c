@@ -769,6 +769,14 @@ void yield(registers_t *ctx) {
         current = pick_next_thread(cpu);
     }
 
+    if (!current || !is_addr_mapped((uint64_t)(uintptr_t)current)) {
+        kpanic("No threads to schedule!");
+        __asm__ volatile("cli");
+        for (;;) {
+            __asm__ volatile("hlt");
+        }
+    }
+
     switch (current->state) {
     case THREAD_READY:
         next = current;

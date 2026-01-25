@@ -1,8 +1,11 @@
 #include "binfmt.h"
 #include "errors.h"
+#include "fs/vfs/vfs.h"
 #include "memory/heap/kheap.h"
 #include "scheduler/scheduler.h"
 #include "stdio.h"
+#include "user/access.h"
+#include "user/user.h"
 #include <string.h>
 
 binfmt_loader_t **binfmt_loaders = NULL;
@@ -32,6 +35,12 @@ int binfmt_load(const char *path, const char **argv, const char **envp, binfmt_p
         fileio_t *file = open(path, 0, 0);
         if (!file || (int64_t)file < 0) {
             continue;
+        }
+
+        vnode_t *vnode = file->private;
+        if (vnode_permission(get_current_cred(), vnode, X_OK) < 0) {
+            close(file);
+            return -EACCES;
         }
 
         uint8_t magic[loader->magic_size];
