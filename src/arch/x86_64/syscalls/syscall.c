@@ -1,5 +1,6 @@
 #include "syscall.h"
 #include "cpu.h"
+#include "stdio.h"
 
 #include <fs/file_io.h>
 #include <fs/vfs/vfs.h>
@@ -160,6 +161,7 @@ int sys_getpid(void) {
     if (!current) {
         return -1;
     }
+    debugf("getpid: %d", current->pid);
     return current->pid;
 }
 

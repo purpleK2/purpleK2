@@ -8,9 +8,10 @@ typedef unsigned long  size_t;
 typedef unsigned int   uint32_t;
 
 /* syscall numbers */
-#define SYS_EXIT  0
-#define SYS_OPEN  1
-#define SYS_WRITE 3
+#define SYS_EXIT   0
+#define SYS_OPEN   1
+#define SYS_WRITE  3
+#define SYS_GETPID 9
 
 /* auxv types */
 #define AT_NULL         0
@@ -72,6 +73,17 @@ static inline uint64_t syscall1(uint64_t num, uint64_t a1) {
         "int $0x80"
         : "=a"(ret)
         : "a"(num), "D"(a1)
+        : "memory"
+    );
+    return ret;
+}
+
+static inline uint64_t syscall0(uint64_t num) {
+    uint64_t ret;
+    __asm__ volatile (
+        "int $0x80"
+        : "=a"(ret)
+        : "a"(num)
         : "memory"
     );
     return ret;
@@ -154,6 +166,8 @@ static const char *auxv_type_name(uint64_t type) {
 void main(uintptr_t *stack_ptr) {
     uint64_t *stack = (uint64_t *)stack_ptr;
     uint64_t fd = syscall3(SYS_OPEN, (uint64_t)filename, 0, 0);
+
+    uint64_t pid = syscall0(SYS_GETPID);
     
     uint64_t argc = stack[0];
     
@@ -238,6 +252,10 @@ void main(uintptr_t *stack_ptr) {
     
     print(fd, "After += 33: thread_local_var = ");
     print_dec(fd, thread_local_var);
+    print(fd, "\r\n");
+
+    print(fd, "Process ID = ");
+    print_dec(fd, pid);
     print(fd, "\r\n");
     
     syscall1(SYS_EXIT, thread_local_var);
