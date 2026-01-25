@@ -288,11 +288,23 @@ int cpio_extract(cpio_t *cpio, char *dest_path) {
                 char *dup = strdup(path);
                 if (flags & V_DIR) {
                     vfs_mkdir(dup, 0755);
+                    if (vfs_lookup(dup, &v) != EOK) {
+                        return ENOENT;
+                    } else {
+                        v->gid = file->gid;
+                        v->uid = file->uid;
+                    }
                 } else {
                     if (vfs_create(dup, file->mode) == EOK) {
                         if (vfs_open(dup, 0, &f) == EOK) {
                             write(f, file->data, file->filesize);
                             close(f);
+                        }
+                        if (vfs_lookup(dup, &v) != EOK) {
+                            return ENOENT;
+                        } else {
+                            v->gid = file->gid;
+                            v->uid = file->uid;
                         }
                     }
                 }
