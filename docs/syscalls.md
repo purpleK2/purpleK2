@@ -19,21 +19,58 @@ System calls can be triggered using either the `syscall` instruction or with int
 
 ## Syscall Table
 
+```c
+#define SYS_exit 0
+#define SYS_open 1
+#define SYS_read 2
+#define SYS_write 3
+#define SYS_close 4
+#define SYS_ioctl 5
+#define SYS_seek 6
+#define SYS_fcntl 7
+#define SYS_dup 8
+#define SYS_getpid 9
+#define SYS_getuid 10
+#define SYS_geteuid 11
+#define SYS_getgid 12
+#define SYS_getegid 13
+#define SYS_setuid 14
+#define SYS_seteuid 15
+#define SYS_setreuid 16
+#define SYS_setresuid 17
+#define SYS_getresuid 18
+#define SYS_setgid 19
+#define SYS_setegid 20
+#define SYS_setregid 21
+#define SYS_setresgid 22
+#define SYS_getresgid 23
+```
+
 A complete table of all syscalls
 
-| Syscall Name | Syscall Description                                | Syscall Number (%rax) | Return Value (%rax)                                        | Arg 1 (%rdi)    | Arg 2 (%rsi)  | Arg 3 (%rdx) | Arg 4 (%r8) | Arg 5 (%r9) | Arg 6 (%r10) |
-| ------------ | -------------------------------------------------- | --------------------- | ---------------------------------------------------------- | --------------- | ------------- | ------------ | ----------- | ----------- | ------------ |
-| exit         | Exits the current process                          | 0                     | /                                                          | int exit_code   | /             | /            | /           | /           | /            |
-| open         | Opens a file from the VFS                          | 1                     | int fd (File Descriptor of the opened file or -1 on error) | char\* path     | int flags     | int mode     | /           | /           | /            |
-| read         | Reads the contents of a file                       | 2                     | int bytes_read (or error)                                  | int fd          | void \*buffer | int size     | /           | /           | /            |
-| write        | Writes data to a file                              | 3                     | int bytes_written (or error)                               | int fd          | void\* out    | int size     | /           | /           | /            |
-| close        | Closes a file descriptor                           | 4                     | int return (0 on success or else error)                    | int fd          | /             | /            | /           | /           | /            |
-| ioctl        | Sends an ioctl command to the fd                   | 5                     | int ioctl_call_return                                      | int fd          | int request   | void \*arg   | /           | /           | /            |
-| seek         | Seeks the fd to a specific offset                  | 6                     | int new_offset                                             | int fd          | int whence    | int offset   | /           | /           | /            |
-| fcntl        | Performs an operation on an file descriptor        | 7                     | int fd                                                     | int op          | void\* arg    | /            | /           | /           | /            |
-| dup          | Duplicates a file descriptor                       | 8                     | int fd_of_clone                                            | int fd_to_clone | /             | /            | /           | /           | /            |
-| getpid       | Gets the current process ID                        | 9                     | pid_t (int) pid                                            | /               | /             | /            | /           | /           | /            |
-| getuid       | Gets the user id of the current process            | 10                    | uid_t (int) uid                                            | /               | /             | /            | /           | /           | /            |
-| geteuid      | Gets the effective user id of the current process  | 12                    | uid_t (int) euid                                           | /               | /             | /            | /           | /           | /            |
-| getgid       | Gets the group id of the current process           | 13                    | gid_t (int) gid                                            | /               | /             | /            | /           | /           | /            |
-| getegid      | Gets the effective group id of the current process | 14                    | gid_t (int) egid                                           | /               | /             | /            | /           | /           | /            |
+| Syscall Name | Syscall Description                           | Syscall Number (%rax) | Return Value (%rax)             | Arg 1 (%rdi)  | Arg 2 (%rsi)  | Arg 3 (%rdx) | Arg 4 (%r8) | Arg 5 (%r9) | Arg 6 (%r10) |
+| ------------ | --------------------------------------------- | --------------------- | ------------------------------- | ------------- | ------------- | ------------ | ----------- | ----------- | ------------ |
+| exit         | Exits the current process                     | 0                     | /                               | int exit_code | /             | /            | /           | /           | /            |
+| open         | Opens a file from the VFS                     | 1                     | int fd or -1                    | char\* path   | int flags     | int mode     | /           | /           | /            |
+| read         | Reads from a file descriptor                  | 2                     | int bytes_read or -1            | int fd        | void\* buffer | int size     | /           | /           | /            |
+| write        | Writes to a file descriptor                   | 3                     | int bytes_written or -1         | int fd        | void\* buffer | int size     | /           | /           | /            |
+| close        | Closes a file descriptor                      | 4                     | int (0 on success, -1 on error) | int fd        | /             | /            | /           | /           | /            |
+| ioctl        | Performs device-specific control              | 5                     | int result                      | int fd        | int request   | void\* arg   | /           | /           | /            |
+| seek         | Changes file offset                           | 6                     | int new_offset or -1            | int fd        | int whence    | int offset   | /           | /           | /            |
+| fcntl        | Manipulates file descriptor                   | 7                     | int result                      | int fd        | int op        | void\* arg   | /           | /           | /            |
+| dup          | Duplicates a file descriptor                  | 8                     | int new_fd or -1                | int old_fd    | /             | /            | /           | /           | /            |
+| getpid       | Returns the calling process ID                | 9                     | pid_t pid                       | /             | /             | /            | /           | /           | /            |
+| getuid       | Returns real user ID                          | 10                    | uid_t uid                       | /             | /             | /            | /           | /           | /            |
+| geteuid      | Returns effective user ID                     | 11                    | uid_t euid                      | /             | /             | /            | /           | /           | /            |
+| getgid       | Returns real group ID                         | 12                    | gid_t gid                       | /             | /             | /            | /           | /           | /            |
+| getegid      | Returns effective group ID                    | 13                    | gid_t egid                      | /             | /             | /            | /           | /           | /            |
+| setuid       | Sets real/effective/saved UID per POSIX rules | 14                    | int (0 or -1)                   | uid_t uid     | /             | /            | /           | /           | /            |
+| seteuid      | Sets effective UID                            | 15                    | int (0 or -1)                   | uid_t euid    | /             | /            | /           | /           | /            |
+| setreuid     | Sets real and/or effective UID                | 16                    | int (0 or -1)                   | uid_t ruid    | uid_t euid    | /            | /           | /           | /            |
+| setresuid    | Sets real, effective, and saved UID           | 17                    | int (0 or -1)                   | uid_t ruid    | uid_t euid    | uid_t suid   | /           | /           | /            |
+| getresuid    | Gets real, effective, and saved UID           | 18                    | int (0 or -1)                   | uid_t\* ruid  | uid_t\* euid  | uid_t\* suid | /           | /           | /            |
+| setgid       | Sets real/effective/saved GID per POSIX rules | 19                    | int (0 or -1)                   | gid_t gid     | /             | /            | /           | /           | /            |
+| setegid      | Sets effective GID                            | 20                    | int (0 or -1)                   | gid_t egid    | /             | /            | /           | /           | /            |
+| setregid     | Sets real and/or effective GID                | 21                    | int (0 or -1)                   | gid_t rgid    | gid_t egid    | /            | /           | /           | /            |
+| setresgid    | Sets real, effective, and saved GID           | 22                    | int (0 or -1)                   | gid_t rgid    | gid_t egid    | gid_t sgid   | /           | /           | /            |
+| getresgid    | Gets real, effective, and saved GID           | 23                    | int (0 or -1)                   | gid_t\* rgid  | gid_t\* egid  | gid_t\* sgid | /           | /           | /            |

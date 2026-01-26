@@ -4,20 +4,30 @@
 #include "cpu.h"
 #include "types.h"
 
-#define SYS_exit    0
-#define SYS_open    1
-#define SYS_read    2
-#define SYS_write   3
-#define SYS_close   4
-#define SYS_ioctl   5
-#define SYS_seek    6
-#define SYS_fcntl   7
-#define SYS_dup     8
-#define SYS_getpid  9
-#define SYS_getuid  10
-#define SYS_geteuid 11
-#define SYS_getgid  12
-#define SYS_getegid 13
+#define SYS_exit      0
+#define SYS_open      1
+#define SYS_read      2
+#define SYS_write     3
+#define SYS_close     4
+#define SYS_ioctl     5
+#define SYS_seek      6
+#define SYS_fcntl     7
+#define SYS_dup       8
+#define SYS_getpid    9
+#define SYS_getuid    10
+#define SYS_geteuid   11
+#define SYS_getgid    12
+#define SYS_getegid   13
+#define SYS_setuid    14
+#define SYS_seteuid   15
+#define SYS_setreuid  16
+#define SYS_setresuid 17
+#define SYS_getresuid 18
+#define SYS_setgid    19
+#define SYS_setegid   20
+#define SYS_setregid  21
+#define SYS_setresgid 22
+#define SYS_getresgid 23
 
 void sys_exit(int status, registers_t *ctx);
 int sys_open(char *path, int flags, mode_t mode);

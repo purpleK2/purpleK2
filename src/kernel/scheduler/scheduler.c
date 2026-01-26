@@ -258,7 +258,7 @@ int proc_create(void (*entry)(), int flags, char *name) {
     memset(proc->cred, 0, sizeof(user_cred_t));
 
     user_cred_t *current_cred = get_current_cred();
-    if (current_cred) {
+    if (current_cred && proc->pid != 1) {
         memcpy(proc->cred, current_cred, sizeof(user_cred_t));
     } else {
         if (flags & TF_MODE_USER) {

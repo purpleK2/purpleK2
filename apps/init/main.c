@@ -16,6 +16,17 @@ typedef unsigned int   uint32_t;
 #define SYS_GETEUID 11
 #define SYS_GETGID 12
 #define SYS_GETEGID 13
+#define SYS_SETUID     14
+#define SYS_SETEUID   15
+#define SYS_SETREUID  16
+#define SYS_SETRESUID 17
+#define SYS_GETRESUID 18
+#define SYS_SETGID    19
+#define SYS_SETEGID   20
+#define SYS_SETREGID  21
+#define SYS_SETRESGID 22
+#define SYS_GETRESGID 23
+
 
 /* auxv types */
 #define AT_NULL         0
@@ -91,6 +102,14 @@ static inline uint64_t syscall0(uint64_t num) {
         : "memory"
     );
     return ret;
+}
+
+static inline uint64_t syscall3p(uint64_t num, void *a1, void *a2, void *a3) {
+    return syscall3(num, (uint64_t)a1, (uint64_t)a2, (uint64_t)a3);
+}
+
+static inline uint64_t syscall2p(uint64_t num, void *a1, void *a2) {
+    return syscall2(num, (uint64_t)a1, (uint64_t)a2);
 }
 
 static const char filename[] = "/dev/e9";
@@ -281,6 +300,81 @@ void main(uintptr_t *stack_ptr) {
 
     print(fd, "EGID = ");
     print_dec(fd, egid);
+    print(fd, "\r\n");
+
+        print(fd, "\r\n=== UID/GID syscall tests ===\r\n");
+
+    uint64_t ruid, euid2, suid;
+    uint64_t rgid, egid2, sgid;
+
+    /* getresuid */
+    syscall3p(SYS_GETRESUID, &ruid, &euid2, &suid);
+    print(fd, "getresuid: r=");
+    print_dec(fd, ruid);
+    print(fd, " e=");
+    print_dec(fd, euid2);
+    print(fd, " s=");
+    print_dec(fd, suid);
+    print(fd, "\r\n");
+
+    /* getresgid */
+    syscall3p(SYS_GETRESGID, &rgid, &egid2, &sgid);
+    print(fd, "getresgid: r=");
+    print_dec(fd, rgid);
+    print(fd, " e=");
+    print_dec(fd, egid2);
+    print(fd, " s=");
+    print_dec(fd, sgid);
+    print(fd, "\r\n");
+
+    /* seteuid to real uid (should succeed) */
+    uint64_t ret = syscall1(SYS_SETEUID, ruid);
+    print(fd, "seteuid(ruid) = ");
+    print_dec(fd, ret);
+    print(fd, "\r\n");
+
+    /* seteuid to bogus uid (should fail unless privileged) */
+    ret = syscall1(SYS_SETEUID, 99999);
+    print(fd, "seteuid(99999) = ");
+    print_dec(fd, ret);
+    print(fd, "\r\n");
+
+    /* setreuid(-1, ruid) */
+    ret = syscall2(SYS_SETREUID, (uint64_t)-1, ruid);
+    print(fd, "setreuid(-1, ruid) = ");
+    print_dec(fd, ret);
+    print(fd, "\r\n");
+
+    /* setegid to real gid */
+    ret = syscall1(SYS_SETEGID, rgid);
+    print(fd, "setegid(rgid) = ");
+    print_dec(fd, ret);
+    print(fd, "\r\n");
+
+    /* invalid setegid */
+    ret = syscall1(SYS_SETEGID, 99999);
+    print(fd, "setegid(99999) = ");
+    print_dec(fd, ret);
+    print(fd, "\r\n");
+
+    /* verify after mutations */
+    syscall3p(SYS_GETRESUID, &ruid, &euid2, &suid);
+    syscall3p(SYS_GETRESGID, &rgid, &egid2, &sgid);
+
+    print(fd, "after tests getresuid: r=");
+    print_dec(fd, ruid);
+    print(fd, " e=");
+    print_dec(fd, euid2);
+    print(fd, " s=");
+    print_dec(fd, suid);
+    print(fd, "\r\n");
+
+    print(fd, "after tests getresgid: r=");
+    print_dec(fd, rgid);
+    print(fd, " e=");
+    print_dec(fd, egid2);
+    print(fd, " s=");
+    print_dec(fd, sgid);
     print(fd, "\r\n");
     
     syscall1(SYS_EXIT, thread_local_var);

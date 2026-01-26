@@ -22,9 +22,7 @@ typedef struct user_cred {
     uint8_t ngroups;    
 } user_cred_t;
 
-static inline int is_root(const struct user_cred *cred) {
-    return cred->euid == 0;
-}
+user_cred_t* get_current_cred(void);
 
 static inline int in_group(const struct user_cred *cred, gid_t gid) {
     if (cred->egid == gid)
@@ -37,6 +35,9 @@ static inline int in_group(const struct user_cred *cred, gid_t gid) {
     return 0;
 }
 
-user_cred_t* get_current_cred(void);
+/* A process may change IDs only to its real, effective or saved ID OR if it is privileged */
+static inline int is_privileged(void) {
+    return get_current_cred()->euid == 0;
+}
 
 #endif // USER_H
