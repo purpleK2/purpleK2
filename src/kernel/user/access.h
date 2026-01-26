@@ -29,6 +29,9 @@
 
 #define S_IFMT	 0170000	/* Type of file.  */
 
+#define S_ISUID  0x800
+#define S_ISGID  0x400
+
 int vnode_permission(const user_cred_t *cred, const vnode_t *vnode, int mask);
 bool is_in_group(const user_cred_t *cred, gid_t gid);
 

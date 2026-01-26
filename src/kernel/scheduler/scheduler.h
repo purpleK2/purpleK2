@@ -26,6 +26,8 @@
 #define TF_DETACHED    (1 << 3)
 #define TF_HAS_FPU     (1 << 4)
 
+#define PF_SETUID_BIT  (1 << 0)
+
 #define TIME_SLICE_TICKS 10
 
 #define TLS_MIN_SIZE PFRAME_SIZE
@@ -112,6 +114,8 @@ typedef struct process {
     fileio_t *cwd; // Current Working Directory (yes it's a file :3c)
 
     int cpu; // the cpu we're running on
+
+    uint8_t flags;
 
     vmc_t *vmc;
 

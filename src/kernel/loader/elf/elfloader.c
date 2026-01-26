@@ -1,7 +1,9 @@
 #include "elfloader.h"
 #include "auxv.h"
 #include "elf/elf.h"
+#include "fs/vfs/vfs.h"
 #include "loader/binfmt.h"
+#include "user/access.h"
 #include "user/user.h"
 #include "util/macro.h"
 
@@ -335,6 +337,17 @@ int load_elf(const char *path, const char **argv, const char **envp, binfmt_prog
         kfree(phdrs);
         close(elf_file);
         return -EINVAL;
+    }
+
+    vnode_t *vnode = elf_file->private;
+    if (vnode->mode & S_ISUID) {
+        proc->cred->euid = vnode->uid;
+        debugf_debug("Setting SETUID bit for PID=%d due to SUID file\n", pid);
+    }
+
+    if (vnode->mode & S_ISGID) {
+        proc->cred->egid = vnode->gid;
+        debugf_debug("Setting SETGID bit for PID=%d due to SGID file\n", pid);
     }
 
     uint64_t *pml4 = (uint64_t *)PHYS_TO_VIRTUAL(proc->vmc->pml4_table);
