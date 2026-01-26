@@ -12,6 +12,10 @@ typedef unsigned int   uint32_t;
 #define SYS_OPEN   1
 #define SYS_WRITE  3
 #define SYS_GETPID 9
+#define SYS_GETUID 10
+#define SYS_GETEUID 11
+#define SYS_GETGID 12
+#define SYS_GETEGID 13
 
 /* auxv types */
 #define AT_NULL         0
@@ -169,6 +173,11 @@ void main(uintptr_t *stack_ptr) {
 
     uint64_t pid = syscall0(SYS_GETPID);
     
+    uint64_t uid = syscall0(SYS_GETUID);
+    uint64_t euid = syscall0(SYS_GETEUID);
+    uint64_t gid = syscall0(SYS_GETGID);
+    uint64_t egid = syscall0(SYS_GETEGID);
+
     uint64_t argc = stack[0];
     
     char **argv = (char **)&stack[1];
@@ -256,6 +265,22 @@ void main(uintptr_t *stack_ptr) {
 
     print(fd, "Process ID = ");
     print_dec(fd, pid);
+    print(fd, "\r\n");
+
+    print(fd, "UID = ");
+    print_dec(fd, uid);
+    print(fd, "\r\n");
+
+    print(fd, "EUID = ");
+    print_dec(fd, euid);
+    print(fd, "\r\n");
+
+    print(fd, "GID = ");
+    print_dec(fd, gid);
+    print(fd, "\r\n");
+
+    print(fd, "EGID = ");
+    print_dec(fd, egid);
     print(fd, "\r\n");
     
     syscall1(SYS_EXIT, thread_local_var);
