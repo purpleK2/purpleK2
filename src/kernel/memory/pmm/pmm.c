@@ -1,5 +1,5 @@
 /*
-        Freelist memory allocator/manager
+        Freelist memory allocator/manager with reference counting
 
         (C) RepubblicaTech 2024
 */
@@ -31,8 +31,36 @@ void pmm_init(LIMINE_PTR(struct limine_memmap_response *) memmap_response) {
     spinlock_release(&pmm.PMM_LOCK);
     pmm.total_memory = 0;
     pmm.used_memory  = 0;
+    pmm.pages_info = NULL;
+    pmm.total_pages = 0;
+    pmm.pages_info_base = 0;
 
     pmm.usable_entry_count = 0;
+    
+    uint64_t lowest_base = UINT64_MAX;
+    uint64_t highest_end = 0;
+    
+    for (uint64_t i = 0; i < memmap_response->entry_count; i++) {
+        struct limine_memmap_entry *memmap_entry = memmap_response->entries[i];
+
+        if (memmap_entry->type != LIMINE_MEMMAP_USABLE)
+            continue;
+
+        uint64_t entry_pages = memmap_entry->length / PFRAME_SIZE;
+        pmm.total_pages += entry_pages;
+        
+        if (memmap_entry->base < lowest_base) {
+            lowest_base = memmap_entry->base;
+        }
+        
+        uint64_t entry_end = memmap_entry->base + memmap_entry->length;
+        if (entry_end > highest_end) {
+            highest_end = entry_end;
+        }
+    }
+    
+    pmm.pages_info_base = lowest_base;
+    
     for (uint64_t i = 0; i < memmap_response->entry_count; i++) {
         struct limine_memmap_entry *memmap_entry = memmap_response->entries[i];
 
@@ -49,6 +77,7 @@ void pmm_init(LIMINE_PTR(struct limine_memmap_response *) memmap_response) {
     }
 
     kprintf_info("Found %d usable regions\n", pmm.usable_entry_count);
+    kprintf_info("Total pages: %llu\n", pmm.total_pages);
 
 #ifdef CONFIG_PMM_DEBUG
     // prints all nodes
@@ -63,6 +92,29 @@ void pmm_init(LIMINE_PTR(struct limine_memmap_response *) memmap_response) {
         }
     }
 #endif
+}
+
+void pmm_init_refcount() {
+    if (pmm.total_pages == 0) {
+        kprintf_panic("PMM not initialized before refcount init!\n");
+    }
+    
+    // Allocate memory for page_t array
+    size_t pages_info_size = pmm.total_pages * sizeof(page_t);
+    size_t pages_needed = (pages_info_size + PFRAME_SIZE - 1) / PFRAME_SIZE;
+    
+    kprintf_info("Allocating %zu pages for reference counting\n", pages_needed);
+    
+    void *pages_info_phys = pmm_alloc_pages(pages_needed);
+    if (!pages_info_phys) {
+        kprintf_panic("Failed to allocate memory for page reference counting!\n");
+    }
+    
+    pmm.pages_info = (page_t *)PHYS_TO_VIRTUAL(pages_info_phys);
+    
+    memset(pmm.pages_info, 0, pages_info_size);
+    
+    kprintf_info("Reference counting initialized for %llu pages\n", pmm.total_pages);
 }
 
 // Returns the count of the entries.
@@ -80,7 +132,7 @@ flnode_t *fl_update_nodes() {
     flnode_t *i = pmm.head;
     while (!is_addr_mapped((uint64_t)i)) {
         pmm.usable_entry_count++;
-        i = i->next; // ffffffff880041449
+        i = i->next;
     }
 
 #ifdef CONFIG_PMM_DEBUG
@@ -88,6 +140,55 @@ flnode_t *fl_update_nodes() {
 #endif
 
     return pmm.head;
+}
+
+page_t *pmm_page_info(void *phys_addr) {
+    if (!pmm.pages_info) {
+        return NULL;
+    }
+    
+    uint64_t page_index = ((uint64_t)phys_addr - pmm.pages_info_base) / PFRAME_SIZE;
+    
+    if (page_index >= pmm.total_pages) {
+#ifdef CONFIG_PMM_DEBUG
+        debugf_debug("Invalid page index %llu (max: %llu)\n", page_index, pmm.total_pages);
+#endif
+        return NULL;
+    }
+    
+    return &pmm.pages_info[page_index];
+}
+
+void pmm_page_ref_inc(void *phys_addr) {
+    page_t *page = pmm_page_info(phys_addr);
+    if (page) {
+        atomic_fetch_add(&page->ref_count, 1);
+#ifdef CONFIG_PMM_DEBUG
+        debugf_debug("Page %p refcount incremented to %d\n", phys_addr, 
+                     atomic_load(&page->ref_count));
+#endif
+    }
+}
+
+void pmm_page_ref_dec(void *phys_addr) {
+    page_t *page = pmm_page_info(phys_addr);
+    if (page) {
+        int old_count = atomic_fetch_sub(&page->ref_count, 1);
+#ifdef CONFIG_PMM_DEBUG
+        debugf_debug("Page %p refcount decremented to %d\n", phys_addr, old_count - 1);
+#endif
+        if (old_count == 1) {
+            pmm_free(phys_addr, 1);
+        }
+    }
+}
+
+int pmm_page_ref_count(void *phys_addr) {
+    page_t *page = pmm_page_info(phys_addr);
+    if (page) {
+        return atomic_load(&page->ref_count);
+    }
+    return 0;
 }
 
 // Omar, this is a PAGE FRAME allocator no need for custom <bytes> parameter
@@ -108,15 +209,13 @@ void *pmm_alloc_page() {
         if (cur_node->length >= PFRAME_SIZE)
             break;
 
-// if not, go to the next block
 #ifdef CONFIG_PMM_DEBUG
         debugf_debug("Not enough memory found at %p. Going on...", cur_node);
 #endif
     }
 
-    // if we've got here and nothing was found, then kernel panic
     if (cur_node == NULL) {
-        kprintf_panic("OUT OF MEMORY!");
+        kpanic("No more physical memory available!");
         _hcf();
     }
 
@@ -130,7 +229,6 @@ void *pmm_alloc_page() {
     if (cur_node->length - PFRAME_SIZE <= 0) {
         pmm.head = pmm.head->next;
     } else {
-        // shift the node
         flnode_t *new_node = (ptr + PFRAME_SIZE);
         new_node->length   = (cur_node->length - PFRAME_SIZE);
         new_node->next     = cur_node->next;
@@ -144,13 +242,20 @@ void *pmm_alloc_page() {
     pmm.used_memory += PFRAME_SIZE;
     fl_update_nodes();
 
-    // zero out the whole allocated region
     memset((void *)ptr, 0, PFRAME_SIZE);
+
+    void *phys_addr = (void *)VIRT_TO_PHYSICAL(ptr);
+    
+    if (pmm.pages_info) {
+        page_t *page = pmm_page_info(phys_addr);
+        if (page) {
+            atomic_store(&page->ref_count, 1);
+        }
+    }
 
     spinlock_release(&pmm.PMM_LOCK);
 
-    // we need the physical address of the free entry
-    return (void *)VIRT_TO_PHYSICAL(ptr);
+    return phys_addr;
 }
 
 void *pmm_alloc_pages(size_t pages) {
@@ -162,7 +267,7 @@ void *pmm_alloc_pages(size_t pages) {
     return ptr;
 }
 
-void pmm_free(void *ptr, size_t pages) {
+static void pmm_free_internal(void *ptr, size_t pages) {
     spinlock_acquire(&pmm.PMM_LOCK);
     pmm.pmm_frees++;
 #ifdef CONFIG_PMM_DEBUG
@@ -174,7 +279,6 @@ void pmm_free(void *ptr, size_t pages) {
 
     flnode_t *deallocated = (flnode_t *)PHYS_TO_VIRTUAL(ptr);
 
-    // you can check vmm.c for an explanation of the same behaviour
     flnode_t *f = pmm.head;
     while (!is_addr_mapped((uint64_t)f)) {
         f = f->next;
@@ -219,4 +323,38 @@ void pmm_free(void *ptr, size_t pages) {
     fl_update_nodes();
 
     spinlock_release(&pmm.PMM_LOCK);
+}
+
+void pmm_free(void *ptr, size_t pages) {
+    if (!pmm.pages_info) {
+        pmm_free_internal(ptr, pages);
+        return;
+    }
+
+    for (size_t i = 0; i < pages; i++) {
+        void *page_addr = ptr + (i * PFRAME_SIZE);
+        page_t *page = pmm_page_info(page_addr);
+        
+        if (!page) {
+#ifdef CONFIG_PMM_DEBUG
+            debugf_debug("Warning: freeing page %p with no info structure\n", page_addr);
+#endif
+            continue;
+        }
+        
+        int old_count = atomic_fetch_sub(&page->ref_count, 1);
+        
+#ifdef CONFIG_PMM_DEBUG
+        debugf_debug("Page %p refcount: %d -> %d\n", page_addr, old_count, old_count - 1);
+#endif
+        
+        // Only actually free if this was the last reference
+        if (old_count == 1) {
+            pmm_free_internal(page_addr, 1);
+        } else if (old_count <= 0) {
+#ifdef CONFIG_PMM_DEBUG
+            debugf_debug("Warning: freeing page %p with refcount %d\n", page_addr, old_count);
+#endif
+        }
+    }
 }

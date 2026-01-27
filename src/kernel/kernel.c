@@ -320,6 +320,7 @@ void kstart(void) {
 
     kvmc = vmc_init((uint64_t *)PHYS_TO_VIRTUAL(kernel_pml4), VMO_KERNEL_RW);
     vmm_init(kvmc);
+    pmm_init_refcount();
     vmc_switch(kvmc);
     set_kernel_vmc(kvmc);
     kprintf_ok("Initialized VMM\n");
