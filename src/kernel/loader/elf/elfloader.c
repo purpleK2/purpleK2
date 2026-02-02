@@ -1,5 +1,6 @@
 #include "elfloader.h"
 #include "auxv.h"
+#include "caps.h"
 #include "elf/elf.h"
 #include "fs/vfs/vfs.h"
 #include "loader/binfmt.h"
@@ -581,6 +582,9 @@ int load_elf(const char *path, const char **argv, const char **envp, binfmt_prog
     Elf64_auxv_t auxv[32];
     int auxc = 0;
 
+    uint64_t hwcaps[2] = {0, 0};
+    get_athwcap_bitmap(hwcaps);
+
     auxv[auxc++] = (Elf64_auxv_t){AT_PHDR, {phdr_vaddr}};
     auxv[auxc++] = (Elf64_auxv_t){AT_PHENT, {sizeof(Elf64_Phdr)}};
     auxv[auxc++] = (Elf64_auxv_t){AT_PHNUM, {eh.e_phnum}};
@@ -593,7 +597,8 @@ int load_elf(const char *path, const char **argv, const char **envp, binfmt_prog
     auxv[auxc++] = (Elf64_auxv_t){AT_EGID, {get_current_cred()->egid}};
     auxv[auxc++] = (Elf64_auxv_t){AT_SECURE, {0}};
     auxv[auxc++] = (Elf64_auxv_t){AT_RANDOM, {0}};
-    auxv[auxc++] = (Elf64_auxv_t){AT_HWCAP, {0}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_HWCAP, {hwcaps[0]}};
+    auxv[auxc++] = (Elf64_auxv_t){AT_HWCAP2, {hwcaps[1]}};
     auxv[auxc++] = (Elf64_auxv_t){AT_PLATFORM, {0}};
     auxv[auxc++] = (Elf64_auxv_t){AT_BASE_PLATFORM, {0}};
     auxv[auxc++] = (Elf64_auxv_t){AT_CLKTCK, {100}};
