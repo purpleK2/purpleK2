@@ -12,16 +12,15 @@ FASM = fasm
 CFLAGS = -target x86_64-unknown-none \
          -ffreestanding \
          -fno-stack-protector \
+         -fPIE \
          -O0 \
          -g \
          -nostdlib \
          -Wall \
          -Wextra
 
-LDFLAGS = -static \
-          -nostdlib \
-          -Ttext 0x200000 \
-          --image-base=0x200000 \
+LDFLAGS = -nostdlib \
+          -pie \
           --entry=_start \
           -o $(TARGET)
 

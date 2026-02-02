@@ -19,13 +19,20 @@ context_load:
     mov rdx, [rdi + 0x60]
     mov rcx, [rdi + 0x68]
     mov rbx, [rdi + 0x70]
+    
+    ; Load segment selector using a scratch register (rcx is already saved above)
+    ; We'll reload rcx after setting segments
+    mov cx, [rdi + 0x00]
+    mov ds, cx
+    mov es, cx
+    
+    ; Now load rax (must be after segment loads to avoid corruption)
     mov rax, [rdi + 0x78]
     
+    ; Reload rcx with correct value
+    mov rcx, [rdi + 0x68]
+    
     lea rsp, [rdi + 0x90]
-
-    mov ax, [rdi + 0x00]
-    mov ds, ax
-    mov es, ax
     
     mov rdi, [rdi + 0x50]
     

@@ -428,7 +428,11 @@ vmc_t *vmc_fork(vmc_t *parent) {
     uint64_t *parent_pml4 = (uint64_t *)PHYS_TO_VIRTUAL(parent->pml4_table);
     uint64_t *child_pml4  = (uint64_t *)PHYS_TO_VIRTUAL(child->pml4_table);
 
-    memcpy(child_pml4, parent_pml4, PFRAME_SIZE);
+    // Initialize child PML4 - copy kernel half (entries 256-511), clear user half
+    memset(child_pml4, 0, PFRAME_SIZE);
+    for (int i = 256; i < 512; i++) {
+        child_pml4[i] = parent_pml4[i];
+    }
 
     child->root_vmo = NULL;
     vmo_t **dst     = &child->root_vmo;
@@ -444,6 +448,8 @@ vmc_t *vmc_fork(vmc_t *parent) {
         dst          = &(*dst)->next;
     }
 
+    // Deep copy user-space page tables (entries 0-255)
+    // We need to allocate fresh page table pages for the child
     for (int pml4_idx = 0; pml4_idx < 256; pml4_idx++) {
         if (!(parent_pml4[pml4_idx] & PMLE_PRESENT)) {
             continue;
@@ -452,9 +458,15 @@ vmc_t *vmc_fork(vmc_t *parent) {
         uint64_t *parent_pdpt = (uint64_t *)PHYS_TO_VIRTUAL(
             PG_GET_ADDR(parent_pml4[pml4_idx])
         );
-        uint64_t *child_pdpt = (uint64_t *)PHYS_TO_VIRTUAL(
-            PG_GET_ADDR(child_pml4[pml4_idx])
-        );
+        
+        // Allocate new PDPT for child
+        uint64_t *child_pdpt_phys = (uint64_t *)pmm_alloc_page();
+        if (!child_pdpt_phys) {
+            continue;
+        }
+        uint64_t *child_pdpt = (uint64_t *)PHYS_TO_VIRTUAL(child_pdpt_phys);
+        memset(child_pdpt, 0, PFRAME_SIZE);
+        child_pml4[pml4_idx] = (uint64_t)child_pdpt_phys | (parent_pml4[pml4_idx] & 0xFFF);
 
         for (int pdp_idx = 0; pdp_idx < 512; pdp_idx++) {
             if (!(parent_pdpt[pdp_idx] & PMLE_PRESENT)) {
@@ -464,9 +476,15 @@ vmc_t *vmc_fork(vmc_t *parent) {
             uint64_t *parent_pdir = (uint64_t *)PHYS_TO_VIRTUAL(
                 PG_GET_ADDR(parent_pdpt[pdp_idx])
             );
-            uint64_t *child_pdir = (uint64_t *)PHYS_TO_VIRTUAL(
-                PG_GET_ADDR(child_pdpt[pdp_idx])
-            );
+            
+            // Allocate new PDIR for child
+            uint64_t *child_pdir_phys = (uint64_t *)pmm_alloc_page();
+            if (!child_pdir_phys) {
+                continue;
+            }
+            uint64_t *child_pdir = (uint64_t *)PHYS_TO_VIRTUAL(child_pdir_phys);
+            memset(child_pdir, 0, PFRAME_SIZE);
+            child_pdpt[pdp_idx] = (uint64_t)child_pdir_phys | (parent_pdpt[pdp_idx] & 0xFFF);
 
             for (int pdir_idx = 0; pdir_idx < 512; pdir_idx++) {
                 if (!(parent_pdir[pdir_idx] & PMLE_PRESENT)) {
@@ -476,18 +494,19 @@ vmc_t *vmc_fork(vmc_t *parent) {
                 uint64_t *parent_pt = (uint64_t *)PHYS_TO_VIRTUAL(
                     PG_GET_ADDR(parent_pdir[pdir_idx])
                 );
-                uint64_t *child_pt = (uint64_t *)PHYS_TO_VIRTUAL(
-                    PG_GET_ADDR(child_pdir[pdir_idx])
-                );
+                
+                // Allocate new PT for child
+                uint64_t *child_pt_phys = (uint64_t *)pmm_alloc_page();
+                if (!child_pt_phys) {
+                    continue;
+                }
+                uint64_t *child_pt = (uint64_t *)PHYS_TO_VIRTUAL(child_pt_phys);
+                memset(child_pt, 0, PFRAME_SIZE);
+                child_pdir[pdir_idx] = (uint64_t)child_pt_phys | (parent_pdir[pdir_idx] & 0xFFF);
 
                 for (int pt_idx = 0; pt_idx < 512; pt_idx++) {
                     uint64_t entry = parent_pt[pt_idx];
                     if (!(entry & PMLE_PRESENT)) {
-                        continue;
-                    }
-
-                    // Only COW user-writable 4KiB pages
-                    if (!(entry & PMLE_USER) || !(entry & PMLE_WRITE)) {
                         continue;
                     }
 
@@ -497,25 +516,36 @@ vmc_t *vmc_fork(vmc_t *parent) {
                         ((uint64_t)pdir_idx << 21) |
                         ((uint64_t)pt_idx << 12);
 
+                    // Skip TLS region - will be allocated fresh for child
                     if (tls_start && virt >= tls_start && virt < tls_end) {
                         continue;
                     }
 
+                    // Skip user stack region - will be allocated fresh for child
                     if (virt >= USER_STACK_TOP - SCHEDULER_STACKSZ && virt < USER_STACK_TOP) {
                         continue;
                     }
 
                     uint64_t phys = PG_GET_ADDR(entry);
 
-                    uint64_t cow_entry = (entry & ~PMLE_WRITE) | PMLE_COW;
-                    parent_pt[pt_idx]  = cow_entry;
-                    child_pt[pt_idx]   = cow_entry;
+                    // Only COW user-writable 4KiB pages
+                    if ((entry & PMLE_USER) && (entry & PMLE_WRITE)) {
+                        uint64_t cow_entry = (entry & ~PMLE_WRITE) | PMLE_COW;
+                        parent_pt[pt_idx] = cow_entry;
+                        child_pt[pt_idx]  = cow_entry;
+                        pmm_page_ref_inc((void *)phys);
 
-                    pmm_page_ref_inc((void *)phys);
-
-                    _invalidate(virt);
-                    if (get_bootloader_data()->smp_enabled) {
-                        tlb_shootdown(virt);
+                        _invalidate(virt);
+                        if (get_bootloader_data()->smp_enabled) {
+                            tlb_shootdown(virt);
+                        }
+                    } else {
+                        // Read-only or non-user pages: just copy the entry
+                        child_pt[pt_idx] = entry;
+                        // Increment refcount for shared physical pages
+                        if (entry & PMLE_USER) {
+                            pmm_page_ref_inc((void *)phys);
+                        }
                     }
                 }
             }
@@ -733,6 +763,7 @@ void vfree(vmc_t *ctx, void *ptr, bool free) {
         debugf_debug("Tried to deallocate a non-existing virtual address. "
                      "Quitting...\n");
 #endif
+        spinlock_release(&VMM_LOCK);
         return;
     }
 

@@ -1,4 +1,5 @@
 #include "scheduler.h"
+#include "interrupts/isr.h"
 #include "karg.h"
 #include "loader/binfmt.h"
 #include "user/group.h"
@@ -578,32 +579,35 @@ int proc_fork(registers_t *regs) {
     VMO_KERNEL_RW,
     NULL);
 
-    child_thread->kernel_stack = (void *)(uintptr_t)PHYS_TO_VIRTUAL(
-        pg_virtual_to_phys(
-            (uint64_t *)(uintptr_t)PHYS_TO_VIRTUAL(child->vmc->pml4_table),
-            (uint64_t)(uintptr_t)child_thread->kernel_stack
-        )
+    uint64_t kstack_virt = (uint64_t)(uintptr_t)child_thread->kernel_stack;
+    uint64_t kstack_phys = pg_virtual_to_phys(
+        (uint64_t *)(uintptr_t)PHYS_TO_VIRTUAL(child->vmc->pml4_table),
+        kstack_virt
     );
+
+    child_thread->kernel_stack = (void *)(uintptr_t)PHYS_TO_VIRTUAL(kstack_phys);
 
     uint64_t user_stack_top  = USER_STACK_TOP;
     uint64_t user_stack_base = user_stack_top - SCHEDULER_STACKSZ;
 
-    vfree(child->vmc, (void *)(uintptr_t)user_stack_base, SCHEDULER_STACK_PAGES);
-
-    unmap_region((uint64_t *)PHYS_TO_VIRTUAL(child_thread->parent->vmc->pml4_table), user_stack_base, SCHEDULER_STACK_PAGES);
+    vfree(child->vmc, (void *)(uintptr_t)user_stack_base, false);
 
     child_thread->user_stack = valloc_at(child->vmc, (void *)(uintptr_t)user_stack_base,
         SCHEDULER_STACK_PAGES, VMO_USER_RW,
         NULL);
 
-    child_thread->user_stack = (void *)(uintptr_t)PHYS_TO_VIRTUAL(
-        pg_virtual_to_phys((uint64_t*)(uintptr_t)PHYS_TO_VIRTUAL(child->vmc->pml4_table), (uint64_t)(uintptr_t)child_thread->user_stack)
-    );
+    if (!child_thread->user_stack) {
+        debugf_warn("proc_fork: valloc_at failed for child user stack!\n");
+        return -ENOMEM;
+    }
+
+    uint64_t child_stack_phys = pg_virtual_to_phys(
+        (uint64_t *)PHYS_TO_VIRTUAL(child->vmc->pml4_table),
+        (uint64_t)(uintptr_t)child_thread->user_stack);
+
+    child_thread->user_stack = (void *)(uintptr_t)PHYS_TO_VIRTUAL(child_stack_phys);
 
     memcpy(child_thread->user_stack, current->user_stack, SCHEDULER_STACKSZ);
-
-    //memcpy(&child_thread->regs->rsp, &current->regs->rsp, sizeof(uint64_t));
-    // child_thread->user_stack = current->user_stack;
 
     if (current->tls.size) {
         if (allocate_tls(child_thread, current->tls.size) != EOK) {
@@ -1096,9 +1100,6 @@ void yield(registers_t *ctx) {
 
 
     fpu_restore(next->fpu);
-
-debugf_debug("About to load context: next=%p next->regs=%p next->regs->rax=%llx next->regs->rip=%llx\n",
-             next, next->regs, next->regs->rax, next->regs->rip);
 
     context_load(next->regs);
 }
