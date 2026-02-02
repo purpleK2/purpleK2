@@ -52,6 +52,9 @@ vmo_t *split_vmo_at(vmo_t *src_vmo, size_t len);
 vmc_t *vmc_init(uint64_t *pml4, uint64_t flags);
 void vmc_destroy(vmc_t *ctx);
 
+// Create a new VM context that shares pages with the parent using COW
+vmc_t *vmc_fork(vmc_t *parent);
+
 void pagemap_copy_to(uint64_t *non_kernel_pml4);
 
 void vmm_init(vmc_t *ctx);

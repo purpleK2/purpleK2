@@ -35,6 +35,7 @@
 #define PMLE_PCD            (1 << 4)
 #define PMLE_ACCESSED       (1 << 5)
 #define PMLE_PAT            (1 << 7)
+#define PMLE_COW            (1 << 9) // software-only Copy-on-Write flag
 #define PMLE_NOT_EXECUTABLE (1ull << 63)
 
 // Page privileges attributes
@@ -97,6 +98,7 @@ extern void _invalidate(uint64_t virtual);
 
 uint64_t *get_pmlt(uint64_t *pml_table, uint64_t pml_index);
 uint64_t get_page_entry(uint64_t *pml4_table, uint64_t virtual);
+uint64_t *get_page_entry_ptr(uint64_t *pml4_table, uint64_t virtual);
 uint64_t pg_virtual_to_phys(uint64_t *pml4_table, uint64_t virtual);
 
 uint64_t *get_create_pmlt(uint64_t *pml_table, uint64_t pmlt_index,

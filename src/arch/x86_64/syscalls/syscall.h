@@ -29,6 +29,8 @@
 #define SYS_setresgid 22
 #define SYS_getresgid 23
 
+#define SYS_fork      24
+
 void sys_exit(int status, registers_t *ctx);
 int sys_open(char *path, int flags, mode_t mode);
 int sys_read(int fd, char *buf, int count);
@@ -39,6 +41,7 @@ int sys_seek(int fd, int whence, int offset);
 int sys_fcntl(int fd, int op, void *arg);
 int sys_dup(int fd);
 int sys_getpid(void);
+int sys_fork(registers_t *ctx);
 
 long handle_syscall(registers_t *ctx);
 

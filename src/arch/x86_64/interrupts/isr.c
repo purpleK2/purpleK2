@@ -1,5 +1,6 @@
 #include "isr.h"
 #include "elf/sym.h"
+#include "errors.h"
 #include "loader/module/module_loader.h"
 #include "scheduler/scheduler.h"
 #include "syscalls/syscall.h"
@@ -65,6 +66,40 @@ void isr_syscall(registers_t *ctx) {
     }
 }
 
+static void isr_gpf(registers_t *ctx) {
+    // If this is a user-mode general protection fault, kill the
+    // offending process instead of panicking the whole kernel.
+    if ((ctx->cs & 0x3) == 0x3) {
+        pcb_t *proc = get_current_pcb();
+        if (proc) {
+            debugf_warn("GPF in user process %d at RIP=%p, killing it\n",
+                        proc->pid, (void *)ctx->rip);
+        } else {
+            debugf_warn(
+                "GPF in user context with no current process, killing\n");
+        }
+
+        proc_exit(ENOMEM);
+        yield(ctx);
+        return;
+    }
+
+    // Kernel-mode GPF: keep the existing panic behavior.
+    stdio_panic_init();
+    debugf(ANSI_COLOR_BLUE);
+    bsod_init();
+
+    uint64_t cpu = 0;
+    if (is_lapic_enabled())
+        cpu = lapic_get_id();
+
+    mprintf("KERNEL PANIC! \"%s\" (Exception n. %d) on CPU %hhu\n",
+            "General Protection Fault", 13, cpu);
+    mprintf("\terrcode: %llx\n", ctx->error);
+
+    panic_common(ctx);
+}
+
 static void isr_debug(registers_t *ctx) {
     debugf_warn("Debug exception at RIP=0x%llx\n", ctx->rip);
 
@@ -79,6 +114,7 @@ void isr_init() {
     }
 
     isr_registerHandler(0x80, isr_syscall);
+    isr_registerHandler(13, isr_gpf);
     isr_registerHandler(0x1, isr_debug);
 }
 

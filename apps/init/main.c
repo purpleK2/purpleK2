@@ -26,6 +26,7 @@ typedef unsigned int   uint32_t;
 #define SYS_SETREGID  21
 #define SYS_SETRESGID 22
 #define SYS_GETRESGID 23
+#define SYS_FORK      24
 
 
 /* auxv types */
@@ -259,6 +260,29 @@ void main(uintptr_t *stack_ptr) {
         }
         print(fd, "\r\n");
     }
+
+    print(fd, "\r\nTesting fork()...\r\n");
+    uint64_t fork_ret = syscall0(SYS_FORK);
+
+    print(fd, "\r\nFork returned: ");
+    print_dec(fd, fork_ret);
+    print(fd, "\r\n");
+
+    if (fork_ret == 0) {
+        print(fd, "[child] fork() returned 0, PID=");
+        uint64_t cpid = syscall0(SYS_GETPID);
+        print_dec(fd, cpid);
+        print(fd, "\r\n");
+        syscall1(SYS_EXIT, 0);
+        return;
+    } else {
+        print(fd, "[parent] fork() returned child PID=");
+        print_dec(fd, fork_ret);
+        print(fd, ", parent PID=");
+        uint64_t ppid = syscall0(SYS_GETPID);
+        print_dec(fd, ppid);
+        print(fd, "\r\n");
+    }
     
     if (argc > 0) {
         print(fd, "argv[0] = \"");
@@ -302,7 +326,7 @@ void main(uintptr_t *stack_ptr) {
     print_dec(fd, egid);
     print(fd, "\r\n");
 
-        print(fd, "\r\n=== UID/GID syscall tests ===\r\n");
+    print(fd, "\r\n=== UID/GID syscall tests ===\r\n");
 
     uint64_t ruid, euid2, suid;
     uint64_t rgid, egid2, sgid;
@@ -378,6 +402,6 @@ void main(uintptr_t *stack_ptr) {
     print(fd, "\r\n");
     
     syscall1(SYS_EXIT, thread_local_var);
-    
-    for(;;) __asm__("hlt");
+    /* Should not return. */
+    return;
 }

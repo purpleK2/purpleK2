@@ -10,15 +10,26 @@ context_load:
     mov r14, [rdi + 0x10]
     mov r13, [rdi + 0x18]
     mov r12, [rdi + 0x20]
-
+    mov r11, [rdi + 0x28]
+    mov r10, [rdi + 0x30]
+    mov r9,  [rdi + 0x38]
+    mov r8,  [rdi + 0x40]
     mov rbp, [rdi + 0x48]
+    mov rsi, [rdi + 0x58]
+    mov rdx, [rdi + 0x60]
+    mov rcx, [rdi + 0x68]
     mov rbx, [rdi + 0x70]
-
+    mov rax, [rdi + 0x78]
+    
     lea rsp, [rdi + 0x90]
 
-    swapgs
+    mov ax, [rdi + 0x00]
+    mov ds, ax
+    mov es, ax
+    
+    mov rdi, [rdi + 0x50]
+    
     iretq
-
 public fpu_save
 public fpu_restore
 

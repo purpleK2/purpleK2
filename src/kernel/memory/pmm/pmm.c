@@ -129,10 +129,8 @@ int get_freelist_entry_count() {
 */
 flnode_t *fl_update_nodes() {
     pmm.usable_entry_count = 0;
-    flnode_t *i = pmm.head;
-    while (!is_addr_mapped((uint64_t)i)) {
+    for (flnode_t *i = pmm.head; i != NULL; i = i->next) {
         pmm.usable_entry_count++;
-        i = i->next;
     }
 
 #ifdef CONFIG_PMM_DEBUG

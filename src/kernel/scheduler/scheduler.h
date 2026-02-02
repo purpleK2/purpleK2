@@ -174,6 +174,7 @@ int pcb_destroy(int pid);
 pcb_t *get_current_pcb();
 tcb_t *get_current_tcb();
 int thread_destroy(int pid, int tid);
+int proc_fork(registers_t *regs);
 
 int allocate_tls(tcb_t *thread, size_t size);
 void free_tls(tcb_t *thread);

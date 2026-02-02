@@ -7,6 +7,9 @@
 #include "memory/pmm/pmm.h"
 #include "vflags.h"
 #include <paging/paging.h>
+#include <scheduler/scheduler.h>
+
+#include <smp/ipi.h>
 
 #include <spinlock.h>
 
@@ -378,6 +381,149 @@ void pagemap_copy_to(uint64_t *non_kernel_pml4) {
 
         ((uint64_t *)PHYS_TO_VIRTUAL(non_kernel_pml4))[i] = k_pml4[i];
     }
+}
+
+static uint64_t *pt_clone(uint64_t *src) {
+    uint64_t *dst = (uint64_t *)PHYS_TO_VIRTUAL(pmm_alloc_page());
+    memset(dst, 0, PFRAME_SIZE);
+    memcpy(dst, src, PFRAME_SIZE);
+    return dst;
+}
+
+
+vmc_t *vmc_fork(vmc_t *parent) {
+    if (!parent) {
+        return NULL;
+    }
+
+    spinlock_acquire(&VMM_LOCK);
+
+    uint64_t tls_start = 0;
+    uint64_t tls_end   = 0;
+    tcb_t *cur_tcb = get_current_tcb();
+    if (cur_tcb && cur_tcb->tls.base_virt && cur_tcb->tls.size) {
+        uint64_t fs_base   = (uint64_t)(uintptr_t)cur_tcb->tls.base_virt;
+        size_t   total_sz  = cur_tcb->tls.size;
+        size_t   tcb_sz    = sizeof(user_tls_t);
+        if (total_sz >= tcb_sz) {
+            uint64_t region_base = fs_base - (total_sz - tcb_sz);
+            tls_start            = region_base & ~(PFRAME_SIZE - 1ULL);
+            tls_end              = region_base + total_sz;
+        }
+    }
+
+    vmc_t *child = vmc_alloc();
+    if (!child) {
+        spinlock_release(&VMM_LOCK);
+        return NULL;
+    }
+
+    child->pml4_table = (uint64_t *)pmm_alloc_page();
+    if (!child->pml4_table) {
+        vmc_free(child);
+        spinlock_release(&VMM_LOCK);
+        return NULL;
+    }
+
+    uint64_t *parent_pml4 = (uint64_t *)PHYS_TO_VIRTUAL(parent->pml4_table);
+    uint64_t *child_pml4  = (uint64_t *)PHYS_TO_VIRTUAL(child->pml4_table);
+
+    memcpy(child_pml4, parent_pml4, PFRAME_SIZE);
+
+    child->root_vmo = NULL;
+    vmo_t **dst     = &child->root_vmo;
+
+    for (vmo_t *v = parent->root_vmo; v != NULL; v = v->next) {
+        *dst = vmo_alloc();
+        if (!*dst) {
+            break;
+        }
+
+        memcpy(*dst, v, sizeof(vmo_t));
+        (*dst)->next = NULL;
+        dst          = &(*dst)->next;
+    }
+
+    for (int pml4_idx = 0; pml4_idx < 256; pml4_idx++) {
+        if (!(parent_pml4[pml4_idx] & PMLE_PRESENT)) {
+            continue;
+        }
+
+        uint64_t *parent_pdpt = (uint64_t *)PHYS_TO_VIRTUAL(
+            PG_GET_ADDR(parent_pml4[pml4_idx])
+        );
+        uint64_t *child_pdpt = (uint64_t *)PHYS_TO_VIRTUAL(
+            PG_GET_ADDR(child_pml4[pml4_idx])
+        );
+
+        for (int pdp_idx = 0; pdp_idx < 512; pdp_idx++) {
+            if (!(parent_pdpt[pdp_idx] & PMLE_PRESENT)) {
+                continue;
+            }
+
+            uint64_t *parent_pdir = (uint64_t *)PHYS_TO_VIRTUAL(
+                PG_GET_ADDR(parent_pdpt[pdp_idx])
+            );
+            uint64_t *child_pdir = (uint64_t *)PHYS_TO_VIRTUAL(
+                PG_GET_ADDR(child_pdpt[pdp_idx])
+            );
+
+            for (int pdir_idx = 0; pdir_idx < 512; pdir_idx++) {
+                if (!(parent_pdir[pdir_idx] & PMLE_PRESENT)) {
+                    continue;
+                }
+
+                uint64_t *parent_pt = (uint64_t *)PHYS_TO_VIRTUAL(
+                    PG_GET_ADDR(parent_pdir[pdir_idx])
+                );
+                uint64_t *child_pt = (uint64_t *)PHYS_TO_VIRTUAL(
+                    PG_GET_ADDR(child_pdir[pdir_idx])
+                );
+
+                for (int pt_idx = 0; pt_idx < 512; pt_idx++) {
+                    uint64_t entry = parent_pt[pt_idx];
+                    if (!(entry & PMLE_PRESENT)) {
+                        continue;
+                    }
+
+                    // Only COW user-writable 4KiB pages
+                    if (!(entry & PMLE_USER) || !(entry & PMLE_WRITE)) {
+                        continue;
+                    }
+
+                    uint64_t virt =
+                        ((uint64_t)pml4_idx << 39) |
+                        ((uint64_t)pdp_idx << 30) |
+                        ((uint64_t)pdir_idx << 21) |
+                        ((uint64_t)pt_idx << 12);
+
+                    if (tls_start && virt >= tls_start && virt < tls_end) {
+                        continue;
+                    }
+
+                    if (virt >= USER_STACK_TOP - SCHEDULER_STACKSZ && virt < USER_STACK_TOP) {
+                        continue;
+                    }
+
+                    uint64_t phys = PG_GET_ADDR(entry);
+
+                    uint64_t cow_entry = (entry & ~PMLE_WRITE) | PMLE_COW;
+                    parent_pt[pt_idx]  = cow_entry;
+                    child_pt[pt_idx]   = cow_entry;
+
+                    pmm_page_ref_inc((void *)phys);
+
+                    _invalidate(virt);
+                    if (get_bootloader_data()->smp_enabled) {
+                        tlb_shootdown(virt);
+                    }
+                }
+            }
+        }
+    }
+
+    spinlock_release(&VMM_LOCK);
+    return child;
 }
 
 // Assumes the CTX has been initialized with vmc_init()

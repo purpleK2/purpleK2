@@ -165,6 +165,21 @@ int sys_getpid(void) {
     return current->pid;
 }
 
+int sys_fork(registers_t *ctx) {
+    if (!ctx) {
+        return -1;
+    }
+
+    int child_pid = proc_fork(ctx);
+
+    if (child_pid < 0) {
+        return -1;
+    }
+ 
+    ctx->rax = child_pid;
+    return child_pid;
+}
+
 int sys_getuid(void)  { return get_current_cred()->uid; }
 int sys_geteuid(void) { return get_current_cred()->euid; }
 int sys_getgid(void)  { return get_current_cred()->gid; }
@@ -423,6 +438,9 @@ long handle_syscall(registers_t *ctx) {
             (gid_t *)(uintptr_t)arg2,
             (gid_t *)(uintptr_t)arg3
         );
+
+    case SYS_fork:
+        return sys_fork(ctx);
 
     default:
         return -1;

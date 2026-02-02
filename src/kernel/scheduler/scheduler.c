@@ -3,6 +3,7 @@
 #include "loader/binfmt.h"
 #include "user/group.h"
 #include "user/user.h"
+#include "util/dump.h"
 
 #include <gdt/gdt.h>
 
@@ -66,8 +67,6 @@ static void cleanup_dead_thread(tcb_t *thread) {
 
     if (parent_proc->state == PROC_DEAD) {
         pmm_free((void *)VIRT_TO_PHYSICAL(kernel_stack), SCHEDULER_STACK_PAGES);
-        if (user_stack) pmm_free((void *)VIRT_TO_PHYSICAL(user_stack), SCHEDULER_STACK_PAGES);
-        if (is_user_mode && parent_proc->vmc) vmc_destroy(parent_proc->vmc);
         kfree(fpu);
         kfree(regs);
         kfree(parent_proc->threads);
@@ -75,7 +74,7 @@ static void cleanup_dead_thread(tcb_t *thread) {
         kfree(parent_proc);
     } else {
         pmm_free((void *)VIRT_TO_PHYSICAL(kernel_stack), SCHEDULER_STACK_PAGES);
-        if (user_stack) pmm_free((void *)VIRT_TO_PHYSICAL(user_stack), SCHEDULER_STACK_PAGES);
+        /* See comment above: leave user_stack pages managed by the VMM. */
         kfree(fpu);
         kfree(regs);
     }
@@ -420,6 +419,232 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
 
     return thread->tid;
 }
+
+int proc_fork(registers_t *regs) {
+    if (!regs) {
+        return -EINVAL;
+    }
+
+    pcb_t *parent = get_current_pcb();
+    tcb_t *current = get_current_tcb();
+
+    if (!parent || !current) {
+        return -EINVAL;
+    }
+
+    if (!(current->flags & TF_MODE_USER)) {
+        debugf_warn("proc_fork: refusing to fork from non-user thread\n");
+        return -EINVAL;
+    }
+
+    if (!parent->vmc) {
+        debugf_warn("proc_fork: parent process has no VMC\n");
+        return -EINVAL;
+    }
+
+    vmc_t *child_vmc = vmc_fork(parent->vmc);
+    if (!child_vmc) {
+        debugf_warn("proc_fork: vmc_fork failed\n");
+        return -ENOMEM;
+    }
+
+    pcb_t *child = kmalloc(sizeof(pcb_t));
+    if (!child) {
+        return -ENOMEM;
+    }
+    memset(child, 0, sizeof(pcb_t));
+
+    child->pid   = __sync_add_and_fetch(&global_pid, 1);
+    child->state = PROC_READY;
+
+    if (parent->name) {
+        child->name = strdup(parent->name);
+    } else {
+        child->name = NULL;
+    }
+
+    child->parent         = parent;
+    child->children       = NULL;
+    child->children_count = 0;
+
+    child->wakeup_tick = 0;
+
+    child->fd_count = parent->fd_count;
+    if (parent->fd_count > 0) {
+        child->fds = kmalloc(sizeof(fileio_t *) * parent->fd_count);
+        if (!child->fds) {
+            kfree(child);
+            return -ENOMEM;
+        }
+
+        for (int i = 0; i < parent->fd_count; i++) {
+            fileio_t *pf = parent->fds[i];
+            if (pf) {
+                fileio_t *nf = kmalloc(sizeof(fileio_t));
+                if (!nf) {
+                    child->fds[i] = NULL;
+                    continue;
+                }
+                memcpy(nf, pf, sizeof(fileio_t));
+                child->fds[i] = nf;
+            } else {
+                child->fds[i] = NULL;
+            }
+        }
+    } else {
+        child->fds = NULL;
+    }
+
+    child->cwd = parent->cwd;
+    child->cpu = parent->cpu;
+    child->flags = parent->flags;
+
+    child->vmc = child_vmc;
+
+    child->cred = kmalloc(sizeof(user_cred_t));
+    if (!child->cred) {
+        kfree(child->fds);
+        kfree(child);
+        return -ENOMEM;
+    }
+    memcpy(child->cred, parent->cred, sizeof(user_cred_t));
+
+    child->signal_handler = parent->signal_handler;
+
+    child->thread_count = 1;
+    child->threads = kmalloc(sizeof(tcb_t *));
+    if (!child->threads) {
+        kfree(child->cred);
+        kfree(child->fds);
+        kfree(child);
+        return -ENOMEM;
+    }
+
+    tcb_t *child_thread = kmalloc(sizeof(tcb_t));
+    if (!child_thread) {
+        kfree(child->threads);
+        kfree(child->cred);
+        kfree(child->fds);
+        kfree(child);
+        return -ENOMEM;
+    }
+    memset(child_thread, 0, sizeof(tcb_t));
+
+    child_thread->tid      = 0;
+    child_thread->parent   = child;
+    child_thread->flags    = current->flags;
+    child_thread->state    = THREAD_READY;
+    child_thread->priority = current->priority;
+    child_thread->time_slice = SCHEDULER_THREAD_TS;
+
+    child_thread->fpu = (void *)PHYS_TO_VIRTUAL(pmm_alloc_page());
+    if (!child_thread->fpu) {
+        kfree(child_thread);
+        kfree(child->threads);
+        kfree(child->cred);
+        kfree(child->fds);
+        kfree(child);
+        return -ENOMEM;
+    }
+    memset(child_thread->fpu, 0, PFRAME_SIZE);
+
+    registers_t *child_regs = kmalloc(sizeof(registers_t));
+    if (!child_regs) {
+        kfree(child_thread->fpu);
+        kfree(child_thread);
+        kfree(child->threads);
+        kfree(child->cred);
+        kfree(child->fds);
+        kfree(child);
+        return -ENOMEM;
+    }
+    memcpy(child_regs, regs, sizeof(registers_t));
+    child_regs->rax = 0; // fork() returns 0 in the child
+
+#ifdef CONFIG_SCHED_DEBUG
+    debugf_debug("proc_fork: parent PID=%d RIP=%p RSP=%p -> child PID=%d RIP=%p RSP=%p\n",
+                 parent->pid,
+                 (void *)regs->rip,
+                 (void *)regs->rsp,
+                 child->pid,
+                 (void *)child_regs->rip,
+                 (void *)child_regs->rsp);
+#endif
+
+    child_thread->regs = child_regs;
+
+    child_thread->kernel_stack = valloc(child->vmc,
+    SCHEDULER_STACK_PAGES,
+    VMO_KERNEL_RW,
+    NULL);
+
+    child_thread->kernel_stack = (void *)(uintptr_t)PHYS_TO_VIRTUAL(
+        pg_virtual_to_phys(
+            (uint64_t *)(uintptr_t)PHYS_TO_VIRTUAL(child->vmc->pml4_table),
+            (uint64_t)(uintptr_t)child_thread->kernel_stack
+        )
+    );
+
+    uint64_t user_stack_top  = USER_STACK_TOP;
+    uint64_t user_stack_base = user_stack_top - SCHEDULER_STACKSZ;
+
+    vfree(child->vmc, (void *)(uintptr_t)user_stack_base, SCHEDULER_STACK_PAGES);
+
+    unmap_region((uint64_t *)PHYS_TO_VIRTUAL(child_thread->parent->vmc->pml4_table), user_stack_base, SCHEDULER_STACK_PAGES);
+
+    child_thread->user_stack = valloc_at(child->vmc, (void *)(uintptr_t)user_stack_base,
+        SCHEDULER_STACK_PAGES, VMO_USER_RW,
+        NULL);
+
+    child_thread->user_stack = (void *)(uintptr_t)PHYS_TO_VIRTUAL(
+        pg_virtual_to_phys((uint64_t*)(uintptr_t)PHYS_TO_VIRTUAL(child->vmc->pml4_table), (uint64_t)(uintptr_t)child_thread->user_stack)
+    );
+
+    memcpy(child_thread->user_stack, current->user_stack, SCHEDULER_STACKSZ);
+
+    //memcpy(&child_thread->regs->rsp, &current->regs->rsp, sizeof(uint64_t));
+    // child_thread->user_stack = current->user_stack;
+
+    if (current->tls.size) {
+        if (allocate_tls(child_thread, current->tls.size) != EOK) {
+            debugf_warn("proc_fork: failed to allocate TLS for child TID=%d\n",
+                        child_thread->tid);
+        } else {
+            size_t data_size = 0;
+            if (current->tls.size > sizeof(user_tls_t)) {
+                data_size = current->tls.size - sizeof(user_tls_t);
+            }
+
+            if (data_size > 0 && current->tls.base_phys && child_thread->tls.base_phys) {
+                void *parent_data = (void *)PHYS_TO_VIRTUAL(
+                    (uint64_t)(uintptr_t)current->tls.base_phys
+                );
+                void *child_data = (void *)PHYS_TO_VIRTUAL(
+                    (uint64_t)(uintptr_t)child_thread->tls.base_phys
+                );
+
+                memcpy(child_data, parent_data, data_size);
+            }
+        }
+    } else {
+        memset(&child_thread->tls, 0, sizeof(tls_region_t));
+        child_thread->tls_ptr = NULL;
+    }
+
+    child->main_thread = child_thread;
+    child->threads[0]  = child_thread;
+
+    procfs_add_process(child);
+
+    spinlock_acquire(&SCHEDULER_LOCK);
+    int cpu = get_cpu();
+    mlfq_enqueue(cpu, child_thread, child_thread->priority);
+    spinlock_release(&SCHEDULER_LOCK);
+
+
+    return child->pid;
+}
+
 
 // marks all threads as READY
 int proc_engage(pcb_t *proc) {
@@ -842,6 +1067,16 @@ void yield(registers_t *ctx) {
     current_threads[cpu] = next;
     next->state          = THREAD_RUNNING;
 
+#ifdef CONFIG_SCHED_DEBUG
+    if (next && next->parent) {
+        debugf_debug("yield: switching to PID=%d TID=%d RIP=%p RSP=%p\n",
+                     next->parent->pid,
+                     next->tid,
+                     (void *)next->regs->rip,
+                     (void *)next->regs->rsp);
+    }
+#endif
+
     if (next->parent && next->parent->vmc) {
         uint64_t pml4_phys = VIRT_TO_PHYSICAL((uint64_t)next->parent->vmc->pml4_table);
     
@@ -861,6 +1096,9 @@ void yield(registers_t *ctx) {
 
 
     fpu_restore(next->fpu);
+
+debugf_debug("About to load context: next=%p next->regs=%p next->regs->rax=%llx next->regs->rip=%llx\n",
+             next, next->regs, next->regs->rax, next->regs->rip);
 
     context_load(next->regs);
 }
