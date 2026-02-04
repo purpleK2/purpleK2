@@ -1,5 +1,6 @@
 #include "paging.h"
 #include "errors.h"
+#include "uaccess.h"
 
 #include <autoconf.h>
 #include <kernel.h>
@@ -175,9 +176,29 @@ static bool handle_cow_fault(uint64_t fault_addr) {
     return true;
 }
 
+// top 10 things to break once something changes :sob:
+__attribute__((noreturn))
+void jump_to(void *addr)
+{
+    asm volatile (
+        "mov %0, %%rax\n"
+        "jmp *%%rax\n"
+        :
+        : "r"(addr)
+        : "rax"
+    );
+    __builtin_unreachable();
+}
+
 void pf_handler(registers_t *ctx) {
     uint64_t pf_error_code = (uint64_t)ctx->error;
     uint64_t cr2 = cpu_get_cr(2);
+
+    if (current_fault_ctx) {
+        debugf_warn("Fault while copying from / to user space.\n");
+        current_fault_ctx->faulted = 1;
+        jump_to(current_fault_ctx->resume_ip);
+    }
 
     if (is_in_proc(ctx) && PG_PRESENT(pf_error_code) &&
         PG_WR_RD(pf_error_code) && !PG_IF(pf_error_code)) {

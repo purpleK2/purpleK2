@@ -2,6 +2,7 @@
 #include "cpu.h"
 #include "stdio.h"
 #include "user/user.h"
+#include "uaccess.h"
 
 #include <fs/file_io.h>
 #include <fs/vfs/vfs.h>
@@ -19,17 +20,24 @@ void sys_exit(int status, registers_t *ctx) {
     yield(ctx);
 }
 
-int sys_open(char *path, int flags, mode_t mode) {
+int sys_open(const char __user *path, int flags, mode_t mode) {
     pcb_t *current = get_current_pcb();
 
     if (!path || !current) {
         return -1;
     }
 
+    // Copy path from user space (max 4096 bytes)
+    char kpath[4096];
+    if (copy_from_user(kpath, path, sizeof(kpath)) != 0) {
+        return -1;
+    }
+    kpath[sizeof(kpath) - 1] = '\0'; // Ensure null termination
+
     current->fds =
         krealloc(current->fds, sizeof(fileio_t *) * (++current->fd_count));
 
-    current->fds[current->fd_count - 1] = open(path, flags, mode); // TODO: get flags
+    current->fds[current->fd_count - 1] = open(kpath, flags, mode);
     if (current->fds[current->fd_count - 1] == NULL) {
         return -1;
     }
@@ -37,7 +45,7 @@ int sys_open(char *path, int flags, mode_t mode) {
     return current->fd_count - 1;
 }
 
-int sys_read(int fd, char *buf, int count) {
+int sys_read(int fd, char __user *buf, int count) {
     pcb_t *current = get_current_pcb();
 
     if (fd < 0 || fd >= current->fd_count || !buf || count <= 0) {
@@ -49,10 +57,29 @@ int sys_read(int fd, char *buf, int count) {
         return -1;
     }
 
-    return read(file, count, buf);
+    // Read into kernel buffer first
+    char *kbuf = kmalloc(count);
+    if (!kbuf) {
+        return -1;
+    }
+
+    int bytes_read = read(file, count, kbuf);
+    if (bytes_read < 0) {
+        kfree(kbuf);
+        return -1;
+    }
+
+    // Copy to user space
+    if (copy_to_user(buf, kbuf, bytes_read) != 0) {
+        kfree(kbuf);
+        return -1;
+    }
+
+    kfree(kbuf);
+    return bytes_read;
 }
 
-int sys_write(int fd, const char *buf, int count) {
+int sys_write(int fd, const char __user *buf, int count) {
     pcb_t *current = get_current_pcb();
 
     if (fd < 0 || fd >= current->fd_count || !buf || count <= 0) {
@@ -64,7 +91,20 @@ int sys_write(int fd, const char *buf, int count) {
         return -1;
     }
 
-    return write(file, (void *)buf, count);
+    // Copy from user space first
+    char *kbuf = kmalloc(count);
+    if (!kbuf) {
+        return -1;
+    }
+
+    if (copy_from_user(kbuf, buf, count) != 0) {
+        kfree(kbuf);
+        return -1;
+    }
+
+    int bytes_written = write(file, kbuf, count);
+    kfree(kbuf);
+    return bytes_written;
 }
 
 int sys_close(int fd) {
@@ -185,21 +225,31 @@ int sys_geteuid(void) { return get_current_cred()->euid; }
 int sys_getgid(void)  { return get_current_cred()->gid; }
 int sys_getegid(void) { return get_current_cred()->egid; }
 
-int sys_getresuid(uid_t *ruid, uid_t *euid, uid_t *suid) {
+int sys_getresuid(uid_t __user *ruid, uid_t __user *euid, uid_t __user *suid) {
     user_cred_t *c = get_current_cred();
     if (!ruid || !euid || !suid) return -1;
-    *ruid = c->uid;
-    *euid = c->euid;
-    *suid = c->suid;
+
+    if (copy_to_user(ruid, &c->uid, sizeof(uid_t)) != 0)
+        return -1;
+    if (copy_to_user(euid, &c->euid, sizeof(uid_t)) != 0)
+        return -1;
+    if (copy_to_user(suid, &c->suid, sizeof(uid_t)) != 0)
+        return -1;
+
     return 0;
 }
 
-int sys_getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid) {
+int sys_getresgid(gid_t __user *rgid, gid_t __user *egid, gid_t __user *sgid) {
     user_cred_t *c = get_current_cred();
     if (!rgid || !egid || !sgid) return -1;
-    *rgid = c->gid;
-    *egid = c->egid;
-    *sgid = c->sgid;
+
+    if (copy_to_user(rgid, &c->gid, sizeof(gid_t)) != 0)
+        return -1;
+    if (copy_to_user(egid, &c->egid, sizeof(gid_t)) != 0)
+        return -1;
+    if (copy_to_user(sgid, &c->sgid, sizeof(gid_t)) != 0)
+        return -1;
+
     return 0;
 }
 

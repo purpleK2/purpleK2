@@ -3,6 +3,7 @@
 
 #include "cpu.h"
 #include "types.h"
+#include "uaccess.h"
 
 #define SYS_exit      0
 #define SYS_open      1
@@ -32,9 +33,9 @@
 #define SYS_fork      24
 
 void sys_exit(int status, registers_t *ctx);
-int sys_open(char *path, int flags, mode_t mode);
-int sys_read(int fd, char *buf, int count);
-int sys_write(int fd, const char *buf, int count);
+int sys_open(const char __user *path, int flags, mode_t mode);
+int sys_read(int fd, char __user *buf, int count);
+int sys_write(int fd, const char __user *buf, int count);
 int sys_close(int fd);
 int sys_ioctl(int fd, int request, void *arg);
 int sys_seek(int fd, int whence, int offset);
