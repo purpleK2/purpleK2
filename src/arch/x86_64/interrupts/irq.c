@@ -10,6 +10,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
+int change_to_kernel_pml4_on_int = 0;
+
 void irq_init() {
     for (int i = 0; i < 16; i++) {
         isr_registerHandler(PIC_REMAP_OFFSET + i, pic_irq_handler);

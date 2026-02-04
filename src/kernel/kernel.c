@@ -325,6 +325,8 @@ void kstart(void) {
     set_kernel_vmc(kvmc);
     kprintf_ok("Initialized VMM\n");
 
+    change_to_kernel_pml4_on_int = 1;
+
     kmalloc_init();
 
     debugf_debug("Malloc Test:\n");

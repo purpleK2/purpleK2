@@ -108,6 +108,7 @@
 #define CPUID_FEAT_EDX_PBE     1 << 31
 
 typedef struct {
+    uint64_t cr3;
     uint64_t ds;
 
     uint64_t r15;
