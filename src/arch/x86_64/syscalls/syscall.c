@@ -1,6 +1,5 @@
 #include "syscall.h"
 #include "cpu.h"
-#include "stdio.h"
 #include "user/user.h"
 #include "uaccess.h"
 
@@ -27,7 +26,6 @@ int sys_open(const char __user *path, int flags, mode_t mode) {
         return -1;
     }
 
-    // Copy path from user space (max 4096 bytes)
     char kpath[4096];
     if (copy_from_user(kpath, path, sizeof(kpath)) != 0) {
         return -1;
@@ -57,7 +55,6 @@ int sys_read(int fd, char __user *buf, int count) {
         return -1;
     }
 
-    // Read into kernel buffer first
     char *kbuf = kmalloc(count);
     if (!kbuf) {
         return -1;
@@ -69,7 +66,6 @@ int sys_read(int fd, char __user *buf, int count) {
         return -1;
     }
 
-    // Copy to user space
     if (copy_to_user(buf, kbuf, bytes_read) != 0) {
         kfree(kbuf);
         return -1;
@@ -91,7 +87,6 @@ int sys_write(int fd, const char __user *buf, int count) {
         return -1;
     }
 
-    // Copy from user space first
     char *kbuf = kmalloc(count);
     if (!kbuf) {
         return -1;
