@@ -14,6 +14,8 @@ static idtr_t idtr;
 
 static bool vectors[IDT_MAX_DESCRIPTORS];
 
+extern void syscall_handler();
+
 void idt_init() {
     idtr.base  = (idt_entry_t *)&idt_entries[0];
     idtr.limit = ((uint16_t)sizeof(idt_entry_t) * IDT_MAX_DESCRIPTORS) - 1;
@@ -24,7 +26,7 @@ void idt_init() {
 
     for (uint16_t vector = 0; vector < IDT_MAX_DESCRIPTORS; vector++) {
         if (vector == 0x80) {
-            idt_set_gate(vector, isr_stub_table[vector], GDT_CODE_SEGMENT,
+            idt_set_gate(vector, syscall_handler, GDT_CODE_SEGMENT,
                          IDT_FLAG_RING3 | IDT_FLAG_PRESENT |
                              IDT_FLAG_GATE_32BIT_INT);
         } else {

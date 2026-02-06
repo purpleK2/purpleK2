@@ -55,17 +55,6 @@ static const char *const exceptions[] = {"Divide by zero error",
                                          "Security Exception",
                                          ""};
 
-void isr_syscall(registers_t *ctx) {
-    long ret = handle_syscall(ctx);
-
-    ctx->rax = ret;
-
-    tcb_t *current = get_current_tcb();
-    if (current && (current->flags & TF_MODE_USER) && current->tls.base_virt) {
-        _cpu_set_msr(0xC0000100, (uint64_t)current->tls.base_virt);
-    }
-}
-
 static void isr_gpf(registers_t *ctx) {
     // If this is a user-mode general protection fault, kill the
     // offending process instead of panicking the whole kernel.
@@ -113,7 +102,6 @@ void isr_init() {
         idt_gate_enable(i);
     }
 
-    isr_registerHandler(0x80, isr_syscall);
     isr_registerHandler(13, isr_gpf);
     isr_registerHandler(0x1, isr_debug);
 }

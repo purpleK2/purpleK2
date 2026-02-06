@@ -13,8 +13,18 @@
 #include <string.h>
 #include <util/macro.h>
 
-void sys_exit(int status, registers_t *ctx) {
+static registers_t *current_syscall_ctx[256];
 
+void set_syscall_context(registers_t *ctx) {
+    current_syscall_ctx[get_current_cpu()] = ctx;
+}
+
+registers_t *get_syscall_context(void) {
+    return current_syscall_ctx[get_current_cpu()];
+}
+
+void sys_exit(int status) {
+    registers_t *ctx = get_syscall_context();
     proc_exit(status);
     yield(ctx);
 }
@@ -200,7 +210,8 @@ int sys_getpid(void) {
     return current->pid;
 }
 
-int sys_fork(registers_t *ctx) {
+int sys_fork(void) {
+    registers_t *ctx = get_syscall_context();
     if (!ctx) {
         return -1;
     }
@@ -412,83 +423,30 @@ int sys_setresgid(gid_t rgid, gid_t egid, gid_t sgid) {
     return 0;
 }
 
-long handle_syscall(registers_t *ctx) {
-    long num = ctx->rax;
-    long arg1        = ctx->rdi;
-    long arg2        = ctx->rsi;
-    long arg3        = ctx->rdx;
-    long arg4        = ctx->r8;
-    long arg5        = ctx->r9;
-    long arg6        = ctx->r10;
-
-    UNUSED(arg4);
-    UNUSED(arg5);
-    UNUSED(arg6);
-    switch (num) {
-    case SYS_exit:
-        sys_exit(arg1, ctx);
-        break;
-    case SYS_open:
-        return sys_open((char *)(uintptr_t)arg1, arg2, (mode_t)arg3);
-    case SYS_read:
-        return sys_read(arg1, (char *)(uintptr_t)arg2, arg3);
-    case SYS_write:
-        return sys_write(arg1, (const char *)(uintptr_t)arg2, arg3);
-    case SYS_close:
-        return sys_close(arg1);
-    case SYS_ioctl:
-        return sys_ioctl(arg1, arg2, (void *)(uintptr_t)arg3);
-    case SYS_seek:
-        return sys_seek(arg1, arg2, arg3);
-    case SYS_fcntl:
-        return sys_fcntl(arg1, arg2, (void *)(uintptr_t)arg3);
-    case SYS_dup:
-        return sys_dup(arg1);
-    case SYS_getpid:
-        return sys_getpid();
-    case SYS_getuid:
-        return sys_getuid();
-    case SYS_geteuid:
-        return sys_geteuid();
-    case SYS_getgid:
-        return sys_getgid();
-    case SYS_getegid:
-        return sys_getegid();
-    case SYS_setuid:
-        return sys_setuid((uid_t)arg1);
-    case SYS_seteuid:
-        return sys_seteuid((uid_t)arg1);
-    case SYS_setreuid:
-        return sys_setreuid((uid_t)arg1, (uid_t)arg2);
-    case SYS_setresuid:
-        return sys_setresuid((uid_t)arg1, (uid_t)arg2, (uid_t)arg3);
-    case SYS_getresuid:
-        return sys_getresuid(
-            (uid_t *)(uintptr_t)arg1,
-            (uid_t *)(uintptr_t)arg2,
-            (uid_t *)(uintptr_t)arg3
-        );
-
-    case SYS_setgid:
-        return sys_setgid((gid_t)arg1);
-    case SYS_setegid:
-        return sys_setegid((gid_t)arg1);
-    case SYS_setregid:
-        return sys_setregid((gid_t)arg1, (gid_t)arg2);
-    case SYS_setresgid:
-        return sys_setresgid((gid_t)arg1, (gid_t)arg2, (gid_t)arg3);
-    case SYS_getresgid:
-        return sys_getresgid(
-            (gid_t *)(uintptr_t)arg1,
-            (gid_t *)(uintptr_t)arg2,
-            (gid_t *)(uintptr_t)arg3
-        );
-
-    case SYS_fork:
-        return sys_fork(ctx);
-
-    default:
-        return -1;
-    }
-    return 0;
-}
+void* syscall_table[] = {
+    (void*)sys_exit,
+    (void*)sys_open,
+    (void*)sys_read,
+    (void*)sys_write,
+    (void*)sys_close,
+    (void*)sys_ioctl,
+    (void*)sys_seek,
+    (void*)sys_fcntl,
+    (void*)sys_dup,
+    (void*)sys_getpid,
+    (void*)sys_getuid,
+    (void*)sys_geteuid,
+    (void*)sys_getgid,
+    (void*)sys_getegid,
+    (void*)sys_setuid,
+    (void*)sys_seteuid,
+    (void*)sys_setreuid,
+    (void*)sys_setresuid,
+    (void*)sys_getresuid,
+    (void*)sys_setgid,
+    (void*)sys_setegid,
+    (void*)sys_setregid,
+    (void*)sys_setresgid,
+    (void*)sys_getresgid,
+    (void*)sys_fork
+};

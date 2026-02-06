@@ -29,10 +29,12 @@
 #define SYS_setregid  21
 #define SYS_setresgid 22
 #define SYS_getresgid 23
-
 #define SYS_fork      24
 
-void sys_exit(int status, registers_t *ctx);
+void set_syscall_context(registers_t *ctx);
+registers_t *get_syscall_context(void);
+
+void sys_exit(int status);
 int sys_open(const char __user *path, int flags, mode_t mode);
 int sys_read(int fd, char __user *buf, int count);
 int sys_write(int fd, const char __user *buf, int count);
@@ -42,8 +44,20 @@ int sys_seek(int fd, int whence, int offset);
 int sys_fcntl(int fd, int op, void *arg);
 int sys_dup(int fd);
 int sys_getpid(void);
-int sys_fork(registers_t *ctx);
-
-long handle_syscall(registers_t *ctx);
+int sys_getuid(void);
+int sys_geteuid(void);
+int sys_getgid(void);
+int sys_getegid(void);
+int sys_setuid(uid_t uid);
+int sys_seteuid(uid_t euid);
+int sys_setreuid(uid_t ruid, uid_t euid);
+int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid);
+int sys_getresuid(uid_t __user *ruid, uid_t __user *euid, uid_t __user *suid);
+int sys_setgid(gid_t gid);
+int sys_setegid(gid_t egid);
+int sys_setregid(gid_t rgid, gid_t egid);
+int sys_setresgid(gid_t rgid, gid_t egid, gid_t sgid);
+int sys_getresgid(gid_t __user *rgid, gid_t __user *egid, gid_t __user *sgid);
+int sys_fork(void);
 
 #endif // SYSCALL_H
