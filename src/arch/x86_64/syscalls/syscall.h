@@ -30,6 +30,7 @@
 #define SYS_setresgid 22
 #define SYS_getresgid 23
 #define SYS_fork      24
+#define SYS_mount     25
 
 void set_syscall_context(registers_t *ctx);
 registers_t *get_syscall_context(void);
@@ -59,5 +60,6 @@ int sys_setregid(gid_t rgid, gid_t egid);
 int sys_setresgid(gid_t rgid, gid_t egid, gid_t sgid);
 int sys_getresgid(gid_t __user *rgid, gid_t __user *egid, gid_t __user *sgid);
 int sys_fork(void);
+int sys_mount(const char __user *device, const char __user *fstype, const char __user *path, int flags, void __user *data);
 
 #endif // SYSCALL_H

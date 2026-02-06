@@ -1,5 +1,6 @@
 #include "syscall.h"
 #include "cpu.h"
+#include "paging/paging.h"
 #include "user/user.h"
 #include "uaccess.h"
 
@@ -423,6 +424,46 @@ int sys_setresgid(gid_t rgid, gid_t egid, gid_t sgid) {
     return 0;
 }
 
+int sys_mount(const char __user *device, const char __user *fstype, const char __user *path, int flags, void __user *data) {
+    UNUSED(flags); // todo: un-unuse flags
+
+    char    kernel_device[4096];
+    char    kernel_fstype[4096];
+    char    kernel_path[4096];
+    char    kernel_data[4096];
+
+    size_t len = strncpy_from_user(kernel_device, device, sizeof(kernel_device));
+    if (len == (size_t)-1) {
+        return -1;
+    }
+    kernel_device[sizeof(kernel_device) - 1] = '\0';
+
+    len = strncpy_from_user(kernel_fstype, fstype, sizeof(kernel_fstype));
+    if (len == (size_t)-1) {
+        return -1;
+    }
+    kernel_fstype[sizeof(kernel_fstype) - 1] = '\0';
+
+    len = strncpy_from_user(kernel_path, path, sizeof(kernel_path));
+    if (len == (size_t)-1) {
+        return -1;
+    }
+    kernel_path[sizeof(kernel_path) - 1] = '\0';
+
+    if (data) {
+        if (strncpy_from_user(kernel_data, data, sizeof(kernel_data)) != 0) {
+            return -1;
+        }
+    }
+
+    vfs_t *ret_vfs = vfs_mount(kernel_device, kernel_fstype, kernel_path, kernel_data);
+    if (!ret_vfs || !is_addr_mapped((uintptr_t)ret_vfs)) {
+        return -1;
+    }
+
+    return 0;
+}
+
 void* syscall_table[] = {
     (void*)sys_exit,
     (void*)sys_open,
@@ -448,5 +489,6 @@ void* syscall_table[] = {
     (void*)sys_setregid,
     (void*)sys_setresgid,
     (void*)sys_getresgid,
-    (void*)sys_fork
+    (void*)sys_fork,
+    (void*)sys_mount
 };
