@@ -168,14 +168,12 @@ pcie_status pcie_parse_ecam(struct acpi_mcfg_allocation *ecam,
     }
 
     fileio_t *pci_ids = open(pciids_path, 0, 0);
+    assert(pci_ids);
 
     uint64_t ecam_base = ecam->address;
 
     uint8_t bus_start = ecam->start_bus;
     uint8_t bus_end   = ecam->end_bus;
-
-    fileio_t *pci_ids = open(pciids_path, 0);
-    assert(pci_ids);
 
     for (uint16_t bus = bus_start; bus < bus_end + 1; bus++) {
         for (uint8_t device = 0; device < 32; device++) {
