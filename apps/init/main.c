@@ -27,7 +27,29 @@ typedef unsigned int   uint32_t;
 #define SYS_SETRESGID 22
 #define SYS_GETRESGID 23
 #define SYS_FORK      24
+#define SYS_OPENDIR   27
+#define SYS_READDIR   28
+#define SYS_CLOSEDIR  29
 
+/* vnode types for d_type */
+#define VNODE_NULL    0
+#define VNODE_REGULAR 1
+#define VNODE_DIR     2
+#define VNODE_BLOCK   3
+#define VNODE_CHAR    4
+#define VNODE_LINK    5
+#define VNODE_PIPE    6
+#define VNODE_SOCKET  7
+#define VNODE_BAD     8
+
+/* dirent structure - must match kernel's dirent_t */
+typedef struct __attribute__((packed)) {
+    uint64_t d_ino;
+    uint64_t d_off;
+    uint64_t d_reclen;
+    uint8_t  d_type;
+    char     d_name[256];
+} dirent_t;
 
 /* auxv types */
 #define AT_NULL         0
@@ -185,6 +207,124 @@ static const char *auxv_type_name(uint64_t type) {
         case AT_BASE_PLATFORM: return "AT_BASE_PLATFORM";
         default:          return "AT_UNKNOWN";
     }
+}
+
+/* --- Directory walking test --- */
+
+static const char *vnode_type_name(uint8_t type) {
+    switch (type) {
+        case VNODE_NULL:    return "NULL";
+        case VNODE_REGULAR: return "FILE";
+        case VNODE_DIR:     return "DIR";
+        case VNODE_BLOCK:   return "BLOCK";
+        case VNODE_CHAR:    return "CHAR";
+        case VNODE_LINK:    return "LINK";
+        case VNODE_PIPE:    return "PIPE";
+        case VNODE_SOCKET:  return "SOCKET";
+        case VNODE_BAD:     return "BAD";
+        default:            return "UNKNOWN";
+    }
+}
+
+static int64_t sys_opendir(const char *path) {
+    return (int64_t)syscall1(SYS_OPENDIR, (uint64_t)path);
+}
+
+static int64_t sys_readdir_call(int64_t dirfd, dirent_t *entry) {
+    return (int64_t)syscall2(SYS_READDIR, (uint64_t)dirfd, (uint64_t)entry);
+}
+
+static int64_t sys_closedir(int64_t dirfd) {
+    return (int64_t)syscall1(SYS_CLOSEDIR, (uint64_t)dirfd);
+}
+
+static void print_indent(uint64_t fd, int depth) {
+    for (int i = 0; i < depth; i++) {
+        print(fd, "  ");
+    }
+}
+
+static int strcmp(const char *s1, const char *s2) {
+    while (*s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+    }
+    return *(unsigned char *)s1 - *(unsigned char *)s2;
+}
+
+static char *strcpy(char *dest, const char *src) {
+    char *d = dest;
+    while ((*d++ = *src++))
+        ;
+    return dest;
+}
+
+static char *strcat(char *dest, const char *src) {
+    char *d = dest;
+    while (*d)
+        d++;
+    while ((*d++ = *src++))
+        ;
+    return dest;
+}
+
+static void walk_directory(uint64_t outfd, const char *path, int depth) {
+    int64_t dirfd = sys_opendir(path);
+    if (dirfd < 0) {
+        print_indent(outfd, depth);
+        print(outfd, "[ERROR] Failed to open: ");
+        print(outfd, path);
+        print(outfd, "\r\n");
+        return;
+    }
+
+    dirent_t entry;
+    int64_t ret;
+    int max_entries = 1000; /* Safety limit */
+    int entry_count = 0;
+
+    while ((ret = sys_readdir_call(dirfd, &entry)) > 0 && entry_count < max_entries) {
+        entry_count++;
+        
+        /* Skip . and .. to avoid infinite recursion */
+        if (strcmp(entry.d_name, ".") == 0 || strcmp(entry.d_name, "..") == 0) {
+            continue;
+        }
+
+        print_indent(outfd, depth);
+        print(outfd, "[");
+        print(outfd, vnode_type_name(entry.d_type));
+        print(outfd, "] ");
+        print(outfd, entry.d_name);
+        print(outfd, "\r\n");
+
+        /* If it's a directory, recurse into it */
+        if (entry.d_type == VNODE_DIR && entry.d_name[0] != '\0') {
+            /* Build the full path */
+            char child_path[512];
+            strcpy(child_path, path);
+            
+            /* Add trailing slash if needed */
+            size_t plen = strlen(path);
+            if (plen > 0 && path[plen - 1] != '/') {
+                strcat(child_path, "/");
+            }
+            strcat(child_path, entry.d_name);
+
+            walk_directory(outfd, child_path, depth + 1);
+        }
+    }
+
+    sys_closedir(dirfd);
+}
+
+static void test_directory_walk(uint64_t outfd) {
+    print(outfd, "\r\n=== Directory Walking Test ===\r\n");
+    print(outfd, "Walking filesystem from root (/)\r\n\r\n");
+    
+    walk_directory(outfd, "/", 0);
+    
+    print(outfd, "\r\n=== End Directory Walking Test ===\r\n");
 }
 
 void main(uintptr_t *stack_ptr) {
@@ -400,6 +540,9 @@ void main(uintptr_t *stack_ptr) {
     print(fd, " s=");
     print_dec(fd, sgid);
     print(fd, "\r\n");
+
+    /* Test directory walking */
+    test_directory_walk(fd);
     
     syscall1(SYS_EXIT, thread_local_var);
     /* Should not return. */

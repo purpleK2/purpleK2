@@ -1,5 +1,6 @@
 #include "syscall.h"
 #include "cpu.h"
+#include "errors.h"
 #include "paging/paging.h"
 #include "user/user.h"
 #include "uaccess.h"
@@ -14,6 +15,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <util/macro.h>
+#include <system/stdio.h>
 
 static registers_t *current_syscall_ctx[256];
 
@@ -124,12 +126,18 @@ int sys_close(int fd) {
         return -1;
     }
 
-    fileio_t *file = fd_get(&current->fd_table, fd, FD_FILE);
-    if (!file) {
+    fd_entry_t *e = &current->fd_table.entries[fd];
+    if (!e) {
         return -1;
     }
 
-    close(file);
+
+    if (e->type == FD_DIR) {
+        sys_closedir(fd);
+    } else {
+        close(e->ptr);
+    }
+    
     fd_free(&current->fd_table, fd);
 
     return 0;
@@ -478,6 +486,77 @@ int sys_umount(const char __user *path) {
     return vfs_unmount(kernel_path);
 }
 
+int sys_opendir(const char __user *path) {
+    char kernel_path[4096];
+    if (strncpy_from_user(kernel_path, path, sizeof(kernel_path)) < 0) {
+        return -1;
+    }
+    kernel_path[sizeof(kernel_path) - 1] = '\0';
+
+    vnode_t *vn;
+    int ret = vfs_lookup(kernel_path, &vn);
+    if (ret != EOK) {
+        return -1;
+    }
+
+    if (vn->vtype != VNODE_DIR) {
+        vnode_unref(vn);
+        return -1;
+    }
+
+    size_t cap = 256;
+    dirent_t *ents = kmalloc(sizeof(dirent_t) * cap);
+
+    size_t count = cap;
+
+    ret = vfs_readdir(vn, ents, &count);
+    if (ret != EOK) {
+        vnode_unref(vn);
+        kfree(ents);
+        return -1; 
+    }
+
+    dir_handle_t *dh = kmalloc(sizeof(dir_handle_t));
+    dh->vnode   = vn;
+    dh->entries = ents;
+    dh->count   = count;
+    dh->index   = 0;
+
+    int fd = fd_alloc(&get_current_pcb()->fd_table, FD_DIR, dh);
+    return fd;
+}
+
+int sys_readdir(int fd, dirent_t __user *out) {
+    dir_handle_t *dh = fd_get(&get_current_pcb()->fd_table, fd, FD_DIR);
+    if (!dh) {
+        return -EBADF;
+    }
+
+    if (dh->index >= dh->count) {
+        return 0;
+    }
+
+    dirent_t *entry = &dh->entries[dh->index];
+    size_t ret = copy_to_user(out, entry, sizeof(dirent_t));
+    if (ret != 0) {
+        return -1;
+    }
+    dh->index++;
+    return 1;
+}
+
+int sys_closedir(int fd) {
+    dir_handle_t *dh = fd_get(&get_current_pcb()->fd_table, fd, FD_DIR);
+    if (!dh)
+        return -EBADF;
+
+    vnode_unref(dh->vnode);
+    kfree(dh->entries);
+    kfree(dh);
+    fd_free(&get_current_pcb()->fd_table, fd);
+    return 0;
+}
+
 void* syscall_table[] = {
     (void*)sys_exit,
     (void*)sys_open,
@@ -504,5 +583,9 @@ void* syscall_table[] = {
     (void*)sys_setresgid,
     (void*)sys_getresgid,
     (void*)sys_fork,
-    (void*)sys_mount
+    (void*)sys_mount,
+    (void*)sys_umount,
+    (void*)sys_opendir,
+    (void*)sys_readdir,
+    (void*)sys_closedir
 };

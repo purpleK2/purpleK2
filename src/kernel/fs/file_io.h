@@ -41,6 +41,16 @@ typedef struct file_io {
     void *private; // for internal use (aka you put the vnode in here :P)
 } fileio_t;
 
+typedef struct vnode vnode_t;
+typedef struct dirent dirent_t;
+
+typedef struct dir_handle {
+    vnode_t  *vnode;
+    dirent_t *entries;
+    size_t    count;
+    size_t    index;
+} dir_handle_t;
+
 fileio_t *fio_create();
 
 fileio_t *open(const char *path, int flags, mode_t mode);

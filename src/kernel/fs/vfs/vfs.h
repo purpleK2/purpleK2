@@ -67,7 +67,7 @@ typedef struct dirent {
     uint64_t d_reclen;
     uint8_t d_type;   // same as vnode_type
     char d_name[256]; // filename !!!
-} dirent_t;
+} __attribute__((packed)) dirent_t;
 
 typedef struct vfs_ops {
     int (*mount)(vfs_t *, char *, void *);

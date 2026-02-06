@@ -32,6 +32,9 @@
 #define SYS_fork      24
 #define SYS_mount     25
 #define SYS_umount    26
+#define SYS_opendir   27
+#define SYS_readdir   28
+#define SYS_closedir  29
 
 void set_syscall_context(registers_t *ctx);
 registers_t *get_syscall_context(void);
@@ -63,5 +66,8 @@ int sys_getresgid(gid_t __user *rgid, gid_t __user *egid, gid_t __user *sgid);
 int sys_fork(void);
 int sys_mount(const char __user *device, const char __user *fstype, const char __user *path, int flags, void __user *data);
 int sys_umount(const char __user *path);
+int sys_opendir(const char __user *path);
+int sys_readdir(int fd, dirent_t __user *entry);
+int sys_closedir(int fd);
 
 #endif // SYSCALL_H
