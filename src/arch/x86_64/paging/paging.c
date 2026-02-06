@@ -1,4 +1,6 @@
 #include "paging.h"
+#include "errors.h"
+#include "uaccess.h"
 
 #include <autoconf.h>
 #include <kernel.h>
@@ -72,16 +74,181 @@ unrelated to ordinary paging.
         Simply gives information about a page fault error code
         (C) RepubblicaTech 2024
 */
+
+bool is_in_proc(registers_t *ctx) {
+    bool is_cpl_3 = (ctx->cs & 0x3) == 0x3;
+    bool is_user_stack =
+        is_cpl_3 && (ctx->ss & 0x3) == 0x3;
+    /*
+     * Treat a fault as coming from a user process when:
+     *  - CPL == 3 (user mode),
+     *  - SS is also a user segment, and
+     *  - RIP is below the kernel's higher-half virtual base.
+     *
+     * The original implementation compared kernel_base_virtual > RIP,
+     * which misclassified user-mode faults as kernel-mode because the
+     * kernel base is in the higher half. We instead consider RIP >=
+     * kernel_base_virtual as kernel, everything below as user.
+     */
+    bool is_rip_kernel_virt =
+        ctx->rip >= get_bootloader_data()->kernel_base_virtual;
+
+    return is_cpl_3 && is_user_stack && !is_rip_kernel_virt;
+}
+
+static bool handle_cow_fault(uint64_t fault_addr) {
+    debugf_debug("COW fault at %p, PID=%d\n", (void*)fault_addr, get_current_pcb()->pid);
+    pcb_t *proc = get_current_pcb();
+    if (!proc || !proc->vmc) {
+        return false;
+    }
+
+    uint64_t *pml4 = (uint64_t *)PHYS_TO_VIRTUAL(proc->vmc->pml4_table);
+
+    uint64_t virt = fault_addr & ~(uint64_t)(PFRAME_SIZE - 1);
+
+    if (!is_addr_mapped_in(pml4, virt)) {
+        return false;
+    }
+
+    uint64_t pml4_index = PML4_INDEX(virt);
+    uint64_t pdp_index  = PDP_INDEX(virt);
+    uint64_t pdir_index = PDIR_INDEX(virt);
+    uint64_t ptab_index = PTAB_INDEX(virt);
+
+    uint64_t *pdp_table = (uint64_t *)PHYS_TO_VIRTUAL(
+        PG_GET_ADDR(pml4[pml4_index])
+    );
+    if (!(pdp_table[pdp_index] & PMLE_PRESENT)) {
+        return false;
+    }
+
+    uint64_t *pdir_table = (uint64_t *)PHYS_TO_VIRTUAL(
+        PG_GET_ADDR(pdp_table[pdp_index])
+    );
+    if (!(pdir_table[pdir_index] & PMLE_PRESENT)) {
+        return false;
+    }
+
+    uint64_t *page_table = (uint64_t *)PHYS_TO_VIRTUAL(
+        PG_GET_ADDR(pdir_table[pdir_index])
+    );
+
+    uint64_t entry = page_table[ptab_index];
+
+    if (!(entry & PMLE_PRESENT)) {
+        return false;
+    }
+
+    if (!(entry & PMLE_COW)) {
+        return false;
+    }
+
+    uint64_t old_phys = PG_GET_ADDR(entry);
+    int refcnt = pmm_page_ref_count((void *)old_phys);
+
+    if (refcnt <= 1) {
+        entry |= PMLE_WRITE;
+        entry &= ~PMLE_COW;
+        page_table[ptab_index] = entry;
+    } else {
+        void *new_phys = pmm_alloc_page();
+        if (!new_phys) {
+            return false;
+        }
+
+        memcpy((void *)PHYS_TO_VIRTUAL((uint64_t)new_phys),
+               (void *)PHYS_TO_VIRTUAL(old_phys),
+               PFRAME_SIZE);
+
+        pmm_page_ref_dec((void *)old_phys);
+
+        uint64_t new_entry = PG_GET_ADDR((uint64_t)new_phys) |
+                             ((entry | PMLE_WRITE) & ~PMLE_COW);
+        page_table[ptab_index] = new_entry;
+    }
+
+    _invalidate(virt);
+    if (get_bootloader_data()->smp_enabled) {
+        tlb_shootdown(virt);
+    }
+
+    return true;
+}
+
+// top 10 things to break once something changes :sob:
+__attribute__((noreturn))
+void jump_to(void *addr)
+{
+    asm volatile (
+        "mov %0, %%rax\n"
+        "jmp *%%rax\n"
+        :
+        : "r"(addr)
+        : "rax"
+    );
+    __builtin_unreachable();
+}
+
 void pf_handler(registers_t *ctx) {
     uint64_t pf_error_code = (uint64_t)ctx->error;
+    uint64_t cr2 = cpu_get_cr(2);
 
-    if (PG_IF(pf_error_code)) {
-        debugf_debug("Killing process %d, because of a page fault from the %d (1 is user, 0 is kernel).ss=%x, cs=%x rip: %.16llx, fault_addr: %.16llx, instr_fetch: %s\n",
-            PG_RING(pf_error_code), 
-            get_current_pcb()->pid, ctx->ss, ctx->cs, ctx->rip, cpu_get_cr(2),
+    if (current_fault_ctx) {
+        debugf_warn("Fault while copying from / to user space.\n");
+        current_fault_ctx->faulted = 1;
+        jump_to(current_fault_ctx->resume_ip);
+    }
+
+    if (is_in_proc(ctx) && PG_PRESENT(pf_error_code) &&
+        PG_WR_RD(pf_error_code) && !PG_IF(pf_error_code)) {
+        if (handle_cow_fault(cr2)) {
+            return;
+        }
+    }
+
+    if (!is_in_proc(ctx) && PG_PRESENT(pf_error_code) &&
+        PG_WR_RD(pf_error_code) && !PG_IF(pf_error_code)) {
+        uint64_t *pml4 = NULL;
+
+        pcb_t *pcb = get_current_pcb();
+        if (pcb && pcb->vmc && pcb->vmc->pml4_table) {
+            pml4 = (uint64_t *)PHYS_TO_VIRTUAL(pcb->vmc->pml4_table);
+        } else {
+            pml4 = (uint64_t *)PHYS_TO_VIRTUAL(get_kernel_pml4());
+        }
+
+        if (pml4) {
+            uint64_t *entry = get_page_entry_ptr(pml4, cr2);
+            if (entry && (*entry & PMLE_PRESENT) && !(*entry & PMLE_WRITE)) {
+                *entry |= PMLE_WRITE;
+                *entry &= ~PMLE_COW;
+
+                _invalidate(cr2);
+                if (get_bootloader_data()->smp_enabled) {
+                    tlb_shootdown(cr2);
+                }
+                return;
+            }
+        }
+    }
+
+    if (is_in_proc(ctx) || PG_IF(pf_error_code)) {
+        debugf_debug(
+    "PF debug: pid=%d rip=%.16llx cr2=%.16llx rax=%.16llx fsbase=%.16llx\n",
+    get_current_pcb()->pid,
+    ctx->rip,
+    cr2,
+    ctx->rax,
+    _cpu_get_msr(0xC0000100)
+);
+        debugf_debug(
+            "Killing process %d, because of a page fault from the %d (1 is user, 0 is kernel).ss=%x, cs=%x rip: %.16llx, fault_addr: %.16llx, instr_fetch: %s\n",
+            PG_RING(pf_error_code), get_current_pcb()->pid, ctx->ss, ctx->cs,
+            ctx->rip, cr2,
             PG_IF(pf_error_code) == 1 ? "yes" : "no");
-        debugf_debug("CR3: %.16llx\n", cpu_get_cr(3));
-        proc_exit();
+
+        proc_exit(ENOMEM);
         yield(ctx);
         return;
     }
@@ -110,7 +277,6 @@ void pf_handler(registers_t *ctx) {
     }
 
     // CR2 contains the address that caused the fault
-    uint64_t cr2 = cpu_get_cr(2);
     mprintf("\nAttempt to access address %llx\n\n", cr2);
 
     mprintf("RESERVED WRITE: %d\n", PG_RESERVED(pf_error_code));
@@ -171,6 +337,20 @@ uint64_t get_page_entry(uint64_t *pml4_table, uint64_t virtual) {
     uint64_t *page_table = get_pmlt(pdir_table, pdir_index);
 
     return page_table[ptab_index];
+}
+
+// given the PML4 table and a virtual address, returns a pointer to the entry
+uint64_t *get_page_entry_ptr(uint64_t *pml4_table, uint64_t virtual) {
+    uint64_t pml4_index = PML4_INDEX(virtual);
+    uint64_t pdp_index  = PDP_INDEX(virtual);
+    uint64_t pdir_index = PDIR_INDEX(virtual);
+    uint64_t ptab_index = PTAB_INDEX(virtual);
+
+    uint64_t *pdp_table  = get_pmlt(pml4_table, pml4_index);
+    uint64_t *pdir_table = get_pmlt(pdp_table, pdp_index);
+    uint64_t *page_table = get_pmlt(pdir_table, pdir_index);
+
+    return &page_table[ptab_index];
 }
 
 // given the PML4 table and a virtual address, returns its physical address
@@ -510,4 +690,16 @@ bool is_addr_mapped_in(uint64_t *pml4_table, uint64_t address) {
     );
     
     return (page_table[ptab_index] & PMLE_PRESENT) != 0;
+}
+
+
+bool is_region_mapped_in(uint64_t *pml4_table, uint64_t virtual_start,
+                         uint64_t pages) {
+    for (uint64_t i = 0; i < pages; i++) {
+        uint64_t virt = virtual_start + (i * PFRAME_SIZE);
+        if (!is_addr_mapped_in(pml4_table, virt)) {
+            return false;
+        }
+    }
+    return true;
 }

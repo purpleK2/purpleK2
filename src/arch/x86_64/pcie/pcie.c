@@ -1,4 +1,5 @@
 #include "pcie.h"
+#include "fs/file_io.h"
 
 #include <memory/heap/kheap.h>
 #include <paging/paging.h>
@@ -165,6 +166,8 @@ pcie_status pcie_parse_ecam(struct acpi_mcfg_allocation *ecam,
         debugf_warn("No pci.ids path given!\n");
         return PCIE_STATUS_NULLPTR;
     }
+
+    fileio_t *pci_ids = open(pciids_path, 0, 0);
 
     uint64_t ecam_base = ecam->address;
 

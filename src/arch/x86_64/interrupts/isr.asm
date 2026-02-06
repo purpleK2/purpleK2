@@ -3,6 +3,9 @@ extrn isr_handler
 
 section '.text' executable
 
+extrn get_kernel_pml4
+extrn change_to_kernel_pml4_on_int
+
 isr_common:
     push rax
     push rbx
@@ -22,22 +25,31 @@ isr_common:
     
     mov rbp, ds
     push rbp
+
+    mov rax, cr3
+    push rax
     
     mov bx, 0x10
     mov ds, bx
     mov es, bx
-    mov fs, bx
-    mov gs, bx
-    
+
+    cmp dword [change_to_kernel_pml4_on_int], 0
+    je .no_switch
+    push rax
+    call get_kernel_pml4
+    mov cr3, rax
+    pop rax
+.no_switch:
     mov rdi, rsp
     call isr_handler
-    
+
+    pop rax
+    mov cr3, rax
+
     pop rbp
     mov bx, bp
     mov ds, bx
     mov es, bx
-    mov fs, bx
-    mov gs, bx
     
     pop r15
     pop r14

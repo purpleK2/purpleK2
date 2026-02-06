@@ -1,3 +1,4 @@
+#include "fs/file_io.h"
 #ifndef PCI_H
 #define PCI_H 1
 

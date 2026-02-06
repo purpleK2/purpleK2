@@ -1,4 +1,6 @@
 #include "stdio.h"
+#include "interrupts/irq.h"
+#include "interrupts/isr.h"
 
 #include <io.h>
 #include <limine.h>
@@ -193,4 +195,38 @@ int mprintf(const char *fmt, ...) {
     flush_buffer(&e9_buffer, dputc);
 
     return written_fb + written_e9;
+}
+
+extern uint64_t _get_rbp(void);
+
+int kpanic(const char *cause, ...) {
+    va_list args;
+    va_start(args, cause);
+
+    uint64_t rbp;
+    __asm__ volatile(
+        "mov %%rbp, %0"
+        : "=r"(rbp)
+        :
+        :
+    );
+
+    set_screen_bg_fg(0x000000, PANIC_FG);
+    debugf(ANSI_COLOR_BLUE);
+
+    mprintf("Kernel panic @ 0x%.16llx: ", ((struct stackFrame *)rbp)->rip);
+
+    printf(mputc, cause, args);
+
+    mprintf("\n");
+
+    print_stack_trace(rbp, 0);
+
+    va_end(args);
+
+    _disable_interrupts();
+    for (;;)
+        __asm__ volatile ("hlt");
+
+    return 0;
 }

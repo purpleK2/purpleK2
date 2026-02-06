@@ -1,11 +1,12 @@
 #include "devfs.h"
+#include "user/access.h"
 #include <errors.h>
 #include <memory/heap/kheap.h>
 #include <stdio.h>
 #include <string.h>
 #include <util/macro.h>
 
-devfs_t *devfs_create() {
+devfs_t *devfs_create_fs() {
     devfs_t *devfs = kmalloc(sizeof(devfs_t));
     if (!devfs) {
         return NULL;
@@ -15,7 +16,7 @@ devfs_t *devfs_create() {
     return devfs;
 }
 
-devfs_node_t *devfs_create_node(devfs_ftype_t ftype) {
+devfs_node_t *devfs_create_fs_node(devfs_ftype_t ftype) {
     devfs_node_t *node = kmalloc(sizeof(devfs_node_t));
     if (!node) {
         return NULL;
@@ -24,9 +25,23 @@ devfs_node_t *devfs_create_node(devfs_ftype_t ftype) {
     memset(node, 0, sizeof(devfs_node_t));
     node->type = ftype;
 
+    switch (ftype) {
+    case DEVFS_TYPE_DIR:
+        node->mode = S_IFDIR | 0755;
+        break;
+    case DEVFS_TYPE_CHAR:
+        node->mode = S_IFCHR | 0666;
+        break;
+    case DEVFS_TYPE_BLOCK:
+        node->mode = S_IFBLK | 0666;
+        break;
+    case DEVFS_TYPE_FILE:
+        node->mode = S_IFREG | 0644;
+        break;
+    }
+
     return node;
 }
-
 
 int devfs_find_node(devfs_t *devfs, char *path, devfs_node_t **out) {
     if (!devfs || !devfs->root_node || !path || !out) {
@@ -101,7 +116,7 @@ int devfs_node_add(devfs_t *devfs, char *path, devfs_node_t **out) {
                 ? DEVFS_TYPE_DIR
                 : DEVFS_TYPE_FILE;
 
-            devfs_node_t *n = devfs_create_node(type);
+            devfs_node_t *n = devfs_create_fs_node(type);
             n->name = strdup(token);
 
             for (int i = 0; i < device_count; i++) {
@@ -147,7 +162,7 @@ int devfs_find_or_create_node(devfs_t *devfs, char *path,
     devfs_find_node(devfs, path, &found);
 
     if (!found) {
-        *out = devfs_create_node(devfs_ftype);
+        *out = devfs_create_fs_node(devfs_ftype);
         return 1;
     }
 
@@ -268,7 +283,7 @@ int devfs_refresh(void) {
             }
             
             if (!found) {
-                devfs_node_t *new_node = devfs_create_node(
+                devfs_node_t *new_node = devfs_create_fs_node(
                     dev->type == DEVICE_TYPE_BLOCK ? DEVFS_TYPE_BLOCK
                                                    : DEVFS_TYPE_CHAR);
                 if (!new_node) {
@@ -436,6 +451,7 @@ int devfs_lookup(vnode_t *parent, const char *name, vnode_t **out) {
 
             vnode_t *vn = vnode_create(parent->root_vfs, path, t, c);
             memcpy(vn->ops, parent->ops, sizeof(vnops_t));
+            vn->mode = c->mode;
 
             *out = vn;
             return EOK;
@@ -553,7 +569,7 @@ static int devfs_fstype_mount(void *device, char *mount_point, void *mount_data,
     
     devfs_t *devfs = (devfs_t *)device;
     if (!devfs) {
-        devfs = devfs_create();
+        devfs = devfs_create_fs();
         if (!devfs) {
             return ENOMEM;
         }
@@ -563,14 +579,14 @@ static int devfs_fstype_mount(void *device, char *mount_point, void *mount_data,
     memset(&fstype, 0, sizeof(vfs_fstype_t));
     strncpy(fstype.name, "devfs", sizeof(fstype.name) - 1);
     
-    vfs_t *vfs = vfs_create(&fstype, devfs);
+    vfs_t *vfs = vfs_create_fs(&fstype, devfs);
     if (!vfs) {
         return ENOMEM;
     }
     
     memcpy(vfs->ops, &devfs_vfsops, sizeof(vfsops_t));
     
-    devfs_node_t *root_node = devfs_create_node(DEVFS_TYPE_DIR);
+    devfs_node_t *root_node = devfs_create_fs_node(DEVFS_TYPE_DIR);
     if (!root_node) {
         kfree(vfs->ops);
         kfree(vfs);
@@ -601,6 +617,7 @@ static int devfs_fstype_mount(void *device, char *mount_point, void *mount_data,
         return ENOMEM;
     }
 	vfs->root_vnode->node_data = root_node;
+    vfs->root_vnode->mode = root_node->mode;
     
     memcpy(vfs->root_vnode->ops, &devfs_vnops, sizeof(vnops_t));
     
@@ -611,7 +628,7 @@ static int devfs_fstype_mount(void *device, char *mount_point, void *mount_data,
         }
 
         devfs_node_t *devfs_node =
-            devfs_create_node(dev->type == DEVICE_TYPE_BLOCK ? DEVFS_TYPE_BLOCK
+            devfs_create_fs_node(dev->type == DEVICE_TYPE_BLOCK ? DEVFS_TYPE_BLOCK
                                                              : DEVFS_TYPE_CHAR);
         devfs_node->name   = strdup(dev->dev_node_path);
         devfs_node->device = dev;

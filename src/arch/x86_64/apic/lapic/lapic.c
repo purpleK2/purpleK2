@@ -1,4 +1,5 @@
 #include "lapic.h"
+#include "autoconf.h"
 
 #include <cpu.h>
 #include <interrupts/irq.h>
@@ -140,21 +141,13 @@ void lapic_timer_init(void) {
 
     _disable_interrupts();
 
-    // Register the timer interrupt handler
     isr_registerHandler(LAPIC_IRQ_OFFSET + LAPIC_TIMER_VECTOR,
                         lapic_timer_handler);
 
-    // Configure the timer in periodic mode
-    // Set a reasonable value for your system (e.g., 10ms intervals)
-    uint32_t count = lapic_timer_ticks_per_ms * 10; // 10ms intervals
-
-    // Set the initial count
+    uint32_t count = lapic_timer_ticks_per_ms * CONFIG_SCHED_TIMER_INTERVAL_MS;
+    
     lapic_write_reg(LAPIC_TIMER_INIT_CNT, count);
 
-    // Set up the timer register with:
-    // - The timer vector
-    // - Periodic mode (bit 17)
-    // - Not masked (bit 16 = 0)
     lapic_write_reg(LAPIC_TIMER_REG,
                     LAPIC_TIMER_VECTOR + LAPIC_IRQ_OFFSET | (1 << 17));
 

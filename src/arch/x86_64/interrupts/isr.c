@@ -1,6 +1,8 @@
 #include "isr.h"
 #include "elf/sym.h"
+#include "errors.h"
 #include "loader/module/module_loader.h"
+#include "scheduler/scheduler.h"
 #include "syscalls/syscall.h"
 
 #include <apic/lapic/lapic.h>
@@ -19,11 +21,6 @@
 extern struct limine_hhdm_request *hhdm_request;
 
 isrHandler isr_handlers[IDT_MAX_DESCRIPTORS];
-
-struct stackFrame {
-    struct stackFrame *rbp;
-    uint64_t rip;
-};
 
 static const char *const exceptions[] = {"Divide by zero error",
                                          "Debug",
@@ -62,6 +59,45 @@ void isr_syscall(registers_t *ctx) {
     long ret = handle_syscall(ctx);
 
     ctx->rax = ret;
+
+    tcb_t *current = get_current_tcb();
+    if (current && (current->flags & TF_MODE_USER) && current->tls.base_virt) {
+        _cpu_set_msr(0xC0000100, (uint64_t)current->tls.base_virt);
+    }
+}
+
+static void isr_gpf(registers_t *ctx) {
+    // If this is a user-mode general protection fault, kill the
+    // offending process instead of panicking the whole kernel.
+    if ((ctx->cs & 0x3) == 0x3) {
+        pcb_t *proc = get_current_pcb();
+        if (proc) {
+            debugf_warn("GPF in user process %d at RIP=%p, killing it\n",
+                        proc->pid, (void *)ctx->rip);
+        } else {
+            debugf_warn(
+                "GPF in user context with no current process, killing\n");
+        }
+
+        proc_exit(ENOMEM);
+        yield(ctx);
+        return;
+    }
+
+    // Kernel-mode GPF: keep the existing panic behavior.
+    stdio_panic_init();
+    debugf(ANSI_COLOR_BLUE);
+    bsod_init();
+
+    uint64_t cpu = 0;
+    if (is_lapic_enabled())
+        cpu = lapic_get_id();
+
+    mprintf("KERNEL PANIC! \"%s\" (Exception n. %d) on CPU %hhu\n",
+            "General Protection Fault", 13, cpu);
+    mprintf("\terrcode: %llx\n", ctx->error);
+
+    panic_common(ctx);
 }
 
 static void isr_debug(registers_t *ctx) {
@@ -78,6 +114,7 @@ void isr_init() {
     }
 
     isr_registerHandler(0x80, isr_syscall);
+    isr_registerHandler(13, isr_gpf);
     isr_registerHandler(0x1, isr_debug);
 }
 
@@ -165,6 +202,33 @@ static void print_symbol(int frame, uintptr_t addr) {
 
 static uint8_t stack_failed_count = -1;
 
+void print_stack_trace(uint64_t rbp, uint64_t rip) {
+    struct stackFrame *stack = (struct stackFrame *)rbp;
+    int frame                = 0;
+
+    if (rip != 0) {
+        print_symbol(frame, rip);
+    } 
+
+    while (stack) {
+        if (is_addr_mapped((uint64_t)(uintptr_t)stack) && is_addr_mapped(stack->rip)) {
+            print_symbol(frame++, stack->rip);
+        } else {
+            if (!is_addr_mapped((uint64_t)(uintptr_t)stack)) {
+                mprintf(
+                    "[%d][%p] <stack frame not mapped, stopping stack trace>\n",
+                    frame, (void *)(uintptr_t)stack);
+            } else {
+                mprintf(
+                    "[%d][%p] <return address not mapped, stopping stack trace>\n",
+                    frame, (void *)(uintptr_t)stack);
+            }
+            break;
+        }
+        stack = (struct stackFrame *)stack->rbp;
+    }
+}
+
 void panic_common(registers_t *ctx) {
 
     print_reg_dump(ctx);
@@ -181,15 +245,7 @@ void panic_common(registers_t *ctx) {
 
     // stacktrace
     mprintf("\n\n --- STACK TRACE ---\n");
-    struct stackFrame *stack = (struct stackFrame *)ctx->rbp;
-    int frame                = 0;
-
-    print_symbol(frame++, ctx->rip);
-
-    while (stack) {
-        print_symbol(frame++, stack->rip);
-        stack = (struct stackFrame *)stack->rbp;
-    }
+    print_stack_trace(ctx->rbp, ctx->rip);
 
     mprintf("\nPANIC LOG END --- HALTING ---\n");
     debugf(ANSI_COLOR_RESET);

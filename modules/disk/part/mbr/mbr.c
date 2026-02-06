@@ -116,7 +116,7 @@ int parse_ebr(char *dev_path, uint32_t ebr_lba, uint32_t extended_start_lba,
               partition_info_t **partitions) {
     mbr_t ebr;
 
-    fileio_t *fd = open(dev_path, 0);
+    fileio_t *fd = open(dev_path, 0, 0);
     assert(fd != NULL);
 
     seek(fd, ebr_lba * 512, SEEK_SET);
@@ -155,7 +155,7 @@ int parse_ebr(char *dev_path, uint32_t ebr_lba, uint32_t extended_start_lba,
 int parse_mbr(char *dev_path, partition_info_t **partitions) {
     mbr_t mbr;
 
-    fileio_t *fd = open(dev_path, 0);
+    fileio_t *fd = open(dev_path, 0, 0);
     assert(fd != NULL);
 
     read(fd, 512, &mbr);

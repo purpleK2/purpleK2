@@ -7,6 +7,9 @@
 #include "memory/pmm/pmm.h"
 #include "vflags.h"
 #include <paging/paging.h>
+#include <scheduler/scheduler.h>
+
+#include <smp/ipi.h>
 
 #include <spinlock.h>
 
@@ -123,6 +126,14 @@ void *vmmlist_alloc(vmm_node_t **root_node, size_t item_size) {
     }
 
     return item;
+}
+
+static bool vmo_overlaps(vmo_t *v, uint64_t base, size_t pages) {
+    uint64_t len_bytes = pages * PFRAME_SIZE;
+    uint64_t v_end = v->base + v->len * PFRAME_SIZE;
+    uint64_t r_end = base + len_bytes;
+
+    return !(r_end <= v->base || base >= v_end);
 }
 
 void vmmlist_free(vmm_node_t **root_node, size_t item_size, void *tofree) {
@@ -372,6 +383,179 @@ void pagemap_copy_to(uint64_t *non_kernel_pml4) {
     }
 }
 
+static uint64_t *pt_clone(uint64_t *src) {
+    uint64_t *dst = (uint64_t *)PHYS_TO_VIRTUAL(pmm_alloc_page());
+    memset(dst, 0, PFRAME_SIZE);
+    memcpy(dst, src, PFRAME_SIZE);
+    return dst;
+}
+
+
+vmc_t *vmc_fork(vmc_t *parent) {
+    if (!parent) {
+        return NULL;
+    }
+
+    spinlock_acquire(&VMM_LOCK);
+
+    uint64_t tls_start = 0;
+    uint64_t tls_end   = 0;
+    tcb_t *cur_tcb = get_current_tcb();
+    if (cur_tcb && cur_tcb->tls.base_virt && cur_tcb->tls.size) {
+        uint64_t fs_base   = (uint64_t)(uintptr_t)cur_tcb->tls.base_virt;
+        size_t   total_sz  = cur_tcb->tls.size;
+        size_t   tcb_sz    = sizeof(user_tls_t);
+        if (total_sz >= tcb_sz) {
+            uint64_t region_base = fs_base - (total_sz - tcb_sz);
+            tls_start            = region_base & ~(PFRAME_SIZE - 1ULL);
+            tls_end              = region_base + total_sz;
+        }
+    }
+
+    vmc_t *child = vmc_alloc();
+    if (!child) {
+        spinlock_release(&VMM_LOCK);
+        return NULL;
+    }
+
+    child->pml4_table = (uint64_t *)pmm_alloc_page();
+    if (!child->pml4_table) {
+        vmc_free(child);
+        spinlock_release(&VMM_LOCK);
+        return NULL;
+    }
+
+    uint64_t *parent_pml4 = (uint64_t *)PHYS_TO_VIRTUAL(parent->pml4_table);
+    uint64_t *child_pml4  = (uint64_t *)PHYS_TO_VIRTUAL(child->pml4_table);
+
+    // Initialize child PML4 - copy kernel half (entries 256-511), clear user half
+    memset(child_pml4, 0, PFRAME_SIZE);
+    for (int i = 256; i < 512; i++) {
+        child_pml4[i] = parent_pml4[i];
+    }
+
+    child->root_vmo = NULL;
+    vmo_t **dst     = &child->root_vmo;
+
+    for (vmo_t *v = parent->root_vmo; v != NULL; v = v->next) {
+        *dst = vmo_alloc();
+        if (!*dst) {
+            break;
+        }
+
+        memcpy(*dst, v, sizeof(vmo_t));
+        (*dst)->next = NULL;
+        dst          = &(*dst)->next;
+    }
+
+    // Deep copy user-space page tables (entries 0-255)
+    // We need to allocate fresh page table pages for the child
+    for (int pml4_idx = 0; pml4_idx < 256; pml4_idx++) {
+        if (!(parent_pml4[pml4_idx] & PMLE_PRESENT)) {
+            continue;
+        }
+
+        uint64_t *parent_pdpt = (uint64_t *)PHYS_TO_VIRTUAL(
+            PG_GET_ADDR(parent_pml4[pml4_idx])
+        );
+        
+        // Allocate new PDPT for child
+        uint64_t *child_pdpt_phys = (uint64_t *)pmm_alloc_page();
+        if (!child_pdpt_phys) {
+            continue;
+        }
+        uint64_t *child_pdpt = (uint64_t *)PHYS_TO_VIRTUAL(child_pdpt_phys);
+        memset(child_pdpt, 0, PFRAME_SIZE);
+        child_pml4[pml4_idx] = (uint64_t)child_pdpt_phys | (parent_pml4[pml4_idx] & 0xFFF);
+
+        for (int pdp_idx = 0; pdp_idx < 512; pdp_idx++) {
+            if (!(parent_pdpt[pdp_idx] & PMLE_PRESENT)) {
+                continue;
+            }
+
+            uint64_t *parent_pdir = (uint64_t *)PHYS_TO_VIRTUAL(
+                PG_GET_ADDR(parent_pdpt[pdp_idx])
+            );
+            
+            // Allocate new PDIR for child
+            uint64_t *child_pdir_phys = (uint64_t *)pmm_alloc_page();
+            if (!child_pdir_phys) {
+                continue;
+            }
+            uint64_t *child_pdir = (uint64_t *)PHYS_TO_VIRTUAL(child_pdir_phys);
+            memset(child_pdir, 0, PFRAME_SIZE);
+            child_pdpt[pdp_idx] = (uint64_t)child_pdir_phys | (parent_pdpt[pdp_idx] & 0xFFF);
+
+            for (int pdir_idx = 0; pdir_idx < 512; pdir_idx++) {
+                if (!(parent_pdir[pdir_idx] & PMLE_PRESENT)) {
+                    continue;
+                }
+
+                uint64_t *parent_pt = (uint64_t *)PHYS_TO_VIRTUAL(
+                    PG_GET_ADDR(parent_pdir[pdir_idx])
+                );
+                
+                // Allocate new PT for child
+                uint64_t *child_pt_phys = (uint64_t *)pmm_alloc_page();
+                if (!child_pt_phys) {
+                    continue;
+                }
+                uint64_t *child_pt = (uint64_t *)PHYS_TO_VIRTUAL(child_pt_phys);
+                memset(child_pt, 0, PFRAME_SIZE);
+                child_pdir[pdir_idx] = (uint64_t)child_pt_phys | (parent_pdir[pdir_idx] & 0xFFF);
+
+                for (int pt_idx = 0; pt_idx < 512; pt_idx++) {
+                    uint64_t entry = parent_pt[pt_idx];
+                    if (!(entry & PMLE_PRESENT)) {
+                        continue;
+                    }
+
+                    uint64_t virt =
+                        ((uint64_t)pml4_idx << 39) |
+                        ((uint64_t)pdp_idx << 30) |
+                        ((uint64_t)pdir_idx << 21) |
+                        ((uint64_t)pt_idx << 12);
+
+                    // Skip TLS region - will be allocated fresh for child
+                    if (tls_start && virt >= tls_start && virt < tls_end) {
+                        continue;
+                    }
+
+                    // Skip user stack region - will be allocated fresh for child
+                    if (virt >= USER_STACK_TOP - SCHEDULER_STACKSZ && virt < USER_STACK_TOP) {
+                        continue;
+                    }
+
+                    uint64_t phys = PG_GET_ADDR(entry);
+
+                    // Only COW user-writable 4KiB pages
+                    if ((entry & PMLE_USER) && (entry & PMLE_WRITE)) {
+                        uint64_t cow_entry = (entry & ~PMLE_WRITE) | PMLE_COW;
+                        parent_pt[pt_idx] = cow_entry;
+                        child_pt[pt_idx]  = cow_entry;
+                        pmm_page_ref_inc((void *)phys);
+
+                        _invalidate(virt);
+                        if (get_bootloader_data()->smp_enabled) {
+                            tlb_shootdown(virt);
+                        }
+                    } else {
+                        // Read-only or non-user pages: just copy the entry
+                        child_pt[pt_idx] = entry;
+                        // Increment refcount for shared physical pages
+                        if (entry & PMLE_USER) {
+                            pmm_page_ref_inc((void *)phys);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    spinlock_release(&VMM_LOCK);
+    return child;
+}
+
 // Assumes the CTX has been initialized with vmc_init()
 void vmm_init(vmc_t *ctx) {
     for (vmo_t *i = ctx->root_vmo; i != NULL; i = i->next) {
@@ -484,6 +668,73 @@ void *valloc(vmc_t *ctx, size_t pages, uint8_t flags, void *phys) {
     return (ptr + offset);
 }
 
+void *valloc_at(vmc_t *ctx, void *addr, size_t pages, uint8_t flags, void *phys) {
+    spinlock_acquire(&VMM_LOCK);
+
+    uint64_t base = (uint64_t)(uintptr_t)addr;
+
+    if (base & (PFRAME_SIZE - 1)) {
+        debugf_warn("valloc_at: Address %p is not page-aligned\n", addr);
+        spinlock_release(&VMM_LOCK);
+        return NULL;
+    }
+
+    vmo_t *prev_vmo = NULL;
+    vmo_t *cur_vmo  = ctx->root_vmo;
+
+    for (; cur_vmo; prev_vmo = cur_vmo, cur_vmo = cur_vmo->next) {
+        if (vmo_overlaps(cur_vmo, base, pages)) {
+            debugf_warn("valloc_at: Requested region %p - %p overlaps with "
+                        "existing VMO %p (%p - %p)\n",
+                        (void *)base, (void *)(base + pages * PFRAME_SIZE),
+                        cur_vmo, (void *)cur_vmo->base,
+                        (void *)(cur_vmo->base + cur_vmo->len * PFRAME_SIZE));
+            spinlock_release(&VMM_LOCK);
+            return NULL;
+        }
+        if (cur_vmo->base > base) {
+            break;
+        }
+    }
+
+    vmo_t *vmo = vmo_alloc();
+    vmo->base  = base;
+    vmo->len   = pages;
+    vmo->flags = flags | VMO_ALLOCATED;
+
+    if (!prev_vmo) {
+        vmo->next = ctx->root_vmo;
+        ctx->root_vmo = vmo;
+    } else {
+        vmo->next = prev_vmo->next;
+        prev_vmo->next = vmo;
+    }
+
+    void *phys_al = NULL;
+    size_t offset = 0;
+
+    if (phys) {
+        phys_al = (void *)ROUND_DOWN((size_t)phys, PFRAME_SIZE);
+        offset  = (size_t)(phys - phys_al);
+    }
+
+    void *phys_to_map = phys_al ? phys_al : pmm_alloc_pages(pages);
+    map_region(
+        (uint64_t *)PHYS_TO_VIRTUAL(ctx->pml4_table),
+        (uint64_t)phys_to_map,
+        base,
+        pages,
+        vmo_to_page_flags(flags)
+    );
+
+    // add a lot of debugging
+    debugf_debug("Created VMO %p at requested address %p (%zu pages) (range %p - %p)\n",
+                 vmo, (void *)base, pages, (void *)base, (void *)(base + pages * PFRAME_SIZE));
+
+    spinlock_release(&VMM_LOCK);
+    return (void *)(base + offset);
+}
+
 // @param free do you want to give back the physical address of `ptr` back to
 // the PMM? (this will zero out that region on next allocation)
 void vfree(vmc_t *ctx, void *ptr, bool free) {
@@ -512,6 +763,7 @@ void vfree(vmc_t *ctx, void *ptr, bool free) {
         debugf_debug("Tried to deallocate a non-existing virtual address. "
                      "Quitting...\n");
 #endif
+        spinlock_release(&VMM_LOCK);
         return;
     }
 

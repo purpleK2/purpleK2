@@ -1,19 +1,22 @@
-#include <stdatomic.h>
 #ifndef VFS_H
 #define VFS_H 1
 
 #include <fs/file_io.h>
 #include <fs/fsid.h>
+#include "types.h"
 
 #include <spinlock.h>
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdatomic.h>
 
 #define V_CREATE (1 << 0)
-#define V_EXCL   (1 << 1)
-#define V_TRUNC  (1 << 2)
-#define V_DIR    (1 << 3)
+#define V_READ   (1 << 1)
+#define V_WRITE  (1 << 2)
+#define V_EXCL   (1 << 3)
+#define V_TRUNC  (1 << 4)
+#define V_DIR    (1 << 5)
 
 // compiler skill issue
 typedef struct vnode vnode_t;
@@ -88,7 +91,7 @@ typedef struct vnode_ops {
     int (*readlink)(vnode_t *, char *, size_t);
     int (*mkdir)(vnode_t *, const char *, int);
     int (*rmdir)(vnode_t *, const char *);
-    int (*create)(vnode_t *, const char *, int, vnode_t **);
+    int (*create)(vnode_t *, const char *, mode_t, vnode_t **);
     int (*remove)(vnode_t *, const char *);
     int (*symlink)(vnode_t *, const char *, const char *);
 } vnops_t;
@@ -101,6 +104,10 @@ typedef struct vnode {
     char *path;
     vnode_type_t vtype;
     void *node_data; // FS-specific structure about the file
+
+    uid_t uid;
+    gid_t gid;
+    mode_t mode;
 
     vnops_t *ops;
 
@@ -134,7 +141,7 @@ int vfs_register_fstype(vfs_fstype_t *fstype);
 int vfs_unregister_fstype(const char *name);
 vfs_fstype_t *vfs_find_fstype(const char *name);
 
-vfs_t *vfs_create(vfs_fstype_t *fs_type, void *fs_data);
+vfs_t *vfs_create_fs(vfs_fstype_t *fs_type, void *fs_data);
 vfs_t *vfs_mount(void *device, const char *fstype_name, char *path,
                  void *mount_data);
 int vfs_unmount(const char *path);
@@ -157,7 +164,9 @@ int vfs_close(vnode_t *vnode);
 
 int vfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count);
 int vfs_mkdir(const char *path, int mode);
+int vfs_create(const char *path, mode_t mode);
 int vfs_rmdir(const char *path);
+int vfs_remove(const char *path);
 
 int vfs_readlink(const char *path, char *buf, size_t size);
 int vfs_symlink(const char *target, const char *linkpath);

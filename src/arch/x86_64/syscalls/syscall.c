@@ -1,5 +1,7 @@
 #include "syscall.h"
 #include "cpu.h"
+#include "user/user.h"
+#include "uaccess.h"
 
 #include <fs/file_io.h>
 #include <fs/vfs/vfs.h>
@@ -12,23 +14,28 @@
 #include <util/macro.h>
 
 void sys_exit(int status, registers_t *ctx) {
-    UNUSED(status);
 
-    proc_exit();
+    proc_exit(status);
     yield(ctx);
 }
 
-int sys_open(char *path, int mode) {
+int sys_open(const char __user *path, int flags, mode_t mode) {
     pcb_t *current = get_current_pcb();
 
     if (!path || !current) {
         return -1;
     }
 
+    char kpath[4096];
+    if (copy_from_user(kpath, path, sizeof(kpath)) != 0) {
+        return -1;
+    }
+    kpath[sizeof(kpath) - 1] = '\0'; // Ensure null termination
+
     current->fds =
         krealloc(current->fds, sizeof(fileio_t *) * (++current->fd_count));
 
-    current->fds[current->fd_count - 1] = open(path, mode);
+    current->fds[current->fd_count - 1] = open(kpath, flags, mode);
     if (current->fds[current->fd_count - 1] == NULL) {
         return -1;
     }
@@ -36,7 +43,7 @@ int sys_open(char *path, int mode) {
     return current->fd_count - 1;
 }
 
-int sys_read(int fd, char *buf, int count) {
+int sys_read(int fd, char __user *buf, int count) {
     pcb_t *current = get_current_pcb();
 
     if (fd < 0 || fd >= current->fd_count || !buf || count <= 0) {
@@ -48,10 +55,27 @@ int sys_read(int fd, char *buf, int count) {
         return -1;
     }
 
-    return read(file, count, buf);
+    char *kbuf = kmalloc(count);
+    if (!kbuf) {
+        return -1;
+    }
+
+    int bytes_read = read(file, count, kbuf);
+    if (bytes_read < 0) {
+        kfree(kbuf);
+        return -1;
+    }
+
+    if (copy_to_user(buf, kbuf, bytes_read) != 0) {
+        kfree(kbuf);
+        return -1;
+    }
+
+    kfree(kbuf);
+    return bytes_read;
 }
 
-int sys_write(int fd, const char *buf, int count) {
+int sys_write(int fd, const char __user *buf, int count) {
     pcb_t *current = get_current_pcb();
 
     if (fd < 0 || fd >= current->fd_count || !buf || count <= 0) {
@@ -63,7 +87,19 @@ int sys_write(int fd, const char *buf, int count) {
         return -1;
     }
 
-    return write(file, (void *)buf, count);
+    char *kbuf = kmalloc(count);
+    if (!kbuf) {
+        return -1;
+    }
+
+    if (copy_from_user(kbuf, buf, count) != 0) {
+        kfree(kbuf);
+        return -1;
+    }
+
+    int bytes_written = write(file, kbuf, count);
+    kfree(kbuf);
+    return bytes_written;
 }
 
 int sys_close(int fd) {
@@ -156,6 +192,226 @@ int sys_dup(int fd) {
     return current->fd_count - 1;
 }
 
+int sys_getpid(void) {
+    pcb_t *current = get_current_pcb();
+    if (!current) {
+        return -1;
+    }
+    return current->pid;
+}
+
+int sys_fork(registers_t *ctx) {
+    if (!ctx) {
+        return -1;
+    }
+
+    int child_pid = proc_fork(ctx);
+
+    if (child_pid < 0) {
+        return -1;
+    }
+ 
+    ctx->rax = child_pid;
+    return child_pid;
+}
+
+int sys_getuid(void)  { return get_current_cred()->uid; }
+int sys_geteuid(void) { return get_current_cred()->euid; }
+int sys_getgid(void)  { return get_current_cred()->gid; }
+int sys_getegid(void) { return get_current_cred()->egid; }
+
+int sys_getresuid(uid_t __user *ruid, uid_t __user *euid, uid_t __user *suid) {
+    user_cred_t *c = get_current_cred();
+    if (!ruid || !euid || !suid) return -1;
+
+    if (copy_to_user(ruid, &c->uid, sizeof(uid_t)) != 0)
+        return -1;
+    if (copy_to_user(euid, &c->euid, sizeof(uid_t)) != 0)
+        return -1;
+    if (copy_to_user(suid, &c->suid, sizeof(uid_t)) != 0)
+        return -1;
+
+    return 0;
+}
+
+int sys_getresgid(gid_t __user *rgid, gid_t __user *egid, gid_t __user *sgid) {
+    user_cred_t *c = get_current_cred();
+    if (!rgid || !egid || !sgid) return -1;
+
+    if (copy_to_user(rgid, &c->gid, sizeof(gid_t)) != 0)
+        return -1;
+    if (copy_to_user(egid, &c->egid, sizeof(gid_t)) != 0)
+        return -1;
+    if (copy_to_user(sgid, &c->sgid, sizeof(gid_t)) != 0)
+        return -1;
+
+    return 0;
+}
+
+int sys_setuid(uid_t uid) {
+    user_cred_t *c = get_current_cred();
+
+    if (is_privileged()) {
+        c->uid  = uid;
+        c->euid = uid;
+        c->suid = uid;
+        return 0;
+    }
+
+    if (uid == c->uid || uid == c->suid) {
+        c->euid = uid;
+        return 0;
+    }
+
+    return -1;
+}
+
+int sys_seteuid(uid_t euid) {
+    user_cred_t *c = get_current_cred();
+
+    if (is_privileged() ||
+        euid == c->uid ||
+        euid == c->suid) {
+        c->euid = euid;
+        return 0;
+    }
+
+    return -1;
+}
+
+int sys_setreuid(uid_t ruid, uid_t euid) {
+    user_cred_t *c = get_current_cred();
+
+    if (!is_privileged()) {
+        if ((ruid != (uid_t)-1 &&
+             ruid != c->uid &&
+             ruid != c->euid) ||
+            (euid != (uid_t)-1 &&
+             euid != c->uid &&
+             euid != c->euid &&
+             euid != c->suid))
+            return -1;
+    }
+
+    if (ruid != (uid_t)-1)
+        c->uid = ruid;
+    if (euid != (uid_t)-1)
+        c->euid = euid;
+
+    if (ruid != (uid_t)-1 || euid != (uid_t)-1)
+        c->suid = c->euid;
+
+    return 0;
+}
+
+int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid) {
+    user_cred_t *c = get_current_cred();
+
+    if (!is_privileged()) {
+        if ((ruid != (uid_t)-1 &&
+             ruid != c->uid &&
+             ruid != c->euid &&
+             ruid != c->suid) ||
+            (euid != (uid_t)-1 &&
+             euid != c->uid &&
+             euid != c->euid &&
+             euid != c->suid) ||
+            (suid != (uid_t)-1 &&
+             suid != c->uid &&
+             suid != c->euid &&
+             suid != c->suid))
+            return -1;
+    }
+
+    if (ruid != (uid_t)-1) c->uid  = ruid;
+    if (euid != (uid_t)-1) c->euid = euid;
+    if (suid != (uid_t)-1) c->suid = suid;
+
+    return 0;
+}
+
+int sys_setgid(gid_t gid) {
+    user_cred_t *c = get_current_cred();
+
+    if (is_privileged()) {
+        c->gid  = gid;
+        c->egid = gid;
+        c->sgid = gid;
+        return 0;
+    }
+
+    if (gid == c->gid || gid == c->sgid) {
+        c->egid = gid;
+        return 0;
+    }
+
+    return -1;
+}
+
+int sys_setegid(gid_t egid) {
+    user_cred_t *c = get_current_cred();
+
+    if (is_privileged() ||
+        egid == c->gid ||
+        egid == c->sgid) {
+        c->egid = egid;
+        return 0;
+    }
+
+    return -1;
+}
+
+int sys_setregid(gid_t rgid, gid_t egid) {
+    user_cred_t *c = get_current_cred();
+
+    if (!is_privileged()) {
+        if ((rgid != (gid_t)-1 &&
+             rgid != c->gid &&
+             rgid != c->egid) ||
+            (egid != (gid_t)-1 &&
+             egid != c->gid &&
+             egid != c->egid &&
+             egid != c->sgid))
+            return -1;
+    }
+
+    if (rgid != (gid_t)-1)
+        c->gid = rgid;
+    if (egid != (gid_t)-1)
+        c->egid = egid;
+
+    if (rgid != (gid_t)-1 || egid != (gid_t)-1)
+        c->sgid = c->egid;
+
+    return 0;
+}
+
+int sys_setresgid(gid_t rgid, gid_t egid, gid_t sgid) {
+    user_cred_t *c = get_current_cred();
+
+    if (!is_privileged()) {
+        if ((rgid != (gid_t)-1 &&
+             rgid != c->gid &&
+             rgid != c->egid &&
+             rgid != c->sgid) ||
+            (egid != (gid_t)-1 &&
+             egid != c->gid &&
+             egid != c->egid &&
+             egid != c->sgid) ||
+            (sgid != (gid_t)-1 &&
+             sgid != c->gid &&
+             sgid != c->egid &&
+             sgid != c->sgid))
+            return -1;
+    }
+
+    if (rgid != (gid_t)-1) c->gid  = rgid;
+    if (egid != (gid_t)-1) c->egid = egid;
+    if (sgid != (gid_t)-1) c->sgid = sgid;
+
+    return 0;
+}
+
 long handle_syscall(registers_t *ctx) {
     long num = ctx->rax;
     long arg1        = ctx->rdi;
@@ -173,7 +429,7 @@ long handle_syscall(registers_t *ctx) {
         sys_exit(arg1, ctx);
         break;
     case SYS_open:
-        return sys_open((char *)(uintptr_t)arg1, arg2);
+        return sys_open((char *)(uintptr_t)arg1, arg2, (mode_t)arg3);
     case SYS_read:
         return sys_read(arg1, (char *)(uintptr_t)arg2, arg3);
     case SYS_write:
@@ -188,6 +444,49 @@ long handle_syscall(registers_t *ctx) {
         return sys_fcntl(arg1, arg2, (void *)(uintptr_t)arg3);
     case SYS_dup:
         return sys_dup(arg1);
+    case SYS_getpid:
+        return sys_getpid();
+    case SYS_getuid:
+        return sys_getuid();
+    case SYS_geteuid:
+        return sys_geteuid();
+    case SYS_getgid:
+        return sys_getgid();
+    case SYS_getegid:
+        return sys_getegid();
+    case SYS_setuid:
+        return sys_setuid((uid_t)arg1);
+    case SYS_seteuid:
+        return sys_seteuid((uid_t)arg1);
+    case SYS_setreuid:
+        return sys_setreuid((uid_t)arg1, (uid_t)arg2);
+    case SYS_setresuid:
+        return sys_setresuid((uid_t)arg1, (uid_t)arg2, (uid_t)arg3);
+    case SYS_getresuid:
+        return sys_getresuid(
+            (uid_t *)(uintptr_t)arg1,
+            (uid_t *)(uintptr_t)arg2,
+            (uid_t *)(uintptr_t)arg3
+        );
+
+    case SYS_setgid:
+        return sys_setgid((gid_t)arg1);
+    case SYS_setegid:
+        return sys_setegid((gid_t)arg1);
+    case SYS_setregid:
+        return sys_setregid((gid_t)arg1, (gid_t)arg2);
+    case SYS_setresgid:
+        return sys_setresgid((gid_t)arg1, (gid_t)arg2, (gid_t)arg3);
+    case SYS_getresgid:
+        return sys_getresgid(
+            (gid_t *)(uintptr_t)arg1,
+            (gid_t *)(uintptr_t)arg2,
+            (gid_t *)(uintptr_t)arg3
+        );
+
+    case SYS_fork:
+        return sys_fork(ctx);
+
     default:
         return -1;
     }

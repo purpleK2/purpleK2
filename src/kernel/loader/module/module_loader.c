@@ -242,7 +242,7 @@ mod_t *load_module(const char *file_path) {
         return NULL;
     }
 
-    struct file_io *file = open(file_path, 0);
+    struct file_io *file = open(file_path, 0, 0);
     if (!file) {
         debugf_warn("Failed to open module file: %s\n", file_path);
         return NULL;

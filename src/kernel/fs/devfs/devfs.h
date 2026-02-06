@@ -16,6 +16,9 @@ typedef struct devfs_node {
     char *name;
     devfs_ftype_t type;
     device_t *device;
+
+    mode_t mode;
+
     struct devfs_node *sibling;
     struct devfs_node *child;
 } devfs_node_t;
@@ -25,8 +28,8 @@ typedef struct devfs {
     size_t devfs_size;
 } devfs_t;
 
-devfs_t *devfs_create();
-devfs_node_t *devfs_create_node(devfs_ftype_t ftype);
+devfs_t *devfs_create_fs();
+devfs_node_t *devfs_create_fs_node(devfs_ftype_t ftype);
 int devfs_find_node(devfs_t *devfs, char *path, devfs_node_t **out);
 int devfs_find_or_create_node(devfs_t *ramfs, char *path,
                               devfs_ftype_t ramfs_ftype, devfs_node_t **out);

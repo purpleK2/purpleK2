@@ -228,13 +228,13 @@ $(LIBS_DIR)/limine/limine:
 	make -C $(LIBS_DIR)/limine
 
 modules:
-	@mkdir -p target/modules
+	@mkdir -p target/kmod
 	@for dir in $(MODULE_DIRS); do \
 		echo "--> Building module in $$dir"; \
 		$(MAKE) -C $$dir; \
 		for km in $$dir/*.km; do \
 			if [ -f $$km ]; then \
-				cp -v $$km target/modules/; \
+				cp -v $$km target/kmod/; \
 			fi; \
 		done; \
 	done
@@ -246,10 +246,9 @@ apps:
 		echo "--> Building app in $$dir"; \
 		$(MAKE) -C $$dir; \
 		for f in $$dir/*; do \
-			if readelf -h "$$f" >/dev/null 2>&1; then \
-				if [ -f $$f ]; then \
-					cp -v $$f target/bin; \
-				fi; \
+			if [ -f "$$f" ] && \
+			   readelf -h "$$f" 2>/dev/null | grep -Eq "Type:[[:space:]]*(EXEC|DYN)"; then \
+				cp -v "$$f" target/bin; \
 			fi; \
 		done; \
 	done

@@ -1,6 +1,8 @@
 #ifndef SCHEDULER_H
 #define SCHEDULER_H
 
+#include "tsc/tsc.h"
+#include "user/user.h"
 #include <types.h>
 
 #include <ipc/signals.h>
@@ -24,7 +26,15 @@
 #define TF_DETACHED    (1 << 3)
 #define TF_HAS_FPU     (1 << 4)
 
+#define PF_SETUID_BIT  (1 << 0)
+
 #define TIME_SLICE_TICKS 10
+
+#define TLS_MIN_SIZE PFRAME_SIZE
+#define TLS_MAX_SIZE (PFRAME_SIZE * CONFIG_SCHED_TLS_MAX_SIZE_PAGES)
+#define TLS_ALIGNMENT PFRAME_SIZE
+
+#define USER_STACK_TOP 0x7FFFFFFFF000ULL
 
 typedef enum pcb_state {
     PROC_READY,
@@ -43,6 +53,21 @@ typedef enum tcb_state {
 typedef struct process pcb_t;
 typedef struct thread tcb_t;
 
+typedef struct user_tls {
+    struct user_tls *self;
+    void *dtv;
+    void *private_data;
+    int errno;
+    void *stack_guard;
+} user_tls_t;
+
+typedef struct tls_region {
+    void *base_virt;
+    void *base_phys;
+    size_t size;
+    size_t pages;
+} tls_region_t;
+
 typedef struct thread {
     int tid;
     struct process *parent;
@@ -55,6 +80,8 @@ typedef struct thread {
     registers_t *regs;
     void *fpu; // 512 bytes memory region
 
+    int priority; // for MLFQ
+
     // for usermode
     void *kernel_stack;
     void *user_stack;
@@ -63,7 +90,8 @@ typedef struct thread {
 
     struct thread *next;
 
-    // TODO: thread-local storage
+    tls_region_t tls;
+    user_tls_t *tls_ptr;
 } tcb_t;
 
 typedef struct process {
@@ -75,6 +103,7 @@ typedef struct process {
     struct process **children;
 
     pcb_state_t state;
+    uint64_t wakeup_tick;
 
     int thread_count;
     tcb_t **threads;
@@ -86,12 +115,11 @@ typedef struct process {
 
     int cpu; // the cpu we're running on
 
+    uint8_t flags;
+
     vmc_t *vmc;
 
-    struct owner {
-        int gid;
-        int uid;
-    } owner;
+    user_cred_t *cred;
 
     void (*signal_handler)(int);
 } pcb_t;
@@ -101,6 +129,21 @@ typedef struct cpu_thread_queue {
     tcb_t *head;
 } cpu_queue_t;
 
+typedef struct cpu_local {
+    int cpu_id;
+    tcb_t *current;
+} cpu_local_t;
+
+extern cpu_local_t *cpu_locals;
+
+static inline uint64_t choose_random_tls_base(void) {
+    uint64_t min = 0x0000700000000000ULL;  // Higher in user space
+    uint64_t max = 0x00007F0000000000ULL;
+    uint64_t r = (uint64_t)_get_tsc();
+    uint64_t base = min + (r % (max - min));
+    return ROUND_DOWN(base, TLS_ALIGNMENT);
+}
+
 /* from arch/[TARGET]/scheduler.asm */
 extern void context_load(registers_t *ctx);
 extern void fpu_save(void *ctx);
@@ -109,7 +152,8 @@ extern __attribute__((noreturn)) void scheduler_idle();
 
 int pcb_destroy(int pid);
 int thread_destroy(int pid, int tid);
-int proc_exit();
+int proc_exit(int exit_code);
+int proc_engage(pcb_t *proc);
 
 // inits the scheduler on every CPU
 // with an "init" process
@@ -121,7 +165,7 @@ int init_scheduler();
     every CPU), whatever.
 */
 
-int init_cpu_scheduler(void (*p)()); // inits the scheduler for a specific CPU
+int init_cpu_scheduler(); // inits the scheduler for a specific CPU
                                      // with a custom process and a thread queue
 
 int proc_create(void (*entry)(), int flags, char *name);
@@ -130,6 +174,11 @@ int pcb_destroy(int pid);
 pcb_t *get_current_pcb();
 tcb_t *get_current_tcb();
 int thread_destroy(int pid, int tid);
+int proc_fork(registers_t *regs);
+
+int allocate_tls(tcb_t *thread, size_t size);
+void free_tls(tcb_t *thread);
+int find_new_tls_base(tcb_t *tcb, size_t size);
 
 void yield(registers_t *ctx);
 

@@ -1,5 +1,6 @@
 #include "kernel.h"
-#include "elf/elfloader.h"
+#include "loader/elf/elfloader.h"
+#include "karg.h"
 #include "pci/pci.h"
 
 #include <autoconf.h>
@@ -99,6 +100,11 @@ USED SECTION(".requests") static volatile struct limine_executable_file_request
     kernel_file_request = {.id       = LIMINE_EXECUTABLE_FILE_REQUEST_ID,
                            .revision = 0};
 
+USED SECTION(".requests") static volatile struct limine_executable_cmdline_request
+    kernel_cmdline_request = {
+        .id       = LIMINE_EXECUTABLE_CMDLINE_REQUEST_ID,
+        .revision = 0};
+
 USED SECTION(".requests_start_marker") static volatile uint64_t
     limine_requests_start_marker[] = LIMINE_REQUESTS_START_MARKER;
 
@@ -114,6 +120,7 @@ struct limine_paging_mode_response *paging_mode_response;
 struct limine_rsdp_response *rsdp_response;
 struct limine_module_response *module_response;
 struct limine_file *kernel_file;
+struct limine_executable_cmdline_response *kernel_cmdline_response;
 
 struct bootloader_data limine_parsed_data;
 
@@ -123,22 +130,16 @@ struct bootloader_data *get_bootloader_data() {
 
 vmc_t *kvmc;
 
-void pk_init() {
-    kprintf_ok("Hello!\n");
-    elf_program_t *prog = kmalloc(sizeof(elf_program_t));
-    memset(prog, 0, sizeof(elf_program_t));
-    if (load_elf("/initrd/bin/init.elf", prog) != 0) {
-        debugf_warn("Failed to load /initrd/bin/init.elf\n");
-        kfree(prog);
+static int karg_init_exec(const char *value) {
+    if (value == NULL) {
+        limine_parsed_data.init_exec = NULL;
+        return -1;
     }
 
-    fs_list("/", -1);
+    debugf_debug("Init Executable Path: %s\n", value);
 
-    sleep(2000);
-
-    // IT IS STILL A BAD IDEA TO JUST LET THE PAGEFAULT HANDLER KILL THE
-    // PROC 😭
-    proc_exit();
+    limine_parsed_data.init_exec = (char *)value;
+    return 0;
 }
 
 // kernel main function
@@ -170,6 +171,22 @@ void kstart(void) {
         kernel_file_request.response->executable_file->address;
     limine_parsed_data.kernel_file_size =
         kernel_file_request.response->executable_file->size;
+
+    limine_parsed_data.karg_cmdline =
+        kernel_cmdline_request.response
+            ? kernel_cmdline_request.response->cmdline
+            : NULL;
+
+    limine_parsed_data.bootstrap_cpu_id =
+        smp_request.response
+            ? smp_request.response->bsp_lapic_id
+            : 0;
+
+    karg_register("init", karg_init_exec, 0);
+
+    if (limine_parsed_data.karg_cmdline) {
+        karg_parse(limine_parsed_data.karg_cmdline);
+    }
 
     arch_base_init();
 
@@ -303,9 +320,12 @@ void kstart(void) {
 
     kvmc = vmc_init((uint64_t *)PHYS_TO_VIRTUAL(kernel_pml4), VMO_KERNEL_RW);
     vmm_init(kvmc);
+    pmm_init_refcount();
     vmc_switch(kvmc);
     set_kernel_vmc(kvmc);
     kprintf_ok("Initialized VMM\n");
+
+    change_to_kernel_pml4_on_int = 1;
 
     kmalloc_init();
 
@@ -418,26 +438,20 @@ void kstart(void) {
 
     // register file system types
     ramfs_init();
-
     vfs_mount(NULL, "ramfs", "/", NULL);
 
-    vfs_mkdir("/initrd", 0755);
     vfs_mkdir("/dev", 0755);
 
-    ramfs_t *cpio_ramfs         = ramfs_create_fs();
-    cpio_ramfs->root_node       = ramfs_create_node(RAMFS_DIRECTORY);
-    cpio_ramfs->root_node->name = strdup("/");
-
-    vfs_mount(cpio_ramfs, "ramfs", INITRD_MOUNT, cpio_ramfs);
-
     // extract cpio
-    assert(cpio_extract(&cpio, INITRD_MOUNT) == EOK);
+    assert(cpio_extract(&cpio, "/") == EOK);
 
 #ifdef CONFIG_DEVFS_ENABLE
     devfs_init();
 
     if (vfs_mount(NULL, "devfs", CONFIG_DEVFS_MOUNT, NULL) == NULL) {
         kprintf_warn("Failed to initialize DEVFS!\n");
+        fs_list("/", -1);
+        for (;;);
     } else {
         kprintf_ok("DEVFS initialized successfully!\n");
     }
@@ -453,9 +467,11 @@ void kstart(void) {
     // smp_init();
     // limine_parsed_data.smp_enabled = true;
 
-    pci_scan(INITRD_MOUNT "/pci.ids");
+    fs_list("/", -1);
+
+    pci_scan("/etc/pci.ids");
     kprintf_ok("PCI devices parsing done\n");
-    if (pcie_init(INITRD_MOUNT "/pci.ids") != PCIE_STATUS_OK) {
+    if (pcie_init("/etc/pci.ids") != PCIE_STATUS_OK) {
         kprintf_warn("Failed to parse PCIe devices!\n");
     } else {
         kprintf_ok("PCIe devices parsing done\n");
@@ -463,7 +479,7 @@ void kstart(void) {
 
     print_pcie_list();
 
-    fileio_t *f = open(INITRD_MOUNT "/test2.txt", O_CREATE);
+    fileio_t *f = open("/test2.txt", O_CREATE, 0644);
     assert(f);
 
     const char temp[8] = "TUTUTUT";
@@ -471,14 +487,16 @@ void kstart(void) {
     seek(f, 0, SEEK_SET);
     close(f);
 
-    f = open(INITRD_MOUNT "/test2.txt", 0);
+    f = open("/test2.txt", 0, 0);
     assert(f);
     char *buf = kmalloc(30);
     assert(buf);
     read(f, 30, buf);
     kprintf("Reading contents: %s\n", buf);
 
-    fs_list(INITRD_MOUNT, -1);
+    fs_list("/", -1);
+
+    binfmt_register_loader(&elf_binfmt_loader);
 
     // ffffffff80045977
 
@@ -504,7 +522,7 @@ void kstart(void) {
 
     global_vmc_init(kvmc);
 
-    init_cpu_scheduler(pk_init);
+    init_cpu_scheduler();
 
     _disable_interrupts(); // just in case
     irq_registerHandler(0, scheduler_timer_tick);
