@@ -464,6 +464,17 @@ int sys_mount(const char __user *device, const char __user *fstype, const char _
     return 0;
 }
 
+int sys_umount(const char __user *path) {
+    char kernel_path[4096];
+    size_t len = strncpy_from_user(kernel_path, path, sizeof(kernel_path));
+    if (len == (size_t)-1) {
+        return -1;
+    }
+    kernel_path[sizeof(kernel_path) - 1] = '\0';
+
+    return vfs_unmount(kernel_path);
+}
+
 void* syscall_table[] = {
     (void*)sys_exit,
     (void*)sys_open,
