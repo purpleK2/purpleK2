@@ -1,6 +1,7 @@
 #ifndef SCHEDULER_H
 #define SCHEDULER_H
 
+#include "fs/fd.h"
 #include "tsc/tsc.h"
 #include "user/user.h"
 #include <types.h>
@@ -109,8 +110,7 @@ typedef struct process {
     tcb_t **threads;
     tcb_t *main_thread;
 
-    int fd_count;
-    fileio_t **fds;
+    fd_table_t fd_table;
     fileio_t *cwd; // Current Working Directory (yes it's a file :3c)
 
     int cpu; // the cpu we're running on

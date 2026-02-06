@@ -1,5 +1,6 @@
 #include "procfs.h"
 #include "user/access.h"
+#include <fs/fd.h>
 #include <memory/heap/kheap.h>
 #include <stdio.h>
 #include <string.h>
@@ -182,7 +183,7 @@ procfs_info_t *procfs_procinfo_create(pcb_t *pcb) {
     memset(procinfo, 0, sizeof(procfs_info_t));
 
     // fd count
-    snprintf(buf, PROCFS_INFO_BUFSZ, "FD_COUNT::%d\n", pcb->fd_count);
+    snprintf(buf, PROCFS_INFO_BUFSZ, "FD_COUNT::%zu\n", pcb->fd_table.size);
     procfs_info_add(procinfo, buf, 0, strlen(buf) + 1);
     int offset = procfs_info_linelen(procinfo, buf);
 
@@ -350,7 +351,7 @@ void *procfs_find_in_proc(procfs_pcb_t *proc, char *file, int *ftype) {
         f      = proc->procinfo;
     } else if (strcmp(file, PROCFS_FNAME_FDS) == 0) {
         *ftype = PROCFS_FILE_FDS;
-        f      = proc->pcb->fds;
+        f      = proc;
     } else {
         int tid = atoi(file);
 
@@ -658,12 +659,13 @@ int procfs_lookup(vnode_t *parent, const char *name, vnode_t **out) {
         
         procfs_pcb_t *proc = (procfs_pcb_t *)file;
         
-        if (fd_num < 0 || fd_num >= proc->pcb->fd_count || !proc->pcb->fds[fd_num]) {
+        fileio_t *fio = fd_get(&proc->pcb->fd_table, fd_num, FD_FILE);
+        if (!fio) {
             kfree(child_path);
             return ENOENT;
         }
         
-        vnode_t *child_vnode = vnode_create(parent->root_vfs, child_path, VNODE_LINK, proc->pcb->fds[fd_num]);
+        vnode_t *child_vnode = vnode_create(parent->root_vfs, child_path, VNODE_LINK, fio);
         memcpy(child_vnode->ops, parent->ops, sizeof(vnops_t));
         child_vnode->mode = S_IFLNK | 0777;
         
@@ -799,14 +801,14 @@ int procfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count) {
                     return EOK;
                 }
 
-                for (int i = 0; i < proc->pcb->fd_count && idx < max; i++) {
-                    if (!proc->pcb->fds[i]) continue;
+                for (size_t i = 0; i < proc->pcb->fd_table.size && idx < max; i++) {
+                    if (proc->pcb->fd_table.entries[i].type == FD_NONE) continue;
 
                     entries[idx].d_ino = i;
                     entries[idx].d_off = idx + 1;
                     entries[idx].d_reclen = sizeof(dirent_t);
                     entries[idx].d_type = VNODE_LINK;
-                    snprintf(entries[idx].d_name, sizeof(entries[idx].d_name), "%d", i);
+                    snprintf(entries[idx].d_name, sizeof(entries[idx].d_name), "%zu", i);
                     idx++;
                 }
             }
@@ -1000,10 +1002,12 @@ void procfs_print(procfs_t *procfs) {
                     kprintf("|\t|  |_ tinfo\n");
                 }
             }
-            if (p->pcb->fds) {
+            if (p->pcb->fd_table.entries) {
                 kprintf("|\t|-fds\n");
-                for (int j = 0; j < p->pcb->fd_count; j++) {
-                    kprintf("|\t  |- %d[%p]\n", j, p->pcb->fds[j]);
+                for (size_t j = 0; j < p->pcb->fd_table.size; j++) {
+                    if (p->pcb->fd_table.entries[j].type != FD_NONE) {
+                        kprintf("|\t  |- %zu[%p]\n", j, p->pcb->fd_table.entries[j].ptr);
+                    }
                 }
             }
             kprintf("|\t|_procinfo\n");

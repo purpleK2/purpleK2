@@ -4,6 +4,7 @@
 #include "user/user.h"
 #include "uaccess.h"
 
+#include <fs/fd.h>
 #include <fs/file_io.h>
 #include <fs/vfs/vfs.h>
 #include <scheduler/scheduler.h>
@@ -43,25 +44,28 @@ int sys_open(const char __user *path, int flags, mode_t mode) {
     }
     kpath[sizeof(kpath) - 1] = '\0'; // Ensure null termination
 
-    current->fds =
-        krealloc(current->fds, sizeof(fileio_t *) * (++current->fd_count));
-
-    current->fds[current->fd_count - 1] = open(kpath, flags, mode);
-    if (current->fds[current->fd_count - 1] == NULL) {
+    fileio_t *file = open(kpath, flags, mode);
+    if (!file) {
         return -1;
     }
 
-    return current->fd_count - 1;
+    int fd = fd_alloc(&current->fd_table, FD_FILE, file);
+    if (fd < 0) {
+        close(file);
+        return -1;
+    }
+
+    return fd;
 }
 
 int sys_read(int fd, char __user *buf, int count) {
     pcb_t *current = get_current_pcb();
 
-    if (fd < 0 || fd >= current->fd_count || !buf || count <= 0) {
+    if (fd < 0 || !buf || count <= 0) {
         return -1;
     }
 
-    fileio_t *file = current->fds[fd];
+    fileio_t *file = fd_get(&current->fd_table, fd, FD_FILE);
     if (!file) {
         return -1;
     }
@@ -89,11 +93,11 @@ int sys_read(int fd, char __user *buf, int count) {
 int sys_write(int fd, const char __user *buf, int count) {
     pcb_t *current = get_current_pcb();
 
-    if (fd < 0 || fd >= current->fd_count || !buf || count <= 0) {
+    if (fd < 0 || !buf || count <= 0) {
         return -1;
     }
 
-    fileio_t *file = current->fds[fd];
+    fileio_t *file = fd_get(&current->fd_table, fd, FD_FILE);
     if (!file) {
         return -1;
     }
@@ -116,22 +120,17 @@ int sys_write(int fd, const char __user *buf, int count) {
 int sys_close(int fd) {
     pcb_t *current = get_current_pcb();
 
-    if (fd < 0 || fd >= current->fd_count) {
+    if (fd < 0) {
         return -1;
     }
 
-    fileio_t *file = current->fds[fd];
+    fileio_t *file = fd_get(&current->fd_table, fd, FD_FILE);
     if (!file) {
         return -1;
     }
 
     close(file);
-    current->fds[fd] = NULL;
-
-    if (fd == current->fd_count - 1) {
-        current->fds =
-            krealloc(current->fds, sizeof(fileio_t *) * (--current->fd_count));
-    }
+    fd_free(&current->fd_table, fd);
 
     return 0;
 }
@@ -139,11 +138,11 @@ int sys_close(int fd) {
 int sys_ioctl(int fd, int request, void *arg) {
     pcb_t *current = get_current_pcb();
 
-    if (fd < 0 || fd >= current->fd_count) {
+    if (fd < 0) {
         return -1;
     }
 
-    fileio_t *file = current->fds[fd];
+    fileio_t *file = fd_get(&current->fd_table, fd, FD_FILE);
     if (!file) {
         return -1;
     }
@@ -154,11 +153,11 @@ int sys_ioctl(int fd, int request, void *arg) {
 int sys_seek(int fd, int whence, int offset) {
     pcb_t *current = get_current_pcb();
 
-    if (fd < 0 || fd >= current->fd_count) {
+    if (fd < 0) {
         return -1;
     }
 
-    fileio_t *file = current->fds[fd];
+    fileio_t *file = fd_get(&current->fd_table, fd, FD_FILE);
     if (!file) {
         return -1;
     }
@@ -169,11 +168,11 @@ int sys_seek(int fd, int whence, int offset) {
 int sys_fcntl(int fd, int op, void *arg) {
     pcb_t *current = get_current_pcb();
 
-    if (fd < 0 || fd >= current->fd_count) {
+    if (fd < 0) {
         return -1;
     }
 
-    fileio_t *file = current->fds[fd];
+    fileio_t *file = fd_get(&current->fd_table, fd, FD_FILE);
     if (!file) {
         return -1;
     }
@@ -183,24 +182,28 @@ int sys_fcntl(int fd, int op, void *arg) {
 
 int sys_dup(int fd) {
     pcb_t *current = get_current_pcb();
-    if (fd < 0 || fd >= current->fd_count) {
+    if (fd < 0) {
         return -1;
     }
 
-    fileio_t *file = current->fds[fd];
+    fileio_t *file = fd_get(&current->fd_table, fd, FD_FILE);
+    if (!file) {
+        return -1;
+    }
 
     fileio_t *new_file = kmalloc(sizeof(fileio_t));
+    if (!new_file) {
+        return -1;
+    }
     memcpy(new_file, file, sizeof(fileio_t));
 
-    current->fds =
-        krealloc(current->fds, sizeof(fileio_t *) * (++current->fd_count));
-
-    current->fds[current->fd_count - 1] = new_file;
-    if (current->fds[current->fd_count - 1] == NULL) {
+    int new_fd = fd_alloc(&current->fd_table, FD_FILE, new_file);
+    if (new_fd < 0) {
+        kfree(new_file);
         return -1;
     }
 
-    return current->fd_count - 1;
+    return new_fd;
 }
 
 int sys_getpid(void) {

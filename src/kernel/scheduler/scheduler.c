@@ -241,8 +241,9 @@ int proc_create(void (*entry)(), int flags, char *name) {
         proc->name = strdup(name);
     }
 
-    proc->fds      = NULL;
-    proc->fd_count = 0;
+    proc->fd_table.entries = NULL;
+    proc->fd_table.size = 0;
+
 
     int vflags = (flags & TF_MODE_USER ? VMO_USER_RW : VMO_KERNEL_RW);
     if (flags & TF_MODE_USER) {
@@ -470,30 +471,29 @@ int proc_fork(registers_t *regs) {
 
     child->wakeup_tick = 0;
 
-    child->fd_count = parent->fd_count;
-    if (parent->fd_count > 0) {
-        child->fds = kmalloc(sizeof(fileio_t *) * parent->fd_count);
-        if (!child->fds) {
-            kfree(child);
-            return -ENOMEM;
-        }
+    child->fd_table.entries = NULL;
+    child->fd_table.size = 0;
 
-        for (int i = 0; i < parent->fd_count; i++) {
-            fileio_t *pf = parent->fds[i];
-            if (pf) {
-                fileio_t *nf = kmalloc(sizeof(fileio_t));
-                if (!nf) {
-                    child->fds[i] = NULL;
-                    continue;
+    if (parent->fd_table.size > 0) {
+        for (size_t i = 0; i < parent->fd_table.size; i++) {
+            fd_entry_t *pe = &parent->fd_table.entries[i];
+            if (pe->type == FD_NONE)
+                continue;
+
+            if (pe->type == FD_FILE) {
+                fileio_t *pf = (fileio_t *)pe->ptr;
+                if (pf) {
+                    fileio_t *nf = kmalloc(sizeof(fileio_t));
+                    if (!nf) {
+                        continue;
+                    }
+                    memcpy(nf, pf, sizeof(fileio_t));
+                    fd_alloc(&child->fd_table, FD_FILE, nf);
                 }
-                memcpy(nf, pf, sizeof(fileio_t));
-                child->fds[i] = nf;
-            } else {
-                child->fds[i] = NULL;
+            } else if (pe->type == FD_DIR) {
+                fd_alloc(&child->fd_table, FD_DIR, pe->ptr);
             }
         }
-    } else {
-        child->fds = NULL;
     }
 
     child->cwd = parent->cwd;
@@ -504,7 +504,7 @@ int proc_fork(registers_t *regs) {
 
     child->cred = kmalloc(sizeof(user_cred_t));
     if (!child->cred) {
-        kfree(child->fds);
+        kfree(child->fd_table.entries);
         kfree(child);
         return -ENOMEM;
     }
@@ -516,7 +516,7 @@ int proc_fork(registers_t *regs) {
     child->threads = kmalloc(sizeof(tcb_t *));
     if (!child->threads) {
         kfree(child->cred);
-        kfree(child->fds);
+        kfree(child->fd_table.entries);
         kfree(child);
         return -ENOMEM;
     }
@@ -525,7 +525,7 @@ int proc_fork(registers_t *regs) {
     if (!child_thread) {
         kfree(child->threads);
         kfree(child->cred);
-        kfree(child->fds);
+        kfree(child->fd_table.entries);
         kfree(child);
         return -ENOMEM;
     }
@@ -543,7 +543,7 @@ int proc_fork(registers_t *regs) {
         kfree(child_thread);
         kfree(child->threads);
         kfree(child->cred);
-        kfree(child->fds);
+        kfree(child->fd_table.entries);
         kfree(child);
         return -ENOMEM;
     }
@@ -555,7 +555,7 @@ int proc_fork(registers_t *regs) {
         kfree(child_thread);
         kfree(child->threads);
         kfree(child->cred);
-        kfree(child->fds);
+        kfree(child->fd_table.entries);
         kfree(child);
         return -ENOMEM;
     }
