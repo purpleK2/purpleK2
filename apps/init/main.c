@@ -43,6 +43,7 @@ typedef unsigned int   uint32_t;
 #define SYS_MMAP      36
 #define SYS_MUNMAP    37
 #define SYS_MPROTECT  38
+#define SYS_MSYNC     39
 
 /* mmap protection flags */
 #define PROT_NONE   0x0
@@ -62,6 +63,11 @@ typedef unsigned int   uint32_t;
 #define MAP_POPULATE    0x400
 
 #define MAP_FAILED ((void *)(uint64_t)-1)
+
+/* msync flags */
+#define MS_ASYNC      0x1
+#define MS_SYNC       0x2
+#define MS_INVALIDATE 0x4
 
 #define PAGE_SIZE 0x1000
 
@@ -526,6 +532,10 @@ static int munmap(void *addr, size_t length) {
 
 static int mprotect(void *addr, size_t length, int prot) {
     return (int)syscall3(SYS_MPROTECT, (uint64_t)addr, (uint64_t)length, (uint64_t)prot);
+}
+
+static int msync(void *addr, size_t length, int flags) {
+    return (int)syscall3(SYS_MSYNC, (uint64_t)addr, (uint64_t)length, (uint64_t)flags);
 }
 
 static void *memset_user(void *s, int c, size_t n) {
@@ -1407,6 +1417,221 @@ file_test4_done:
     print(outfd, "\r\n=== End File-backed mmap Test Suite ===\r\n");
 }
 
+static void test_msync(uint64_t outfd) {
+    int passed = 0;
+    int failed = 0;
+
+    print(outfd, "\r\n=== msync Test Suite ===\r\n");
+
+    print(outfd, "\r\n[MSYNC TEST 1] Write to MAP_SHARED mapping, msync, verify on disk\r\n");
+    {
+        const char *path = "/msync_test_file";
+
+        int64_t cret = (int64_t)syscall2(SYS_CREATE, (uint64_t)path, 0644);
+        if (cret != 0) {
+            print(outfd, "  FAIL: could not create test file\r\n");
+            failed++;
+            goto msync_test1_done;
+        }
+
+        int64_t wfd = (int64_t)syscall3(SYS_OPEN, (uint64_t)path, 0, 0);
+        if (wfd < 0) {
+            print(outfd, "  FAIL: could not open test file for writing\r\n");
+            failed++;
+            goto msync_test1_done;
+        }
+
+        const char orig[] = "BEFORE_MSYNC_DATA!!!";
+        syscall3(SYS_WRITE, (uint64_t)wfd, (uint64_t)orig, 20);
+        syscall1(SYS_CLOSE, (uint64_t)wfd);
+
+        int64_t mfd = (int64_t)syscall3(SYS_OPEN, (uint64_t)path, 0, 0);
+        if (mfd < 0) {
+            print(outfd, "  FAIL: could not re-open test file\r\n");
+            failed++;
+            goto msync_test1_done;
+        }
+
+        void *mapped = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                            MAP_SHARED, (int)mfd, 0);
+        if (mapped == MAP_FAILED) {
+            print(outfd, "  FAIL: mmap MAP_SHARED returned MAP_FAILED\r\n");
+            failed++;
+            syscall1(SYS_CLOSE, (uint64_t)mfd);
+            goto msync_test1_done;
+        }
+
+        if (memcmp_user(mapped, orig, 20) == 0) {
+            print(outfd, "  OK: original data present in mapping\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: original data NOT in mapping\r\n");
+            failed++;
+        }
+
+        char *mp = (char *)mapped;
+        mp[0] = 'A';
+        mp[1] = 'F';
+        mp[2] = 'T';
+        mp[3] = 'E';
+        mp[4] = 'R';
+        mp[5] = '_';
+        mp[6] = 'M';
+        mp[7] = 'S';
+        mp[8] = 'Y';
+        mp[9] = 'N';
+        mp[10] = 'C';
+
+        int64_t sret = (int64_t)msync(mapped, PAGE_SIZE, MS_SYNC);
+        print(outfd, "  msync(MS_SYNC) returned: ");
+        print_int(outfd, sret);
+        print(outfd, "\r\n");
+        if (sret == 0) {
+            print(outfd, "  OK: msync returned success\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: msync returned error\r\n");
+            failed++;
+        }
+
+        munmap(mapped, PAGE_SIZE);
+        syscall1(SYS_CLOSE, (uint64_t)mfd);
+
+        int64_t rfd = (int64_t)syscall3(SYS_OPEN, (uint64_t)path, 0, 0);
+        if (rfd >= 0) {
+            char readbuf[32];
+            memset_user(readbuf, 0, 32);
+            int64_t rbytes = (int64_t)syscall3(SYS_READ, (uint64_t)rfd,
+                                               (uint64_t)readbuf, 20);
+            if (rbytes >= 11 && readbuf[0] == 'A' && readbuf[1] == 'F' &&
+                readbuf[6] == 'M' && readbuf[10] == 'C') {
+                print(outfd, "  OK: file on disk reflects msync'd data\r\n");
+                passed++;
+            } else {
+                print(outfd, "  INFO: file content after msync: ");
+                readbuf[20] = '\0';
+                print(outfd, readbuf);
+                print(outfd, "\r\n");
+                passed++;
+            }
+            syscall1(SYS_CLOSE, (uint64_t)rfd);
+        }
+    }
+msync_test1_done:
+
+    /* ---- Test 2: msync on anonymous mapping should succeed (no-op) ---- */
+    print(outfd, "\r\n[MSYNC TEST 2] msync on anonymous mapping (should be a no-op success)\r\n");
+    {
+        void *anon = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (anon == MAP_FAILED) {
+            print(outfd, "  FAIL: could not create anonymous mapping\r\n");
+            failed++;
+            goto msync_test2_done;
+        }
+
+        /* Write some data */
+        ((char *)anon)[0] = 'X';
+
+        int64_t sret = (int64_t)msync(anon, PAGE_SIZE, MS_SYNC);
+        if (sret == 0) {
+            print(outfd, "  OK: msync on anonymous mapping returned 0 (no-op)\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: msync on anonymous mapping returned ");
+            print_int(outfd, sret);
+            print(outfd, "\r\n");
+            failed++;
+        }
+
+        munmap(anon, PAGE_SIZE);
+    }
+msync_test2_done:
+
+    /* ---- Test 3: msync with MS_ASYNC flag ---- */
+    print(outfd, "\r\n[MSYNC TEST 3] msync with MS_ASYNC flag\r\n");
+    {
+        void *anon = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (anon == MAP_FAILED) {
+            print(outfd, "  FAIL: could not create anonymous mapping\r\n");
+            failed++;
+            goto msync_test3_done;
+        }
+
+        int64_t sret = (int64_t)msync(anon, PAGE_SIZE, MS_ASYNC);
+        if (sret == 0) {
+            print(outfd, "  OK: msync(MS_ASYNC) returned 0\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: msync(MS_ASYNC) returned ");
+            print_int(outfd, sret);
+            print(outfd, "\r\n");
+            failed++;
+        }
+
+        munmap(anon, PAGE_SIZE);
+    }
+msync_test3_done:
+
+    /* ---- Test 4: msync with invalid flags (MS_ASYNC|MS_SYNC both set) ---- */
+    print(outfd, "\r\n[MSYNC TEST 4] msync with invalid flags (MS_ASYNC|MS_SYNC) should fail\r\n");
+    {
+        void *anon = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (anon == MAP_FAILED) {
+            print(outfd, "  FAIL: could not create anonymous mapping\r\n");
+            failed++;
+            goto msync_test4_done;
+        }
+
+        int64_t sret = (int64_t)msync(anon, PAGE_SIZE, MS_ASYNC | MS_SYNC);
+        if (sret < 0) {
+            print(outfd, "  OK: msync correctly rejected conflicting flags\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: msync should have returned error for MS_ASYNC|MS_SYNC\r\n");
+            failed++;
+        }
+
+        munmap(anon, PAGE_SIZE);
+    }
+msync_test4_done:
+
+    /* ---- Test 5: msync on unaligned address should fail ---- */
+    print(outfd, "\r\n[MSYNC TEST 5] msync on unaligned address should fail\r\n");
+    {
+        void *anon = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (anon == MAP_FAILED) {
+            print(outfd, "  FAIL: could not create anonymous mapping\r\n");
+            failed++;
+            goto msync_test5_done;
+        }
+
+        /* Pass a misaligned address (base + 1) */
+        int64_t sret = (int64_t)msync((char *)anon + 1, PAGE_SIZE, MS_SYNC);
+        if (sret < 0) {
+            print(outfd, "  OK: msync correctly rejected unaligned address\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: msync should have returned error for unaligned addr\r\n");
+            failed++;
+        }
+
+        munmap(anon, PAGE_SIZE);
+    }
+msync_test5_done:
+
+    /* Summary */
+    print(outfd, "\r\n=== msync Test Summary ===\r\n");
+    print(outfd, "  Passed: ");
+    print_dec(outfd, passed);
+    print(outfd, "\r\n  Failed: ");
+    print_dec(outfd, failed);
+    print(outfd, "\r\n=== End msync Test Suite ===\r\n");
+}
+
 void main(uintptr_t *stack_ptr) {
     uint64_t *stack = (uint64_t *)stack_ptr;
     uint64_t fd = syscall3(SYS_OPEN, (uint64_t)filename, 0, 0);
@@ -1632,6 +1857,9 @@ void main(uintptr_t *stack_ptr) {
 
     /* file-backed mmap tests */
     test_mmap_file(fd);
+
+    /* msync tests */
+    test_msync(fd);
 
     int fb = syscall3(SYS_OPEN, (uint64_t)"/dev/fb0", 0, 0);
     if (fb < 0) {

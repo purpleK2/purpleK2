@@ -75,4 +75,19 @@ int do_munmap(struct vmc_t *vmc, void *addr, size_t length);
  */
 int do_mprotect(struct vmc_t *vmc, void *addr, size_t length, int prot);
 
+/**
+ * Core msync implementation
+ *
+ * Flushes changes made to a file-backed memory mapping back to the
+ * underlying file. For each resident page in the range, its contents
+ * are written to the backing vnode at the corresponding file offset.
+ *
+ * @param vmc     Virtual memory context for the process
+ * @param addr    Start address of the region to sync (must be page-aligned)
+ * @param length  Length of the region in bytes
+ * @param flags   MS_ASYNC, MS_SYNC, or MS_INVALIDATE
+ * @return        0 on success, negative errno on error
+ */
+int do_msync(struct vmc_t *vmc, void *addr, size_t length, int flags);
+
 #endif /* MMAP_H */

@@ -48,6 +48,7 @@ System calls can be triggered using either the `syscall` instruction or with int
 #define SYS_mmap 36
 #define SYS_munmap 37
 #define SYS_mprotect 38
+#define SYS_msync 39
 ```
 
 A complete table of all syscalls
@@ -82,3 +83,4 @@ A complete table of all syscalls
 | mmap         | Maps memory into the process address space    | 36                    | void\* addr or MAP_FAILED        | void\* addr   | size_t length | int prot     | int flags   | int fd      | size_t offset |
 | munmap       | Unmaps a memory mapping                       | 37                    | int (0 or -1)                    | void\* addr   | size_t length | /            | /           | /           | /             |
 | mprotect     | Changes protection on a memory mapping        | 38                    | int (0 or -1)                    | void\* addr   | size_t length | int prot     | /           | /           | /             |
+| msync        | Syncs memory-mapped file region to disk       | 39                    | int (0 or -1)                    | void\* addr   | size_t length | int flags    | /           | /           | /             |

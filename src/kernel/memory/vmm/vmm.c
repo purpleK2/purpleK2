@@ -83,7 +83,8 @@ vmm_node_t *vlist_node_alloc(size_t item_size) {
     vmm_node_t *v = (vmm_node_t *)PHYS_TO_VIRTUAL(
         pmm_alloc_pages(itemsize_aligned / PFRAME_SIZE));
 
-    v->len = itemsize_aligned;
+    v->len  = itemsize_aligned;
+    v->next = NULL;
 
     return v;
 }
@@ -115,7 +116,13 @@ void *vmmlist_alloc(vmm_node_t **root_node, size_t item_size) {
     item        = v_cur;
     v_cur->len -= item_size;
 
-    if (v_cur != (*root_node)) {
+    if (v_cur->len == 0) {
+        if (v_cur == (*root_node)) {
+            (*root_node) = v_cur->next;
+        } else if (v_prev) {
+            v_prev->next = v_cur->next;
+        }
+    } else if (v_cur != (*root_node)) {
         // shift the node (byte-level pointer arithmetic)
         v_prev->next = (vmm_node_t *)((void *)v_cur + item_size);
         memcpy(v_prev->next, v_cur, sizeof(vmm_node_t));
@@ -149,10 +156,10 @@ void vmmlist_free(vmm_node_t **root_node, size_t item_size, void *tofree) {
     vmm_node_t *v_prev   = NULL;
     vmm_node_t *v_tofree = tofree;
 
-    if (tofree < (*root_node)) {
+    if (tofree < (void *)(*root_node)) {
         v_cur = (*root_node);
 
-        if (((void *)v_tofree) + item_size == (*root_node)) {
+        if (((void *)v_tofree) + item_size == (void *)(*root_node)) {
             v_tofree->len  = (*root_node)->len + item_size;
             v_tofree->next = (*root_node)->next;
         } else {
@@ -161,8 +168,16 @@ void vmmlist_free(vmm_node_t **root_node, size_t item_size, void *tofree) {
         }
 
         (*root_node) = v_tofree;
+
+        if (v_tofree->len % PFRAME_SIZE == 0) {
+            (*root_node) = v_tofree->next;
+            pmm_free((void *)VIRT_TO_PHYSICAL(v_tofree),
+                     v_tofree->len / PFRAME_SIZE);
+        }
         return;
     }
+
+    vmm_node_t *modified_node = NULL;
 
     for (v_cur = (*root_node); v_cur != NULL; v_cur = v_cur->next) {
         vmm_node_t *v_next = v_cur->next;
@@ -175,18 +190,26 @@ void vmmlist_free(vmm_node_t **root_node, size_t item_size, void *tofree) {
         // if tofree sits right after current node
         if (((void *)v_cur + v_cur->len) == tofree) {
             v_cur->len += item_size;
+
+            if (v_next && ((void *)v_cur + v_cur->len) == (void *)v_next) {
+                v_cur->len += v_next->len;
+                v_cur->next = v_next->next;
+            }
+            modified_node = v_cur;
         } else if (v_next && ((void *)v_next - item_size) == tofree) {
             // here, if it sits right before the next node
             vmm_node_t *v_new = (vmm_node_t *)((void *)v_next - item_size);
             v_new->len        = v_next->len + item_size;
             v_new->next       = v_next->next;
             v_cur->next       = v_new;
+            modified_node     = v_new;
         } else {
             // last case, just put it in the middle of the two xD
             // this might also work at the end of the list (v_next is NULL)
             v_tofree->len  = item_size;
             v_tofree->next = v_next;
             v_cur->next    = v_tofree;
+            modified_node  = v_tofree;
         }
 
         break; // we don't need to go on with the loop
@@ -196,23 +219,31 @@ void vmmlist_free(vmm_node_t **root_node, size_t item_size, void *tofree) {
         v_prev->next = v_tofree;
         v_tofree->len = item_size;
         v_tofree->next = NULL;
+        modified_node = v_tofree;
         v_cur = v_tofree;
     }
 
-
-    if (v_cur->len % PFRAME_SIZE != 0) {
+    if (!modified_node || modified_node->len % PFRAME_SIZE != 0) {
         return;
     }
 
-    // if it's page-aligned (should be 0x1000 most of the time), we can free it
-    v_tofree = v_cur;
+    v_tofree = modified_node;
     if (v_tofree == (*root_node)) {
         (*root_node) = (*root_node)->next;
     } else {
-        v_prev->next = v_tofree->next;
+        vmm_node_t *prev_of_mod = NULL;
+        for (vmm_node_t *n = (*root_node); n != NULL; n = n->next) {
+            if (n->next == v_tofree) {
+                prev_of_mod = n;
+                break;
+            }
+        }
+        if (prev_of_mod) {
+            prev_of_mod->next = v_tofree->next;
+        }
     }
 
-    pmm_free(v_tofree, v_tofree->len / PFRAME_SIZE);
+    pmm_free((void *)VIRT_TO_PHYSICAL(v_tofree), v_tofree->len / PFRAME_SIZE);
 }
 
 // useful wrapper functions //
@@ -741,11 +772,6 @@ void *valloc_at(vmc_t *ctx, void *addr, size_t pages, uint8_t flags, void *phys)
     return (void *)(base + offset);
 }
 
-/**
- * Allocate a VMO without backing physical pages (demand-paged).
- * Pages will be individually allocated and mapped by the page fault handler
- * on first access. This implements Linux-style lazy allocation for file-backed mmap.
- */
 void *valloc_at_lazy(vmc_t *ctx, void *addr, size_t pages, uint8_t flags,
                      struct vnode *vnode, size_t file_offset) {
     spinlock_acquire(&VMM_LOCK);
@@ -792,7 +818,6 @@ void *valloc_at_lazy(vmc_t *ctx, void *addr, size_t pages, uint8_t flags,
         prev_vmo->next = vmo;
     }
 
-    /* No physical allocation or page mapping -- pages are faulted in on demand */
     debugf_debug("Created lazy VMO %p at %p (%zu pages, vnode=%p offset=%zu)\n",
                  vmo, (void *)base, pages, vnode, file_offset);
 
@@ -800,10 +825,6 @@ void *valloc_at_lazy(vmc_t *ctx, void *addr, size_t pages, uint8_t flags,
     return (void *)base;
 }
 
-/**
- * Find the VMO that contains the given virtual address.
- * Returns NULL if no matching VMO is found.
- */
 vmo_t *vmo_find_by_addr(vmc_t *vmc, uint64_t addr) {
     if (!vmc) return NULL;
 
@@ -856,8 +877,6 @@ void vfree(vmc_t *ctx, void *ptr, bool free) {
     uint64_t *pml4_virt = (uint64_t *)PHYS_TO_VIRTUAL(ctx->pml4_table);
 
     if (cur_vmo->flags & VMO_LAZY) {
-        /* Demand-paged VMO: pages were individually allocated on fault,
-         * so we must free them one by one */
         for (size_t i = 0; i < cur_vmo->len; i++) {
             uint64_t virt = cur_vmo->base + i * PFRAME_SIZE;
             uint64_t phys = pg_virtual_to_phys(pml4_virt, virt);
@@ -865,12 +884,10 @@ void vfree(vmc_t *ctx, void *ptr, bool free) {
                 pmm_free((void *)phys, 1);
             }
         }
-        /* Release the vnode reference held by this mapping */
         if (cur_vmo->backing_vnode) {
             vnode_unref(cur_vmo->backing_vnode);
         }
     } else {
-        /* Eagerly-allocated VMO: contiguous physical region */
         uint64_t phys = pg_virtual_to_phys(pml4_virt, cur_vmo->base);
         if (free)
             pmm_free((void *)phys, cur_vmo->len);

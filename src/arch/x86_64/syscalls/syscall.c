@@ -676,6 +676,15 @@ int sys_mprotect(void __user *addr, size_t length, int prot) {
     return do_mprotect(current->vmc, addr, length, prot);
 }
 
+int sys_msync(void __user *addr, size_t length, int flags) {
+    pcb_t *current = get_current_pcb();
+    if (!current || !current->vmc) {
+        return -1;
+    }
+
+    return do_msync(current->vmc, addr, length, flags);
+}
+
 void* syscall_table[] = {
     (void*)sys_exit,
     (void*)sys_open,
@@ -716,4 +725,5 @@ void* syscall_table[] = {
     (void*)sys_mmap,
     (void*)sys_munmap,
     (void*)sys_mprotect,
+    (void*)sys_msync,
 };

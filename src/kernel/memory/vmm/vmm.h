@@ -15,7 +15,6 @@ typedef struct vmo_t {
     size_t len; // length is in pages (4KiB blocks)!!
     uint64_t flags;
 
-    // File-backed mmap (demand paging) -- NULL/0 for anonymous mappings
     struct vnode *backing_vnode;
     size_t file_offset;
 

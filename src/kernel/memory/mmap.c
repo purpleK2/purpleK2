@@ -5,7 +5,7 @@
 #include <memory/pmm/pmm.h>
 #include <paging/paging.h>
 #include <scheduler/scheduler.h>
-#include <fs/vfs/vfs.h>
+#include <fs/ramfs/ramfs.h>
 #include <errors.h>
 
 #include <string.h>
@@ -119,8 +119,6 @@ void *do_mmap(vmc_t *vmc, void *addr, size_t length, int prot,
 
     uint8_t vmo_flags = prot_to_vmo_flags(prot);
 
-    /* Device mmap: if the vnode provides its own mmap handler, delegate to it.
-     * The handler (e.g. framebuffer) maps device physical memory directly. */
     if (!(flags & MAP_ANONYMOUS) && vnode && vnode->ops && vnode->ops->mmap) {
         void *target_addr = NULL;
 
@@ -145,9 +143,6 @@ void *do_mmap(vmc_t *vmc, void *addr, size_t length, int prot,
         return target_addr;
     }
 
-    /* File-backed mappings (non-anonymous with a vnode) use demand paging:
-     * pages are lazily allocated and populated on first access via #PF,
-     * just like Linux's mmap for regular files. */
     bool demand_page = !(flags & MAP_ANONYMOUS) && vnode != NULL;
 
     void *map_addr = NULL;
@@ -205,7 +200,6 @@ void *do_mmap(vmc_t *vmc, void *addr, size_t length, int prot,
         return MAP_FAILED;
     }
 
-    /* Eager mappings (anonymous): zero the pages now */
     if (!demand_page) {
         uint64_t *pml4 = (uint64_t *)PHYS_TO_VIRTUAL(vmc->pml4_table);
         for (size_t i = 0; i < pages; i++) {
@@ -217,8 +211,6 @@ void *do_mmap(vmc_t *vmc, void *addr, size_t length, int prot,
             }
         }
     }
-    /* Demand-paged (file-backed) mappings: pages will be populated on first
-     * access via the page fault handler, which reads from the backing vnode */
 
     return map_addr;
 }
@@ -242,6 +234,81 @@ int do_munmap(vmc_t *vmc, void *addr, size_t length) {
     (void)aligned_length;
 
     vfree(vmc, addr, true);
+
+    return 0;
+}
+
+int do_msync(vmc_t *vmc, void *addr, size_t length, int flags) {
+    if (!vmc || !addr) {
+        return -EINVAL;
+    }
+
+    if (length == 0) {
+        return -EINVAL;
+    }
+
+    uint64_t base = (uint64_t)(uintptr_t)addr;
+
+    if (base & (MMAP_PAGE_SIZE - 1)) {
+        return -EINVAL;
+    }
+
+    if ((flags & MS_ASYNC) && (flags & MS_SYNC)) {
+        return -EINVAL;
+    }
+    if (!(flags & (MS_ASYNC | MS_SYNC))) {
+        return -EINVAL;
+    }
+
+    size_t aligned_length = page_align_up(length);
+    size_t pages = aligned_length / MMAP_PAGE_SIZE;
+
+    vmo_t *vmo = vmo_find_by_addr(vmc, base);
+    if (!vmo) {
+        return -EINVAL;
+    }
+
+    if (!vmo->backing_vnode) {
+        return 0;
+    }
+
+    uint64_t *pml4 = (uint64_t *)PHYS_TO_VIRTUAL(vmc->pml4_table);
+
+    size_t file_size = 0;
+    if (vmo->backing_vnode->node_data) {
+        ramfs_node_t *rn = (ramfs_node_t *)vmo->backing_vnode->node_data;
+        file_size = rn->size;
+    }
+
+    for (size_t i = 0; i < pages; i++) {
+        uint64_t virt = base + i * MMAP_PAGE_SIZE;
+
+        if (virt < vmo->base ||
+            virt >= vmo->base + vmo->len * MMAP_PAGE_SIZE) {
+            continue;
+        }
+
+        uint64_t phys = pg_virtual_to_phys(pml4, virt);
+        if (!phys) {
+            continue;
+        }
+
+        void *page_kaddr = (void *)PHYS_TO_VIRTUAL(phys);
+        size_t file_off  = vmo->file_offset + (virt - vmo->base);
+
+        if (file_off >= file_size) {
+            continue;
+        }
+        size_t write_len = MMAP_PAGE_SIZE;
+        if (file_off + write_len > file_size) {
+            write_len = file_size - file_off;
+        }
+
+        ramfs_node_t *rn = (ramfs_node_t *)vmo->backing_vnode->node_data;
+        if (rn && rn->data) {
+            memcpy(rn->data + file_off, page_kaddr, write_len);
+        }
+    }
 
     return 0;
 }
