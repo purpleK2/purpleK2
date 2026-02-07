@@ -257,11 +257,12 @@ void pf_handler(registers_t *ctx) {
                         proc->vmc->pml4_table);
                     uint64_t pg_flags = vmo_to_page_flags(vmo->flags);
                     map_phys_to_page(pml4, (uint64_t)phys, page_virt, pg_flags);
-
+#ifdef CONFIG_VMM_DEBUG
                     debugf_debug("Demand-paged %p -> phys %p (vnode=%p off=%zu)\n",
                                  (void *)page_virt, phys,
                                  vmo->backing_vnode,
                                  vmo->file_offset + (page_virt - vmo->base));
+#endif
                     return;
                 }
             }

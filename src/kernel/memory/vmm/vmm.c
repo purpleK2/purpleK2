@@ -764,10 +764,10 @@ void *valloc_at(vmc_t *ctx, void *addr, size_t pages, uint8_t flags, void *phys)
         vmo_to_page_flags(flags)
     );
 
-    // add a lot of debugging
+#ifdef CONFIG_VMM_DEBUG
     debugf_debug("Created VMO %p at requested address %p (%zu pages) (range %p - %p)\n",
                  vmo, (void *)base, pages, (void *)base, (void *)(base + pages * PFRAME_SIZE));
-
+#endif
     spinlock_release(&VMM_LOCK);
     return (void *)(base + offset);
 }
@@ -817,10 +817,10 @@ void *valloc_at_lazy(vmc_t *ctx, void *addr, size_t pages, uint8_t flags,
         vmo->next = prev_vmo->next;
         prev_vmo->next = vmo;
     }
-
+#ifdef CONFIG_VMM_DEBUG
     debugf_debug("Created lazy VMO %p at %p (%zu pages, vnode=%p offset=%zu)\n",
                  vmo, (void *)base, pages, vnode, file_offset);
-
+#endif
     spinlock_release(&VMM_LOCK);
     return (void *)base;
 }
