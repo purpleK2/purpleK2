@@ -488,8 +488,17 @@ int devfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count) {
 }
 
 static int devfs_mmap(vnode_t *vnode, void *addr, size_t length, int prot, int flags, size_t offset) {
-    (void)vnode; (void)addr; (void)length; (void)prot; (void)flags; (void)offset;
-    return EOK;
+    // call mmap on the device
+    if (!vnode || !addr) {
+        return ENULLPTR;
+    }
+
+    devfs_node_t *node = vnode->node_data;
+    if (!node || !node->device || !node->device->mmap) {
+        return ENOIMPL;
+    }
+
+    return node->device->mmap(node->device, addr, length, prot, flags, offset);
 }
 
 vnops_t devfs_vnops = {

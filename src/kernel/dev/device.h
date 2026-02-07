@@ -30,6 +30,8 @@ typedef struct device {
     int (*write)(struct device *dev, const void *buffer, size_t size,
                  size_t offset);
     int (*ioctl)(struct device *dev, int request, void *arg);
+    int (*mmap)(struct device *dev, void *addr, size_t length, int prot,
+                int flags, size_t offset);
     void *data;
 } device_t;
 

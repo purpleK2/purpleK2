@@ -119,6 +119,32 @@ void *do_mmap(vmc_t *vmc, void *addr, size_t length, int prot,
 
     uint8_t vmo_flags = prot_to_vmo_flags(prot);
 
+    /* Device mmap: if the vnode provides its own mmap handler, delegate to it.
+     * The handler (e.g. framebuffer) maps device physical memory directly. */
+    if (!(flags & MAP_ANONYMOUS) && vnode && vnode->ops && vnode->ops->mmap) {
+        void *target_addr = NULL;
+
+        if (flags & MAP_FIXED) {
+            uint64_t base = (uint64_t)(uintptr_t)addr;
+            if (base & (MMAP_PAGE_SIZE - 1)) {
+                return MAP_FAILED;
+            }
+            target_addr = addr;
+        } else {
+            target_addr = find_free_region(vmc, pages);
+            if (!target_addr) {
+                return MAP_FAILED;
+            }
+        }
+
+        int ret = vnode->ops->mmap(vnode, target_addr, aligned_length, prot, flags, offset);
+        if (ret != 0) {
+            return MAP_FAILED;
+        }
+
+        return target_addr;
+    }
+
     void *map_addr = NULL;
 
     if (flags & MAP_FIXED) {

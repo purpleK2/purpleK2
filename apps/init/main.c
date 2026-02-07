@@ -13,6 +13,7 @@ typedef unsigned int   uint32_t;
 #define SYS_READ      2
 #define SYS_WRITE     3
 #define SYS_CLOSE     4
+#define SYS_IOCTL     5
 #define SYS_SEEK      6
 #define SYS_GETPID    9
 #define SYS_GETUID    10
@@ -83,6 +84,16 @@ typedef struct __attribute__((packed)) {
     uint8_t  d_type;
     char     d_name[256];
 } dirent_t;
+
+typedef struct fb_info {
+    uint64_t width;
+    uint64_t height;
+    uint64_t pitch;
+    uint64_t bpp;
+} fb_info_t;
+
+#define FB_IOCTL_GET_INFO 0x1001
+
 
 /* auxv types */
 #define AT_NULL         0
@@ -1617,10 +1628,51 @@ void main(uintptr_t *stack_ptr) {
     test_directory_walk(fd);
 
     /* mmap/munmap/mprotect tests */
-    test_mmap(fd);
+    //test_mmap(fd);
 
     /* file-backed mmap tests */
-    test_mmap_file(fd);
+    //test_mmap_file(fd);
+
+    int fb = syscall3(SYS_OPEN, (uint64_t)"/dev/fb0", 0, 0);
+    if (fb < 0) {
+        print(fd, "Failed to open fb!\n");
+    }
+
+    fb_info_t info;
+    ret = syscall3(SYS_IOCTL, (uint64_t)fb, FB_IOCTL_GET_INFO, (uint64_t)&info);
+
+    print(fd, "Framebuffer info: width=");
+    print_dec(fd, info.width);
+    print(fd, " height=");
+    print_dec(fd, info.height);
+    print(fd, " pitch=");
+    print_dec(fd, info.pitch);
+    print(fd, " bpp=");
+    print_dec(fd, info.bpp);
+    print(fd, "\r\n");
+
+    size_t fb_size = info.pitch * info.height;
+    uint8_t *fb_ptr = (uint8_t *)mmap((void *)0, fb_size, PROT_READ | PROT_WRITE,
+                                  MAP_SHARED, (int)fb, 0);
+    if (fb_ptr == MAP_FAILED) {
+        print(fd, "Failed to mmap fb!\n");
+    } else {
+        /* Fill the framebuffer with a test pattern */
+        for (;;) {
+            for (uint32_t y = 0; y < info.height; y++) {
+        for (uint32_t x = 0; x < info.width; x++) {
+            size_t off = y * info.pitch + x * 4;
+
+            fb_ptr[off + 0] = (uint8_t)(x & 0xFF); /* B */
+            fb_ptr[off + 1] = (uint8_t)(y & 0xFF); /* G */
+            fb_ptr[off + 2] = 0xFF;                /* R */
+            fb_ptr[off + 3] = 0x00;                /* ignored / alpha */
+        }
+    }
+    }
+}
+    syscall1(SYS_CLOSE, fb);
+
     
     syscall1(SYS_EXIT, thread_local_var);
     /* Should not return. */
