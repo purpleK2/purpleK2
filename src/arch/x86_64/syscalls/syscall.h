@@ -35,6 +35,12 @@
 #define SYS_opendir   27
 #define SYS_readdir   28
 #define SYS_closedir  29
+#define SYS_mkdir     30
+#define SYS_create    31
+#define SYS_rmdir     32
+#define SYS_remove    33
+#define SYS_symlink   34
+#define SYS_readlink  35
 
 void set_syscall_context(registers_t *ctx);
 registers_t *get_syscall_context(void);
@@ -69,5 +75,11 @@ int sys_umount(const char __user *path);
 int sys_opendir(const char __user *path);
 int sys_readdir(int fd, dirent_t __user *entry);
 int sys_closedir(int fd);
+int sys_mkdir(const char __user *path, int mode);
+int sys_create(const char __user *path, mode_t mode);
+int sys_rmdir(const char __user *path);
+int sys_remove(const char __user *path);
+int sys_symlink(const char __user *target, const char __user *linkpath);
+int sys_readlink(const char __user *path, char __user *buf, size_t size);
 
 #endif // SYSCALL_H

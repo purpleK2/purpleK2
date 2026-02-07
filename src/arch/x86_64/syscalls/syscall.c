@@ -557,6 +557,83 @@ int sys_closedir(int fd) {
     return 0;
 }
 
+int sys_mkdir(const char __user *path, int mode) {
+    char kernel_path[4096];
+    if (strncpy_from_user(kernel_path, path, sizeof(kernel_path)) < 0) {
+        return -1;
+    }
+    kernel_path[sizeof(kernel_path) - 1] = '\0';
+
+    return vfs_mkdir(kernel_path, mode);
+}
+
+int sys_create(const char __user *path, mode_t mode) {
+    char kernel_path[4096];
+    if (strncpy_from_user(kernel_path, path, sizeof(kernel_path)) < 0) {
+        return -1;
+    }
+    kernel_path[sizeof(kernel_path) - 1] = '\0';
+
+    return vfs_create(kernel_path, mode);
+}
+
+int sys_rmdir(const char __user *path) {
+    char kernel_path[4096];
+    if (strncpy_from_user(kernel_path, path, sizeof(kernel_path)) < 0) {
+        return -1;
+    }
+    kernel_path[sizeof(kernel_path) - 1] = '\0';
+
+    return vfs_rmdir(kernel_path);
+}
+
+int sys_remove(const char __user *path) {
+    char kernel_path[4096];
+    if (strncpy_from_user(kernel_path, path, sizeof(kernel_path)) < 0) {
+        return -1;
+    }
+    kernel_path[sizeof(kernel_path) - 1] = '\0';
+
+    return vfs_remove(kernel_path);
+}
+
+int sys_symlink(const char __user *target, const char __user *linkpath) {
+    char kernel_target[4096];
+    char kernel_linkpath[4096];
+
+    if (strncpy_from_user(kernel_target, target, sizeof(kernel_target)) < 0) {
+        return -1;
+    }
+    kernel_target[sizeof(kernel_target) - 1] = '\0';
+
+    if (strncpy_from_user(kernel_linkpath, linkpath, sizeof(kernel_linkpath)) < 0) {
+        return -1;
+    }
+    kernel_linkpath[sizeof(kernel_linkpath) - 1] = '\0';
+
+    return vfs_symlink(kernel_target, kernel_linkpath);
+}
+
+int sys_readlink(const char __user *path, char __user *buf, size_t size) {
+    char kernel_path[4096];
+    if (strncpy_from_user(kernel_path, path, sizeof(kernel_path)) < 0) {
+        return -1;
+    }
+    kernel_path[sizeof(kernel_path) - 1] = '\0';
+
+    char kbuf[size];
+    int ret = vfs_readlink(kernel_path, kbuf, sizeof(kbuf));
+    if (ret < 0) {
+        return -1;
+    }
+
+    if (copy_to_user(buf, kbuf, ret) != 0) {
+        return -1;
+    }
+
+    return ret;
+}
+
 void* syscall_table[] = {
     (void*)sys_exit,
     (void*)sys_open,
@@ -587,5 +664,11 @@ void* syscall_table[] = {
     (void*)sys_umount,
     (void*)sys_opendir,
     (void*)sys_readdir,
-    (void*)sys_closedir
+    (void*)sys_closedir,
+    (void*)sys_mkdir,
+    (void*)sys_create,
+    (void*)sys_rmdir,
+    (void*)sys_remove,
+    (void*)sys_symlink,
+    (void*)sys_readlink,
 };

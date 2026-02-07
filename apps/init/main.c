@@ -8,15 +8,15 @@ typedef unsigned long  size_t;
 typedef unsigned int   uint32_t;
 
 /* syscall numbers */
-#define SYS_EXIT   0
-#define SYS_OPEN   1
-#define SYS_WRITE  3
-#define SYS_GETPID 9
-#define SYS_GETUID 10
-#define SYS_GETEUID 11
-#define SYS_GETGID 12
-#define SYS_GETEGID 13
-#define SYS_SETUID     14
+#define SYS_EXIT      0
+#define SYS_OPEN      1
+#define SYS_WRITE     3
+#define SYS_GETPID    9
+#define SYS_GETUID    10
+#define SYS_GETEUID   11
+#define SYS_GETGID    12
+#define SYS_GETEGID   13
+#define SYS_SETUID    14
 #define SYS_SETEUID   15
 #define SYS_SETREUID  16
 #define SYS_SETRESUID 17
@@ -30,6 +30,12 @@ typedef unsigned int   uint32_t;
 #define SYS_OPENDIR   27
 #define SYS_READDIR   28
 #define SYS_CLOSEDIR  29
+#define SYS_MKDIR     30
+#define SYS_CREATE    31
+#define SYS_RMDIR     32
+#define SYS_REMOVE    33
+#define SYS_SYMLINK   34
+#define SYS_READLINK  35
 
 /* vnode types for d_type */
 #define VNODE_NULL    0
@@ -180,6 +186,16 @@ static void print_dec(uint64_t fd, uint64_t value) {
     syscall3(SYS_WRITE, fd, (uint64_t)&buf[i + 1], 19 - i);
 }
 
+static void print_int(uint64_t fd, int64_t value) {
+    if (value < 0) {
+        print(fd, "-");
+        uint64_t v = (uint64_t)(-value);
+        print_dec(fd, v);
+    } else {
+        print_dec(fd, (uint64_t)value);
+    }
+}
+
 static const char *auxv_type_name(uint64_t type) {
     switch (type) {
         case AT_NULL:     return "AT_NULL";
@@ -236,6 +252,30 @@ static int64_t sys_readdir_call(int64_t dirfd, dirent_t *entry) {
 
 static int64_t sys_closedir(int64_t dirfd) {
     return (int64_t)syscall1(SYS_CLOSEDIR, (uint64_t)dirfd);
+}
+
+static int64_t sys_mkdir_call(const char *path, int mode) {
+    return (int64_t)syscall2(SYS_MKDIR, (uint64_t)path, (uint64_t)mode);
+}
+
+static int64_t sys_create_call(const char *path, int mode) {
+    return (int64_t)syscall2(SYS_CREATE, (uint64_t)path, (uint64_t)mode);
+}
+
+static int64_t sys_rmdir_call(const char *path) {
+    return (int64_t)syscall1(SYS_RMDIR, (uint64_t)path);
+}
+
+static int64_t sys_remove_call(const char *path) {
+    return (int64_t)syscall1(SYS_REMOVE, (uint64_t)path);
+}
+
+static int64_t sys_symlink_call(const char *target, const char *linkpath) {
+    return (int64_t)syscall2(SYS_SYMLINK, (uint64_t)target, (uint64_t)linkpath);
+}
+
+static int64_t sys_readlink_call(const char *path, char *buf, size_t size) {
+    return (int64_t)syscall3(SYS_READLINK, (uint64_t)path, (uint64_t)buf, (uint64_t)size);
 }
 
 static void print_indent(uint64_t fd, int depth) {
@@ -325,6 +365,96 @@ static void test_directory_walk(uint64_t outfd) {
     walk_directory(outfd, "/", 0);
     
     print(outfd, "\r\n=== End Directory Walking Test ===\r\n");
+}
+
+static void test_fs_syscalls(uint64_t outfd) {
+    const char *base_dir  = "/syscall_test";
+    const char *file_path = "/syscall_test/test_file";
+    const char *link_path = "/syscall_test/test_link";
+
+    int64_t ret;
+
+    /* Pass 1: create, verify, then clean up */
+    print(outfd, "\r\n=== FS syscall tests (pass 1, with cleanup) ===\r\n");
+
+    ret = sys_mkdir_call(base_dir, 0755);
+    print(outfd, "sys_mkdir(\"/syscall_test\") = ");
+    print_int(outfd, ret);
+    print(outfd, "\r\n");
+
+    ret = sys_create_call(file_path, 0644);
+    print(outfd, "sys_create(\"/syscall_test/test_file\") = ");
+    print_int(outfd, ret);
+    print(outfd, "\r\n");
+
+    ret = sys_symlink_call(file_path, link_path);
+    print(outfd, "sys_symlink(target=\"/syscall_test/test_file\", link=\"/syscall_test/test_link\") = ");
+    print_int(outfd, ret);
+    print(outfd, "\r\n");
+
+    char buf[256];
+    for (int i = 0; i < (int)sizeof(buf); i++) {
+        buf[i] = '\0';
+    }
+
+    int64_t readlen = sys_readlink_call(link_path, buf, sizeof(buf) - 1);
+    print(outfd, "sys_readlink(\"/syscall_test/test_link\") = ");
+    print_int(outfd, readlen);
+    print(outfd, ", target=\"");
+    if (readlen > 0 && readlen < (int64_t)sizeof(buf)) {
+        buf[readlen] = '\0';
+        print(outfd, buf);
+    }
+    print(outfd, "\"\r\n");
+
+    ret = sys_remove_call(file_path);
+    print(outfd, "sys_remove(\"/syscall_test/test_file\") = ");
+    print_int(outfd, ret);
+    print(outfd, "\r\n");
+
+    ret = sys_remove_call(link_path);
+    print(outfd, "sys_remove(\"/syscall_test/test_link\") = ");
+    print_int(outfd, ret);
+    print(outfd, "\r\n");
+
+    ret = sys_rmdir_call(base_dir);
+    print(outfd, "sys_rmdir(\"/syscall_test\") = ");
+    print_int(outfd, ret);
+    print(outfd, "\r\n");
+
+    /* Pass 2: create and verify again, but keep artifacts */
+    print(outfd, "\r\n=== FS syscall tests (pass 2, keep artifacts) ===\r\n");
+
+    ret = sys_mkdir_call(base_dir, 0755);
+    print(outfd, "sys_mkdir(\"/syscall_test\") = ");
+    print_int(outfd, ret);
+    print(outfd, "\r\n");
+
+    ret = sys_create_call(file_path, 0644);
+    print(outfd, "sys_create(\"/syscall_test/test_file\") = ");
+    print_int(outfd, ret);
+    print(outfd, "\r\n");
+
+    ret = sys_symlink_call(file_path, link_path);
+    print(outfd, "sys_symlink(target=\"/syscall_test/test_file\", link=\"/syscall_test/test_link\") = ");
+    print_int(outfd, ret);
+    print(outfd, "\r\n");
+
+    for (int i = 0; i < (int)sizeof(buf); i++) {
+        buf[i] = '\0';
+    }
+
+    readlen = sys_readlink_call(link_path, buf, sizeof(buf) - 1);
+    print(outfd, "sys_readlink(\"/syscall_test/test_link\") = ");
+    print_int(outfd, readlen);
+    print(outfd, ", target=\"");
+    if (readlen > 0 && readlen < (int64_t)sizeof(buf)) {
+        buf[readlen] = '\0';
+        print(outfd, buf);
+    }
+    print(outfd, "\"\r\n");
+
+    print(outfd, "=== End FS syscall tests ===\r\n");
 }
 
 void main(uintptr_t *stack_ptr) {
@@ -540,6 +670,9 @@ void main(uintptr_t *stack_ptr) {
     print(fd, " s=");
     print_dec(fd, sgid);
     print(fd, "\r\n");
+
+    /* Filesystem syscall tests */
+    test_fs_syscalls(fd);
 
     /* Test directory walking */
     test_directory_walk(fd);
