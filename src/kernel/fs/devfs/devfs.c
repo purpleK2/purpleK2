@@ -487,6 +487,11 @@ int devfs_readdir(vnode_t *vnode, dirent_t *entries, size_t *count) {
     return EOK;
 }
 
+static int devfs_mmap(vnode_t *vnode, void *addr, size_t length, int prot, int flags, size_t offset) {
+    (void)vnode; (void)addr; (void)length; (void)prot; (void)flags; (void)offset;
+    return EOK;
+}
+
 vnops_t devfs_vnops = {
     .open    = devfs_open,
     .close   = devfs_close,
@@ -495,6 +500,7 @@ vnops_t devfs_vnops = {
     .ioctl   = devfs_ioctl,
     .lookup  = devfs_lookup,
     .readdir = devfs_readdir,
+    .mmap    = devfs_mmap,
 };
 
 static int devfs_vfs_mount(vfs_t *vfs, char *path, void *data) {

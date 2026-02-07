@@ -99,7 +99,7 @@ void *vmmlist_alloc(vmm_node_t **root_node, size_t item_size) {
     vmm_node_t *v_prev = NULL;
 
     // find a large enough block for a VMO
-    for (v_cur = (*root_node); v_cur->next != NULL; v_cur = v_cur->next) {
+    for (v_cur = (*root_node); v_cur != NULL; v_cur = v_cur->next) {
         if (v_cur->len >= item_size) {
             break;
         }
@@ -115,13 +115,13 @@ void *vmmlist_alloc(vmm_node_t **root_node, size_t item_size) {
     v_cur->len -= item_size;
 
     if (v_cur != (*root_node)) {
-        // shift the node
-        v_prev->next += item_size;
+        // shift the node (byte-level pointer arithmetic)
+        v_prev->next = (vmm_node_t *)((void *)v_cur + item_size);
         memcpy(v_prev->next, v_cur, sizeof(vmm_node_t));
         v_cur = v_prev->next;
     } else {
         // just shift the root node
-        (*root_node) = (void *)(*root_node) + item_size;
+        (*root_node) = (vmm_node_t *)((void *)(*root_node) + item_size);
         memcpy((*root_node), v_cur, sizeof(vmm_node_t));
     }
 
@@ -166,17 +166,17 @@ void vmmlist_free(vmm_node_t **root_node, size_t item_size, void *tofree) {
     for (v_cur = (*root_node); v_cur != NULL; v_cur = v_cur->next) {
         vmm_node_t *v_next = v_cur->next;
 
-        if (v_next < tofree) {
+        if (v_next != NULL && (void *)v_next < tofree) {
             v_prev = v_cur;
             continue;
         }
 
         // if tofree sits right after current node
-        if ((v_cur + (v_cur->len)) == tofree) {
+        if (((void *)v_cur + v_cur->len) == tofree) {
             v_cur->len += item_size;
-        } else if ((v_next - item_size) == tofree) {
+        } else if (v_next && ((void *)v_next - item_size) == tofree) {
             // here, if it sits right before the next node
-            vmm_node_t *v_new = (v_next - item_size);
+            vmm_node_t *v_new = (vmm_node_t *)((void *)v_next - item_size);
             v_new->len        = v_next->len + item_size;
             v_new->next       = v_next->next;
             v_cur->next       = v_new;

@@ -848,6 +848,11 @@ int procfs_readlink(vnode_t *vnode, char *buf, size_t size) {
     return EOK;
 }
 
+static int procfs_mmap(vnode_t *vnode, void *addr, size_t length, int prot, int flags, size_t offset) {
+    (void)vnode; (void)addr; (void)length; (void)prot; (void)flags; (void)offset;
+    return EOK;
+}
+
 vnops_t procfs_vnops = {
     .open    = procfs_open,
     .close   = procfs_close,
@@ -856,7 +861,8 @@ vnops_t procfs_vnops = {
     .ioctl   = procfs_ioctl,
     .lookup  = procfs_lookup,
     .readdir = procfs_readdir,
-	.readlink = procfs_readlink,
+    .readlink = procfs_readlink,
+    .mmap    = procfs_mmap,
 };
 
 static int procfs_vfs_mount(vfs_t *vfs, char *path, void *data) {

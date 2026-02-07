@@ -41,6 +41,9 @@
 #define SYS_remove    33
 #define SYS_symlink   34
 #define SYS_readlink  35
+#define SYS_mmap      36
+#define SYS_munmap    37
+#define SYS_mprotect  38
 
 void set_syscall_context(registers_t *ctx);
 registers_t *get_syscall_context(void);
@@ -81,5 +84,8 @@ int sys_rmdir(const char __user *path);
 int sys_remove(const char __user *path);
 int sys_symlink(const char __user *target, const char __user *linkpath);
 int sys_readlink(const char __user *path, char __user *buf, size_t size);
+long sys_mmap(void __user *addr, size_t length, int prot, int flags, int fd, size_t offset);
+int sys_munmap(void __user *addr, size_t length);
+int sys_mprotect(void __user *addr, size_t length, int prot);
 
 #endif // SYSCALL_H

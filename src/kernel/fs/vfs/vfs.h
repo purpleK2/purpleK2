@@ -94,6 +94,7 @@ typedef struct vnode_ops {
     int (*create)(vnode_t *, const char *, mode_t, vnode_t **);
     int (*remove)(vnode_t *, const char *);
     int (*symlink)(vnode_t *, const char *, const char *);
+    int (*mmap)(vnode_t *, void *, size_t, int, int, size_t);
 } vnops_t;
 
 typedef struct vnode {

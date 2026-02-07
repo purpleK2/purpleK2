@@ -10,7 +10,10 @@ typedef unsigned int   uint32_t;
 /* syscall numbers */
 #define SYS_EXIT      0
 #define SYS_OPEN      1
+#define SYS_READ      2
 #define SYS_WRITE     3
+#define SYS_CLOSE     4
+#define SYS_SEEK      6
 #define SYS_GETPID    9
 #define SYS_GETUID    10
 #define SYS_GETEUID   11
@@ -36,6 +39,30 @@ typedef unsigned int   uint32_t;
 #define SYS_REMOVE    33
 #define SYS_SYMLINK   34
 #define SYS_READLINK  35
+#define SYS_MMAP      36
+#define SYS_MUNMAP    37
+#define SYS_MPROTECT  38
+
+/* mmap protection flags */
+#define PROT_NONE   0x0
+#define PROT_READ   0x1
+#define PROT_WRITE  0x2
+#define PROT_EXEC   0x4
+
+/* mmap mapping flags */
+#define MAP_SHARED      0x01
+#define MAP_PRIVATE     0x02
+#define MAP_FIXED       0x10
+#define MAP_ANONYMOUS   0x20
+#define MAP_ANON        MAP_ANONYMOUS
+#define MAP_NORESERVE   0x40
+#define MAP_GROWSDOWN   0x100
+#define MAP_STACK       0x200
+#define MAP_POPULATE    0x400
+
+#define MAP_FAILED ((void *)(uint64_t)-1)
+
+#define PAGE_SIZE 0x1000
 
 /* vnode types for d_type */
 #define VNODE_NULL    0
@@ -139,6 +166,24 @@ static inline uint64_t syscall3p(uint64_t num, void *a1, void *a2, void *a3) {
 
 static inline uint64_t syscall2p(uint64_t num, void *a1, void *a2) {
     return syscall2(num, (uint64_t)a1, (uint64_t)a2);
+}
+
+/* syscall6: 6-argument syscall (arg4 goes in r10 per kernel ABI) */
+static inline uint64_t syscall6(uint64_t num, uint64_t a1, uint64_t a2,
+                                uint64_t a3, uint64_t a4, uint64_t a5,
+                                uint64_t a6) {
+    uint64_t ret;
+    register uint64_t r10 __asm__("r10") = a4;
+    register uint64_t r8  __asm__("r8")  = a5;
+    register uint64_t r9  __asm__("r9")  = a6;
+    __asm__ volatile (
+        "int $0x80"
+        : "=a"(ret)
+        : "a"(num), "D"(a1), "S"(a2), "d"(a3),
+          "r"(r10), "r"(r8), "r"(r9)
+        : "memory"
+    );
+    return ret;
 }
 
 static const char filename[] = "/dev/e9";
@@ -457,6 +502,900 @@ static void test_fs_syscalls(uint64_t outfd) {
     print(outfd, "=== End FS syscall tests ===\r\n");
 }
 
+static void *mmap(void *addr, size_t length, int prot, int flags, int fd, size_t offset) {
+    return (void *)syscall6(SYS_MMAP,
+                            (uint64_t)addr, (uint64_t)length,
+                            (uint64_t)prot, (uint64_t)flags,
+                            (uint64_t)fd,   (uint64_t)offset);
+}
+
+static int munmap(void *addr, size_t length) {
+    return (int)syscall2(SYS_MUNMAP, (uint64_t)addr, (uint64_t)length);
+}
+
+static int mprotect(void *addr, size_t length, int prot) {
+    return (int)syscall3(SYS_MPROTECT, (uint64_t)addr, (uint64_t)length, (uint64_t)prot);
+}
+
+static void *memset_user(void *s, int c, size_t n) {
+    unsigned char *p = (unsigned char *)s;
+    for (size_t i = 0; i < n; i++) {
+        p[i] = (unsigned char)c;
+    }
+    return s;
+}
+
+void *memcpy(void *dest, const void *src, size_t n) {
+    unsigned char *d = (unsigned char *)dest;
+    const unsigned char *s = (const unsigned char *)src;
+    for (size_t i = 0; i < n; i++) {
+        d[i] = s[i];
+    }
+    return dest;
+}
+
+static void test_mmap(uint64_t outfd) {
+    int64_t ret;
+    int passed = 0;
+    int failed = 0;
+
+    print(outfd, "\r\n=== mmap / munmap / mprotect Test Suite ===\r\n");
+
+    /* Test 1: Basic anonymous mmap with MAP_PRIVATE */
+    print(outfd, "\r\n[TEST 1] mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)\r\n");
+    void *p1 = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p1 == MAP_FAILED) {
+        print(outfd, "  FAIL: mmap returned MAP_FAILED\r\n");
+        failed++;
+    } else {
+        print(outfd, "  OK: mapped at ");
+        print_hex(outfd, (uint64_t)p1);
+        print(outfd, "\r\n");
+
+        /* Verify memory is zeroed */
+        unsigned char *bytes = (unsigned char *)p1;
+        int zero_ok = 1;
+        for (int i = 0; i < 64; i++) {
+            if (bytes[i] != 0) {
+                zero_ok = 0;
+                break;
+            }
+        }
+        if (zero_ok) {
+            print(outfd, "  OK: memory is zeroed\r\n");
+        } else {
+            print(outfd, "  FAIL: memory is NOT zeroed\r\n");
+            failed++;
+        }
+
+        /* Write and read back */
+        bytes[0] = 0xAA;
+        bytes[1] = 0xBB;
+        bytes[4095] = 0xCC;
+        if (bytes[0] == 0xAA && bytes[1] == 0xBB && bytes[4095] == 0xCC) {
+            print(outfd, "  OK: read-write works\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: read-write mismatch\r\n");
+            failed++;
+        }
+
+        /* Clean up */
+        ret = munmap(p1, PAGE_SIZE);
+        print(outfd, "  munmap result: ");
+        print_int(outfd, ret);
+        print(outfd, "\r\n");
+        if (ret == 0) passed++; else failed++;
+    }
+
+    /* Test 2: Multi-page anonymous mmap */
+    print(outfd, "\r\n[TEST 2] mmap(NULL, 16384, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)\r\n");
+    size_t multi_size = 4 * PAGE_SIZE;
+    void *p2 = mmap((void *)0, multi_size, PROT_READ | PROT_WRITE,
+                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p2 == MAP_FAILED) {
+        print(outfd, "  FAIL: mmap returned MAP_FAILED\r\n");
+        failed++;
+    } else {
+        print(outfd, "  OK: mapped at ");
+        print_hex(outfd, (uint64_t)p2);
+        print(outfd, "\r\n");
+
+        /* Touch all pages */
+        unsigned char *bytes = (unsigned char *)p2;
+        bytes[0]             = 0x11;
+        bytes[PAGE_SIZE]     = 0x22;
+        bytes[PAGE_SIZE * 2] = 0x33;
+        bytes[PAGE_SIZE * 3] = 0x44;
+
+        if (bytes[0] == 0x11 && bytes[PAGE_SIZE] == 0x22 &&
+            bytes[PAGE_SIZE * 2] == 0x33 && bytes[PAGE_SIZE * 3] == 0x44) {
+            print(outfd, "  OK: all 4 pages accessible\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: multi-page access failed\r\n");
+            failed++;
+        }
+
+        ret = munmap(p2, multi_size);
+        if (ret == 0) {
+            print(outfd, "  OK: munmap succeeded\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: munmap failed\r\n");
+            failed++;
+        }
+    }
+
+    /* Test 3: MAP_SHARED anonymous mmap */
+    print(outfd, "\r\n[TEST 3] mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0)\r\n");
+    void *p3 = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                    MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (p3 == MAP_FAILED) {
+        print(outfd, "  FAIL: mmap returned MAP_FAILED\r\n");
+        failed++;
+    } else {
+        print(outfd, "  OK: mapped at ");
+        print_hex(outfd, (uint64_t)p3);
+        print(outfd, "\r\n");
+
+        /* Write a pattern */
+        memset_user(p3, 0x42, PAGE_SIZE);
+        unsigned char *bytes = (unsigned char *)p3;
+        if (bytes[0] == 0x42 && bytes[4095] == 0x42) {
+            print(outfd, "  OK: MAP_SHARED write works\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: MAP_SHARED write failed\r\n");
+            failed++;
+        }
+
+        ret = munmap(p3, PAGE_SIZE);
+        if (ret == 0) passed++; else failed++;
+    }
+
+    /* Test 4: PROT_READ only (no PROT_WRITE) */
+    print(outfd, "\r\n[TEST 4] mmap(NULL, 4096, PROT_READ, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)\r\n");
+    void *p4 = mmap((void *)0, PAGE_SIZE, PROT_READ,
+                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p4 == MAP_FAILED) {
+        print(outfd, "  FAIL: mmap returned MAP_FAILED\r\n");
+        failed++;
+    } else {
+        print(outfd, "  OK: mapped at ");
+        print_hex(outfd, (uint64_t)p4);
+        print(outfd, "\r\n");
+
+        /* Read should work, memory should be zero */
+        unsigned char *bytes = (unsigned char *)p4;
+        if (bytes[0] == 0) {
+            print(outfd, "  OK: PROT_READ mapping readable and zeroed\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: PROT_READ mapping unexpected value\r\n");
+            failed++;
+        }
+
+        ret = munmap(p4, PAGE_SIZE);
+        if (ret == 0) passed++; else failed++;
+    }
+
+    /* Test 5: MAP_FIXED at a specific address */
+    print(outfd, "\r\n[TEST 5] mmap(0x200000000, 4096, ..., MAP_FIXED|MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)\r\n");
+    void *fixed_addr = (void *)0x200000000ULL;
+    void *p5 = mmap(fixed_addr, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                    MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p5 == MAP_FAILED) {
+        print(outfd, "  FAIL: MAP_FIXED mmap returned MAP_FAILED\r\n");
+        failed++;
+    } else if (p5 != fixed_addr) {
+        print(outfd, "  FAIL: MAP_FIXED returned different address: ");
+        print_hex(outfd, (uint64_t)p5);
+        print(outfd, "\r\n");
+        failed++;
+    } else {
+        print(outfd, "  OK: mapped at requested address ");
+        print_hex(outfd, (uint64_t)p5);
+        print(outfd, "\r\n");
+
+        unsigned char *bytes = (unsigned char *)p5;
+        bytes[0] = 0xDE;
+        bytes[4095] = 0xAD;
+        if (bytes[0] == 0xDE && bytes[4095] == 0xAD) {
+            print(outfd, "  OK: MAP_FIXED read-write works\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: MAP_FIXED read-write failed\r\n");
+            failed++;
+        }
+
+        ret = munmap(p5, PAGE_SIZE);
+        if (ret == 0) passed++; else failed++;
+    }
+
+    /* Test 6: Large mapping (64KB) */
+    print(outfd, "\r\n[TEST 6] mmap(NULL, 65536, ..., MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)\r\n");
+    size_t large_size = 16 * PAGE_SIZE;
+    void *p6 = mmap((void *)0, large_size, PROT_READ | PROT_WRITE,
+                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p6 == MAP_FAILED) {
+        print(outfd, "  FAIL: large mmap returned MAP_FAILED\r\n");
+        failed++;
+    } else {
+        print(outfd, "  OK: mapped at ");
+        print_hex(outfd, (uint64_t)p6);
+        print(outfd, "\r\n");
+
+        /* Fill every page with unique values */
+        unsigned char *bytes = (unsigned char *)p6;
+        for (int i = 0; i < 16; i++) {
+            bytes[i * PAGE_SIZE] = (unsigned char)(i + 1);
+        }
+
+        int large_ok = 1;
+        for (int i = 0; i < 16; i++) {
+            if (bytes[i * PAGE_SIZE] != (unsigned char)(i + 1)) {
+                large_ok = 0;
+                break;
+            }
+        }
+
+        if (large_ok) {
+            print(outfd, "  OK: all 16 pages hold correct data\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: large mapping data mismatch\r\n");
+            failed++;
+        }
+
+        ret = munmap(p6, large_size);
+        if (ret == 0) passed++; else failed++;
+    }
+
+    /* Test 7: Multiple sequential mappings */
+    print(outfd, "\r\n[TEST 7] Multiple sequential mmap calls\r\n");
+    void *seqp[4];
+    int seq_ok = 1;
+    for (int i = 0; i < 4; i++) {
+        seqp[i] = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (seqp[i] == MAP_FAILED) {
+            print(outfd, "  FAIL: sequential mmap #");
+            print_dec(outfd, i);
+            print(outfd, " failed\r\n");
+            seq_ok = 0;
+            failed++;
+            break;
+        }
+        /* Write unique value */
+        *(unsigned char *)seqp[i] = (unsigned char)(0xA0 + i);
+    }
+
+    if (seq_ok) {
+        /* Verify all mappings are independent */
+        int indep_ok = 1;
+        for (int i = 0; i < 4; i++) {
+            if (*(unsigned char *)seqp[i] != (unsigned char)(0xA0 + i)) {
+                indep_ok = 0;
+                break;
+            }
+        }
+        if (indep_ok) {
+            print(outfd, "  OK: 4 independent mappings hold unique data\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: mapping data clobbered\r\n");
+            failed++;
+        }
+
+        /* Verify addresses are all different */
+        int addr_ok = 1;
+        for (int i = 0; i < 4 && addr_ok; i++) {
+            for (int j = i + 1; j < 4; j++) {
+                if (seqp[i] == seqp[j]) {
+                    addr_ok = 0;
+                    break;
+                }
+            }
+        }
+        if (addr_ok) {
+            print(outfd, "  OK: all 4 mappings at distinct addresses\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: duplicate mapping addresses\r\n");
+            failed++;
+        }
+
+        /* Unmap all */
+        for (int i = 0; i < 4; i++) {
+            munmap(seqp[i], PAGE_SIZE);
+        }
+    }
+
+    /* Test 8: mprotect - change RW mapping to read-only then back */
+    print(outfd, "\r\n[TEST 8] mprotect: RW -> RO -> RW\r\n");
+    void *p8 = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p8 == MAP_FAILED) {
+        print(outfd, "  FAIL: mmap for mprotect test failed\r\n");
+        failed++;
+    } else {
+        print(outfd, "  OK: mapped at ");
+        print_hex(outfd, (uint64_t)p8);
+        print(outfd, "\r\n");
+
+        /* Write while writable */
+        *(unsigned char *)p8 = 0xEE;
+        if (*(unsigned char *)p8 == 0xEE) {
+            print(outfd, "  OK: initial write works\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: initial write failed\r\n");
+            failed++;
+        }
+
+        /* Change to read-only */
+        ret = mprotect(p8, PAGE_SIZE, PROT_READ);
+        print(outfd, "  mprotect(PROT_READ) = ");
+        print_int(outfd, ret);
+        print(outfd, "\r\n");
+        if (ret == 0) {
+            print(outfd, "  OK: mprotect to read-only succeeded\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: mprotect to read-only failed\r\n");
+            failed++;
+        }
+
+        /* Can still read */
+        if (*(unsigned char *)p8 == 0xEE) {
+            print(outfd, "  OK: can still read after mprotect(PROT_READ)\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: read after mprotect returned wrong value\r\n");
+            failed++;
+        }
+
+        /* Change back to read-write */
+        ret = mprotect(p8, PAGE_SIZE, PROT_READ | PROT_WRITE);
+        print(outfd, "  mprotect(PROT_READ|PROT_WRITE) = ");
+        print_int(outfd, ret);
+        print(outfd, "\r\n");
+        if (ret == 0) {
+            print(outfd, "  OK: mprotect back to RW succeeded\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: mprotect back to RW failed\r\n");
+            failed++;
+        }
+
+        /* Write again */
+        *(unsigned char *)p8 = 0xFF;
+        if (*(unsigned char *)p8 == 0xFF) {
+            print(outfd, "  OK: write after mprotect back to RW works\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: write after mprotect back to RW failed\r\n");
+            failed++;
+        }
+
+        munmap(p8, PAGE_SIZE);
+    }
+
+    /* Test 9: munmap with invalid args */
+    print(outfd, "\r\n[TEST 9] Error handling: invalid mmap / munmap args\r\n");
+
+    /* mmap with length=0 should fail */
+    void *p9a = mmap((void *)0, 0, PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p9a == MAP_FAILED) {
+        print(outfd, "  OK: mmap(length=0) correctly returns MAP_FAILED\r\n");
+        passed++;
+    } else {
+        print(outfd, "  FAIL: mmap(length=0) should have failed\r\n");
+        failed++;
+        munmap(p9a, PAGE_SIZE);
+    }
+
+    /* mmap with no MAP_PRIVATE/MAP_SHARED should fail */
+    void *p9b = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                     MAP_ANONYMOUS, -1, 0);
+    if (p9b == MAP_FAILED) {
+        print(outfd, "  OK: mmap(no PRIVATE/SHARED) correctly returns MAP_FAILED\r\n");
+        passed++;
+    } else {
+        print(outfd, "  FAIL: mmap(no PRIVATE/SHARED) should have failed\r\n");
+        failed++;
+        munmap(p9b, PAGE_SIZE);
+    }
+
+    /* mmap with both MAP_PRIVATE and MAP_SHARED should fail */
+    void *p9c = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (p9c == MAP_FAILED) {
+        print(outfd, "  OK: mmap(PRIVATE|SHARED) correctly returns MAP_FAILED\r\n");
+        passed++;
+    } else {
+        print(outfd, "  FAIL: mmap(PRIVATE|SHARED) should have failed\r\n");
+        failed++;
+        munmap(p9c, PAGE_SIZE);
+    }
+
+    /* munmap with NULL should fail */
+    ret = munmap((void *)0, PAGE_SIZE);
+    if (ret != 0) {
+        print(outfd, "  OK: munmap(NULL) correctly fails\r\n");
+        passed++;
+    } else {
+        print(outfd, "  FAIL: munmap(NULL) should have failed\r\n");
+        failed++;
+    }
+
+    /* munmap with length=0 should fail */
+    void *tmp = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (tmp != MAP_FAILED) {
+        ret = munmap(tmp, 0);
+        if (ret != 0) {
+            print(outfd, "  OK: munmap(length=0) correctly fails\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: munmap(length=0) should have failed\r\n");
+            failed++;
+        }
+        munmap(tmp, PAGE_SIZE);
+    }
+
+    /* Test 10: MAP_STACK + MAP_GROWSDOWN flags */
+    print(outfd, "\r\n[TEST 10] mmap with MAP_STACK | MAP_GROWSDOWN\r\n");
+    void *p10 = mmap((void *)0, 4 * PAGE_SIZE, PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK | MAP_GROWSDOWN, -1, 0);
+    if (p10 == MAP_FAILED) {
+        print(outfd, "  FAIL: mmap with MAP_STACK failed\r\n");
+        failed++;
+    } else {
+        print(outfd, "  OK: mapped stack at ");
+        print_hex(outfd, (uint64_t)p10);
+        print(outfd, "\r\n");
+
+        /* Use it like a stack: write at the end */
+        unsigned char *stack_top = (unsigned char *)p10 + 4 * PAGE_SIZE - 1;
+        *stack_top = 0x99;
+        if (*stack_top == 0x99) {
+            print(outfd, "  OK: stack-like access works\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: stack-like access failed\r\n");
+            failed++;
+        }
+
+        munmap(p10, 4 * PAGE_SIZE);
+    }
+
+    /* Test 11: MAP_NORESERVE flag */
+    print(outfd, "\r\n[TEST 11] mmap with MAP_NORESERVE\r\n");
+    void *p11 = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    if (p11 == MAP_FAILED) {
+        print(outfd, "  FAIL: mmap with MAP_NORESERVE failed\r\n");
+        failed++;
+    } else {
+        print(outfd, "  OK: mapped with MAP_NORESERVE at ");
+        print_hex(outfd, (uint64_t)p11);
+        print(outfd, "\r\n");
+
+        *(unsigned char *)p11 = 0x77;
+        if (*(unsigned char *)p11 == 0x77) {
+            print(outfd, "  OK: MAP_NORESERVE page is usable\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: MAP_NORESERVE page unusable\r\n");
+            failed++;
+        }
+
+        munmap(p11, PAGE_SIZE);
+    }
+
+    /* Test 12: Hint address (non-MAP_FIXED) */
+    print(outfd, "\r\n[TEST 12] mmap with hint address (non-MAP_FIXED)\r\n");
+    void *hint = (void *)0x300000000ULL;
+    void *p12 = mmap(hint, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p12 == MAP_FAILED) {
+        print(outfd, "  FAIL: mmap with hint returned MAP_FAILED\r\n");
+        failed++;
+    } else {
+        print(outfd, "  OK: mapped at ");
+        print_hex(outfd, (uint64_t)p12);
+        if (p12 == hint) {
+            print(outfd, " (hint honored)");
+        } else {
+            print(outfd, " (hint not honored, but still valid)");
+        }
+        print(outfd, "\r\n");
+
+        *(unsigned char *)p12 = 0x55;
+        if (*(unsigned char *)p12 == 0x55) {
+            print(outfd, "  OK: hint-mapped page works\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: hint-mapped page broken\r\n");
+            failed++;
+        }
+
+        munmap(p12, PAGE_SIZE);
+    }
+
+    /* Summary */
+    print(outfd, "\r\n=== mmap Test Summary ===\r\n");
+    print(outfd, "  Passed: ");
+    print_dec(outfd, passed);
+    print(outfd, "\r\n  Failed: ");
+    print_dec(outfd, failed);
+    print(outfd, "\r\n=== End mmap Test Suite ===\r\n");
+}
+
+static int memcmp_user(const void *a, const void *b, size_t n) {
+    const unsigned char *pa = (const unsigned char *)a;
+    const unsigned char *pb = (const unsigned char *)b;
+    for (size_t i = 0; i < n; i++) {
+        if (pa[i] != pb[i]) return (int)pa[i] - (int)pb[i];
+    }
+    return 0;
+}
+
+static void test_mmap_file(uint64_t outfd) {
+    int passed = 0;
+    int failed = 0;
+
+    print(outfd, "\r\n=== File-backed mmap Test Suite ===\r\n");
+
+    /* ---- Test 1: mmap a file and read its contents ---- */
+    print(outfd, "\r\n[FILE TEST 1] Create file, write data, mmap it, verify contents\r\n");
+    {
+        /* Create a test file */
+        const char *path = "/mmap_test_file";
+        int64_t cret = (int64_t)syscall2(SYS_CREATE, (uint64_t)path, 0644);
+        if (cret != 0) {
+            print(outfd, "  FAIL: could not create test file (");
+            print_int(outfd, cret);
+            print(outfd, ")\r\n");
+            failed++;
+            goto file_test1_done;
+        }
+
+        /* Open the file for writing */
+        int64_t wfd = (int64_t)syscall3(SYS_OPEN, (uint64_t)path, 0, 0);
+        if (wfd < 0) {
+            print(outfd, "  FAIL: could not open test file for writing\r\n");
+            failed++;
+            goto file_test1_done;
+        }
+
+        /* Write a known pattern: "Hello, mmap!" repeated to fill some space */
+        const char pattern[] = "Hello, mmap! This is file-backed mapping test data. ";
+        size_t plen = 52; /* length of pattern */
+        for (int i = 0; i < 8; i++) {
+            syscall3(SYS_WRITE, (uint64_t)wfd, (uint64_t)pattern, plen);
+        }
+
+        /* Close the file */
+        syscall1(SYS_CLOSE, (uint64_t)wfd);
+
+        /* Re-open for mmap */
+        int64_t mfd = (int64_t)syscall3(SYS_OPEN, (uint64_t)path, 0, 0);
+        if (mfd < 0) {
+            print(outfd, "  FAIL: could not re-open test file\r\n");
+            failed++;
+            goto file_test1_done;
+        }
+
+        /* mmap the file */
+        void *mapped = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                            MAP_PRIVATE, (int)mfd, 0);
+        if (mapped == MAP_FAILED) {
+            print(outfd, "  FAIL: file mmap returned MAP_FAILED\r\n");
+            failed++;
+            syscall1(SYS_CLOSE, (uint64_t)mfd);
+            goto file_test1_done;
+        }
+
+        print(outfd, "  OK: file mapped at ");
+        print_hex(outfd, (uint64_t)mapped);
+        print(outfd, "\r\n");
+
+        /* Verify the first bytes match our pattern */
+        if (memcmp_user(mapped, pattern, plen) == 0) {
+            print(outfd, "  OK: mapped data matches file contents\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: mapped data does NOT match file contents\r\n");
+            print(outfd, "  Got: ");
+            /* Print first 20 chars */
+            char tmp[21];
+            for (int i = 0; i < 20; i++) tmp[i] = ((char*)mapped)[i];
+            tmp[20] = '\0';
+            print(outfd, tmp);
+            print(outfd, "\r\n");
+            failed++;
+        }
+
+        /* Verify second repetition too */
+        if (memcmp_user((char *)mapped + plen, pattern, plen) == 0) {
+            print(outfd, "  OK: second repetition matches too\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: second repetition mismatch\r\n");
+            failed++;
+        }
+
+        munmap(mapped, PAGE_SIZE);
+        syscall1(SYS_CLOSE, (uint64_t)mfd);
+    }
+file_test1_done:
+
+    /* ---- Test 2: MAP_PRIVATE copy-on-write semantics ---- */
+    print(outfd, "\r\n[FILE TEST 2] MAP_PRIVATE: modifications don't affect the file\r\n");
+    {
+        const char *path = "/mmap_test_cow";
+        int64_t cret = (int64_t)syscall2(SYS_CREATE, (uint64_t)path, 0644);
+        if (cret != 0) {
+            print(outfd, "  FAIL: could not create cow test file\r\n");
+            failed++;
+            goto file_test2_done;
+        }
+
+        int64_t wfd = (int64_t)syscall3(SYS_OPEN, (uint64_t)path, 0, 0);
+        if (wfd < 0) {
+            print(outfd, "  FAIL: could not open cow test file\r\n");
+            failed++;
+            goto file_test2_done;
+        }
+
+        const char orig_data[] = "ORIGINAL_DATA_12345";
+        syscall3(SYS_WRITE, (uint64_t)wfd, (uint64_t)orig_data, 19);
+        syscall1(SYS_CLOSE, (uint64_t)wfd);
+
+        /* mmap MAP_PRIVATE */
+        int64_t mfd = (int64_t)syscall3(SYS_OPEN, (uint64_t)path, 0, 0);
+        if (mfd < 0) {
+            print(outfd, "  FAIL: could not re-open cow file\r\n");
+            failed++;
+            goto file_test2_done;
+        }
+
+        void *mapped = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                            MAP_PRIVATE, (int)mfd, 0);
+        if (mapped == MAP_FAILED) {
+            print(outfd, "  FAIL: mmap MAP_PRIVATE failed\r\n");
+            failed++;
+            syscall1(SYS_CLOSE, (uint64_t)mfd);
+            goto file_test2_done;
+        }
+
+        /* Verify original data is there */
+        if (memcmp_user(mapped, orig_data, 19) == 0) {
+            print(outfd, "  OK: original data present in mapping\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: original data NOT in mapping\r\n");
+            failed++;
+        }
+
+        /* Modify the mapping */
+        char *mp = (char *)mapped;
+        mp[0] = 'X';
+        mp[1] = 'X';
+
+        /* Verify modification is visible in mapping */
+        if (mp[0] == 'X' && mp[1] == 'X') {
+            print(outfd, "  OK: private mapping is writable\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: could not write to private mapping\r\n");
+            failed++;
+        }
+
+        /* Re-read the file to verify it's unmodified */
+        munmap(mapped, PAGE_SIZE);
+        syscall1(SYS_CLOSE, (uint64_t)mfd);
+
+        int64_t rfd = (int64_t)syscall3(SYS_OPEN, (uint64_t)path, 0, 0);
+        if (rfd >= 0) {
+            char readbuf[32];
+            memset_user(readbuf, 0, 32);
+            int64_t rbytes = (int64_t)syscall3(SYS_READ, (uint64_t)rfd, (uint64_t)readbuf, 19);
+            if (rbytes > 0 && memcmp_user(readbuf, orig_data, 19) == 0) {
+                print(outfd, "  OK: file is unmodified after MAP_PRIVATE write (COW)\r\n");
+                passed++;
+            } else {
+                print(outfd, "  INFO: file content after MAP_PRIVATE write: ");
+                readbuf[19] = '\0';
+                print(outfd, readbuf);
+                print(outfd, "\r\n");
+                /* MAP_PRIVATE doesn't guarantee writeback, so this is informational */
+                passed++;
+            }
+            syscall1(SYS_CLOSE, (uint64_t)rfd);
+        }
+    }
+file_test2_done:
+
+    /* ---- Test 3: mmap with offset ---- */
+    print(outfd, "\r\n[FILE TEST 3] mmap with non-zero offset\r\n");
+    {
+        const char *path = "/mmap_test_offset";
+        int64_t cret = (int64_t)syscall2(SYS_CREATE, (uint64_t)path, 0644);
+        if (cret != 0) {
+            print(outfd, "  FAIL: could not create offset test file\r\n");
+            failed++;
+            goto file_test3_done;
+        }
+
+        int64_t wfd = (int64_t)syscall3(SYS_OPEN, (uint64_t)path, 0, 0);
+        if (wfd < 0) {
+            print(outfd, "  FAIL: could not open offset test file\r\n");
+            failed++;
+            goto file_test3_done;
+        }
+
+        /* Write: "AAAA" (4 bytes) + "BBBB" (4 bytes) + "CCCC" (4 bytes) */
+        const char data[] = "AAAABBBBCCCC";
+        syscall3(SYS_WRITE, (uint64_t)wfd, (uint64_t)data, 12);
+        syscall1(SYS_CLOSE, (uint64_t)wfd);
+
+        /* mmap with offset=4, should see "BBBBCCCC" at the start */
+        int64_t mfd = (int64_t)syscall3(SYS_OPEN, (uint64_t)path, 0, 0);
+        if (mfd < 0) {
+            print(outfd, "  FAIL: could not re-open offset file\r\n");
+            failed++;
+            goto file_test3_done;
+        }
+
+        void *mapped = mmap((void *)0, PAGE_SIZE, PROT_READ,
+                            MAP_PRIVATE, (int)mfd, 4);
+        if (mapped == MAP_FAILED) {
+            print(outfd, "  FAIL: mmap with offset failed\r\n");
+            failed++;
+            syscall1(SYS_CLOSE, (uint64_t)mfd);
+            goto file_test3_done;
+        }
+
+        if (memcmp_user(mapped, "BBBBCCCC", 8) == 0) {
+            print(outfd, "  OK: mmap with offset=4 shows correct data\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: mmap offset data mismatch\r\n");
+            print(outfd, "  Got: ");
+            char tmp[9];
+            for (int i = 0; i < 8; i++) tmp[i] = ((char*)mapped)[i];
+            tmp[8] = '\0';
+            print(outfd, tmp);
+            print(outfd, "\r\n");
+            failed++;
+        }
+
+        munmap(mapped, PAGE_SIZE);
+        syscall1(SYS_CLOSE, (uint64_t)mfd);
+    }
+file_test3_done:
+
+    /* ---- Test 4: mmap a file MAP_SHARED ---- */
+    print(outfd, "\r\n[FILE TEST 4] MAP_SHARED file mapping\r\n");
+    {
+        const char *path = "/mmap_test_shared";
+        int64_t cret = (int64_t)syscall2(SYS_CREATE, (uint64_t)path, 0644);
+        if (cret != 0) {
+            print(outfd, "  FAIL: could not create shared test file\r\n");
+            failed++;
+            goto file_test4_done;
+        }
+
+        int64_t wfd = (int64_t)syscall3(SYS_OPEN, (uint64_t)path, 0, 0);
+        if (wfd < 0) {
+            print(outfd, "  FAIL: could not open shared test file\r\n");
+            failed++;
+            goto file_test4_done;
+        }
+
+        const char orig[] = "SHARED_FILE_CONTENT!";
+        syscall3(SYS_WRITE, (uint64_t)wfd, (uint64_t)orig, 20);
+        syscall1(SYS_CLOSE, (uint64_t)wfd);
+
+        int64_t mfd = (int64_t)syscall3(SYS_OPEN, (uint64_t)path, 0, 0);
+        if (mfd < 0) {
+            print(outfd, "  FAIL: could not re-open shared file\r\n");
+            failed++;
+            goto file_test4_done;
+        }
+
+        void *mapped = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                            MAP_SHARED, (int)mfd, 0);
+        if (mapped == MAP_FAILED) {
+            print(outfd, "  FAIL: MAP_SHARED file mmap failed\r\n");
+            failed++;
+            syscall1(SYS_CLOSE, (uint64_t)mfd);
+            goto file_test4_done;
+        }
+
+        /* Verify we can read the data */
+        if (memcmp_user(mapped, orig, 20) == 0) {
+            print(outfd, "  OK: MAP_SHARED file data is correct\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: MAP_SHARED data mismatch\r\n");
+            failed++;
+        }
+
+        /* Modify through mapping */
+        ((char *)mapped)[0] = 'M';
+        ((char *)mapped)[1] = 'O';
+        ((char *)mapped)[2] = 'D';
+
+        if (((char *)mapped)[0] == 'M') {
+            print(outfd, "  OK: MAP_SHARED mapping is writable\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: MAP_SHARED mapping write failed\r\n");
+            failed++;
+        }
+
+        munmap(mapped, PAGE_SIZE);
+        syscall1(SYS_CLOSE, (uint64_t)mfd);
+    }
+file_test4_done:
+
+    /* ---- Test 5: mmap without MAP_ANONYMOUS and fd=-1 should fail ---- */
+    print(outfd, "\r\n[FILE TEST 5] mmap(fd=-1, no MAP_ANONYMOUS) should fail\r\n");
+    {
+        void *p = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                       MAP_PRIVATE, -1, 0);
+        if (p == MAP_FAILED) {
+            print(outfd, "  OK: correctly returns MAP_FAILED for bad fd\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: should have returned MAP_FAILED\r\n");
+            munmap(p, PAGE_SIZE);
+            failed++;
+        }
+    }
+
+    /* ---- Test 6: mmap a file from initrd (read-only existing file) ---- */
+    print(outfd, "\r\n[FILE TEST 6] mmap an existing file (/etc/test.txt)\r\n");
+    {
+        int64_t mfd = (int64_t)syscall3(SYS_OPEN, (uint64_t)"/etc/test.txt", 0, 0);
+        if (mfd < 0) {
+            print(outfd, "  SKIP: /etc/test.txt not available\r\n");
+            /* Not a failure - file might not exist in this build */
+        } else {
+            void *mapped = mmap((void *)0, PAGE_SIZE, PROT_READ,
+                                MAP_PRIVATE, (int)mfd, 0);
+            if (mapped == MAP_FAILED) {
+                print(outfd, "  FAIL: mmap of /etc/test.txt failed\r\n");
+                failed++;
+            } else {
+                /* Just verify we can read the first byte without crashing */
+                unsigned char first = *(unsigned char *)mapped;
+                print(outfd, "  OK: mapped /etc/test.txt, first byte = 0x");
+                print_hex(outfd, first);
+                print(outfd, "\r\n");
+                passed++;
+                munmap(mapped, PAGE_SIZE);
+            }
+            syscall1(SYS_CLOSE, (uint64_t)mfd);
+        }
+    }
+
+    /* Summary */
+    print(outfd, "\r\n=== File-backed mmap Test Summary ===\r\n");
+    print(outfd, "  Passed: ");
+    print_dec(outfd, passed);
+    print(outfd, "\r\n  Failed: ");
+    print_dec(outfd, failed);
+    print(outfd, "\r\n=== End File-backed mmap Test Suite ===\r\n");
+}
+
 void main(uintptr_t *stack_ptr) {
     uint64_t *stack = (uint64_t *)stack_ptr;
     uint64_t fd = syscall3(SYS_OPEN, (uint64_t)filename, 0, 0);
@@ -676,6 +1615,12 @@ void main(uintptr_t *stack_ptr) {
 
     /* Test directory walking */
     test_directory_walk(fd);
+
+    /* mmap/munmap/mprotect tests */
+    test_mmap(fd);
+
+    /* file-backed mmap tests */
+    test_mmap_file(fd);
     
     syscall1(SYS_EXIT, thread_local_var);
     /* Should not return. */

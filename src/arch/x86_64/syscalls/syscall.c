@@ -11,6 +11,7 @@
 #include <scheduler/scheduler.h>
 
 #include <memory/heap/kheap.h>
+#include <memory/mmap.h>
 
 #include <stdint.h>
 #include <string.h>
@@ -634,6 +635,47 @@ int sys_readlink(const char __user *path, char __user *buf, size_t size) {
     return ret;
 }
 
+long sys_mmap(void __user *addr, size_t length, int prot, int flags, int fd, size_t offset) {
+    pcb_t *current = get_current_pcb();
+    if (!current || !current->vmc) {
+        return (long)(uintptr_t)MAP_FAILED;
+    }
+
+    vnode_t *vnode = NULL;
+
+    if (!(flags & MAP_ANONYMOUS)) {
+        if (fd < 0) {
+            return (long)(uintptr_t)MAP_FAILED;
+        }
+        fileio_t *file = fd_get(&current->fd_table, fd, FD_FILE);
+        if (!file || !file->private) {
+            return (long)(uintptr_t)MAP_FAILED;
+        }
+        vnode = (vnode_t *)file->private;
+    }
+
+    void *result = do_mmap(current->vmc, addr, length, prot, flags, vnode, offset);
+    return (long)(uintptr_t)result;
+}
+
+int sys_munmap(void __user *addr, size_t length) {
+    pcb_t *current = get_current_pcb();
+    if (!current || !current->vmc) {
+        return -1;
+    }
+
+    return do_munmap(current->vmc, addr, length);
+}
+
+int sys_mprotect(void __user *addr, size_t length, int prot) {
+    pcb_t *current = get_current_pcb();
+    if (!current || !current->vmc) {
+        return -1;
+    }
+
+    return do_mprotect(current->vmc, addr, length, prot);
+}
+
 void* syscall_table[] = {
     (void*)sys_exit,
     (void*)sys_open,
@@ -671,4 +713,7 @@ void* syscall_table[] = {
     (void*)sys_remove,
     (void*)sys_symlink,
     (void*)sys_readlink,
+    (void*)sys_mmap,
+    (void*)sys_munmap,
+    (void*)sys_mprotect,
 };
