@@ -19,6 +19,7 @@
 // YOU SHOULD NOT USE THIS
 // (we'll check for it anyway)
 #define VMO_ALLOCATED (1 << 8)
+#define VMO_LAZY      (1 << 9)
 
 // VMO "macro"flags
 #define VMO_KERNEL    VMO_PRESENT

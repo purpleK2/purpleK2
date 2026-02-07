@@ -7,14 +7,19 @@
 #include <stddef.h>
 #include <stdint.h>
 
+struct vnode; // forward declaration for file-backed mmap
+
 // Virtual Memory Object
 typedef struct vmo_t {
     uint64_t base;
     size_t len; // length is in pages (4KiB blocks)!!
     uint64_t flags;
 
+    // File-backed mmap (demand paging) -- NULL/0 for anonymous mappings
+    struct vnode *backing_vnode;
+    size_t file_offset;
+
     struct vmo_t *next;
-    // struct virtmem_object_t *prev;
 } vmo_t;
 
 // Virtual Memory Context
@@ -62,6 +67,9 @@ void process_vmm_init(vmc_t **proc_vmcr, uint64_t flags);
 
 void *valloc(vmc_t *ctx, size_t pages, uint8_t flags, void *phys);
 void *valloc_at(vmc_t *ctx, void *addr, size_t pages, uint8_t flags, void *phys);
+void *valloc_at_lazy(vmc_t *ctx, void *addr, size_t pages, uint8_t flags,
+                     struct vnode *vnode, size_t file_offset);
+vmo_t *vmo_find_by_addr(vmc_t *vmc, uint64_t addr);
 void vfree(vmc_t *ctx, void *ptr, bool free);
 
 void global_vmc_init(vmc_t *kernel_vmc);

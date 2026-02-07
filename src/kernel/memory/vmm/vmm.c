@@ -3,6 +3,7 @@
 #include <autoconf.h>
 #include <cpu.h>
 #include <kernel.h>
+#include <fs/vfs/vfs.h>
 
 #include "memory/pmm/pmm.h"
 #include "vflags.h"
@@ -239,6 +240,9 @@ vmo_t *vmo_init(uint64_t base, size_t length, uint64_t flags) {
     vmo->base  = base;
     vmo->len   = length;
     vmo->flags = flags;
+
+    vmo->backing_vnode = NULL;
+    vmo->file_offset   = 0;
 
     vmo->next = NULL;
 
@@ -701,6 +705,8 @@ void *valloc_at(vmc_t *ctx, void *addr, size_t pages, uint8_t flags, void *phys)
     vmo->base  = base;
     vmo->len   = pages;
     vmo->flags = flags | VMO_ALLOCATED;
+    vmo->backing_vnode = NULL;
+    vmo->file_offset   = 0;
 
     if (!prev_vmo) {
         vmo->next = ctx->root_vmo;
@@ -733,6 +739,84 @@ void *valloc_at(vmc_t *ctx, void *addr, size_t pages, uint8_t flags, void *phys)
 
     spinlock_release(&VMM_LOCK);
     return (void *)(base + offset);
+}
+
+/**
+ * Allocate a VMO without backing physical pages (demand-paged).
+ * Pages will be individually allocated and mapped by the page fault handler
+ * on first access. This implements Linux-style lazy allocation for file-backed mmap.
+ */
+void *valloc_at_lazy(vmc_t *ctx, void *addr, size_t pages, uint8_t flags,
+                     struct vnode *vnode, size_t file_offset) {
+    spinlock_acquire(&VMM_LOCK);
+
+    uint64_t base = (uint64_t)(uintptr_t)addr;
+
+    if (base & (PFRAME_SIZE - 1)) {
+        debugf_warn("valloc_at_lazy: Address %p is not page-aligned\n", addr);
+        spinlock_release(&VMM_LOCK);
+        return NULL;
+    }
+
+    vmo_t *prev_vmo = NULL;
+    vmo_t *cur_vmo  = ctx->root_vmo;
+
+    for (; cur_vmo; prev_vmo = cur_vmo, cur_vmo = cur_vmo->next) {
+        if (vmo_overlaps(cur_vmo, base, pages)) {
+            debugf_warn("valloc_at_lazy: Requested region %p - %p overlaps\n",
+                        (void *)base, (void *)(base + pages * PFRAME_SIZE));
+            spinlock_release(&VMM_LOCK);
+            return NULL;
+        }
+        if (cur_vmo->base > base) {
+            break;
+        }
+    }
+
+    vmo_t *vmo = vmo_alloc();
+    vmo->base  = base;
+    vmo->len   = pages;
+    vmo->flags = flags | VMO_ALLOCATED | VMO_LAZY;
+    vmo->backing_vnode = vnode;
+    vmo->file_offset   = file_offset;
+
+    if (vnode) {
+        vnode_ref(vnode);
+    }
+
+    if (!prev_vmo) {
+        vmo->next = ctx->root_vmo;
+        ctx->root_vmo = vmo;
+    } else {
+        vmo->next = prev_vmo->next;
+        prev_vmo->next = vmo;
+    }
+
+    /* No physical allocation or page mapping -- pages are faulted in on demand */
+    debugf_debug("Created lazy VMO %p at %p (%zu pages, vnode=%p offset=%zu)\n",
+                 vmo, (void *)base, pages, vnode, file_offset);
+
+    spinlock_release(&VMM_LOCK);
+    return (void *)base;
+}
+
+/**
+ * Find the VMO that contains the given virtual address.
+ * Returns NULL if no matching VMO is found.
+ */
+vmo_t *vmo_find_by_addr(vmc_t *vmc, uint64_t addr) {
+    if (!vmc) return NULL;
+
+    for (vmo_t *v = vmc->root_vmo; v != NULL; v = v->next) {
+        if (!(v->flags & VMO_ALLOCATED)) continue;
+
+        uint64_t vmo_end = v->base + v->len * PFRAME_SIZE;
+        if (addr >= v->base && addr < vmo_end) {
+            return v;
+        }
+    }
+
+    return NULL;
 }
 
 // @param free do you want to give back the physical address of `ptr` back to
@@ -769,13 +853,29 @@ void vfree(vmc_t *ctx, void *ptr, bool free) {
 
     FLAG_UNSET(cur_vmo->flags, VMO_ALLOCATED);
 
-    // find the physical address of the VMO
-    uint64_t phys = pg_virtual_to_phys(
-        (uint64_t *)PHYS_TO_VIRTUAL(ctx->pml4_table), cur_vmo->base);
-    if (free)
-        pmm_free((void *)phys, cur_vmo->len);
-    unmap_region((uint64_t *)PHYS_TO_VIRTUAL(ctx->pml4_table), cur_vmo->base,
-                 cur_vmo->len);
+    uint64_t *pml4_virt = (uint64_t *)PHYS_TO_VIRTUAL(ctx->pml4_table);
+
+    if (cur_vmo->flags & VMO_LAZY) {
+        /* Demand-paged VMO: pages were individually allocated on fault,
+         * so we must free them one by one */
+        for (size_t i = 0; i < cur_vmo->len; i++) {
+            uint64_t virt = cur_vmo->base + i * PFRAME_SIZE;
+            uint64_t phys = pg_virtual_to_phys(pml4_virt, virt);
+            if (phys && free) {
+                pmm_free((void *)phys, 1);
+            }
+        }
+        /* Release the vnode reference held by this mapping */
+        if (cur_vmo->backing_vnode) {
+            vnode_unref(cur_vmo->backing_vnode);
+        }
+    } else {
+        /* Eagerly-allocated VMO: contiguous physical region */
+        uint64_t phys = pg_virtual_to_phys(pml4_virt, cur_vmo->base);
+        if (free)
+            pmm_free((void *)phys, cur_vmo->len);
+    }
+    unmap_region(pml4_virt, cur_vmo->base, cur_vmo->len);
 
     vmo_t *to_dealloc = cur_vmo;
     // d is deallocated

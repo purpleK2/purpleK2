@@ -9,10 +9,13 @@
 #include <cpu.h>
 
 #include <memory/pmm/pmm.h>
+#include <memory/vmm/vmm.h>
 #include <memory/vmm/vflags.h>
 #include <smp/ipi.h>
 
 #include <scheduler/scheduler.h>
+
+#include <fs/vfs/vfs.h>
 
 #include <interrupts/irq.h>
 
@@ -229,6 +232,38 @@ void pf_handler(registers_t *ctx) {
                     tlb_shootdown(cr2);
                 }
                 return;
+            }
+        }
+    }
+
+    if (is_in_proc(ctx) && !PG_PRESENT(pf_error_code) && !PG_IF(pf_error_code)) {
+        pcb_t *proc = get_current_pcb();
+        if (proc && proc->vmc) {
+            vmo_t *vmo = vmo_find_by_addr(proc->vmc, cr2);
+            if (vmo && (vmo->flags & VMO_LAZY)) {
+                uint64_t page_virt = cr2 & ~(uint64_t)(PFRAME_SIZE - 1);
+                void *phys = pmm_alloc_page();
+                if (phys) {
+                    void *kaddr = (void *)PHYS_TO_VIRTUAL((uint64_t)phys);
+                    memset(kaddr, 0, PFRAME_SIZE);
+
+                    if (vmo->backing_vnode) {
+                        size_t page_off_in_vmo = page_virt - vmo->base;
+                        size_t file_off = vmo->file_offset + page_off_in_vmo;
+                        vfs_read(vmo->backing_vnode, PFRAME_SIZE, file_off, kaddr);
+                    }
+
+                    uint64_t *pml4 = (uint64_t *)PHYS_TO_VIRTUAL(
+                        proc->vmc->pml4_table);
+                    uint64_t pg_flags = vmo_to_page_flags(vmo->flags);
+                    map_phys_to_page(pml4, (uint64_t)phys, page_virt, pg_flags);
+
+                    debugf_debug("Demand-paged %p -> phys %p (vnode=%p off=%zu)\n",
+                                 (void *)page_virt, phys,
+                                 vmo->backing_vnode,
+                                 vmo->file_offset + (page_virt - vmo->base));
+                    return;
+                }
             }
         }
     }

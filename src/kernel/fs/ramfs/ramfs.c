@@ -841,12 +841,6 @@ int ramfs_symlink(vnode_t *parent, const char *name, const char *target) {
     return EOK;
 }
 
-static int ramfs_mmap(vnode_t *vnode, void *addr, size_t length, int prot, int flags, size_t offset) {
-    (void)vnode; (void)addr; (void)length; (void)prot; (void)flags; (void)offset;
-    /* ramfs supports mmap via anonymous-style mapping (data is in memory already) */
-    return EOK;
-}
-
 vnops_t ramfs_vnops = {
     .open     = ramfs_open,
     .close    = ramfs_close,
@@ -861,7 +855,6 @@ vnops_t ramfs_vnops = {
     .create   = ramfs_create,
     .remove   = ramfs_remove,
     .symlink  = ramfs_symlink,
-    .mmap     = ramfs_mmap,
 };
 
 static int ramfs_vfs_mount(vfs_t *vfs, char *path, void *data) {

@@ -145,6 +145,11 @@ void *do_mmap(vmc_t *vmc, void *addr, size_t length, int prot,
         return target_addr;
     }
 
+    /* File-backed mappings (non-anonymous with a vnode) use demand paging:
+     * pages are lazily allocated and populated on first access via #PF,
+     * just like Linux's mmap for regular files. */
+    bool demand_page = !(flags & MAP_ANONYMOUS) && vnode != NULL;
+
     void *map_addr = NULL;
 
     if (flags & MAP_FIXED) {
@@ -164,13 +169,17 @@ void *do_mmap(vmc_t *vmc, void *addr, size_t length, int prot,
             do_munmap(vmc, (void *)base, aligned_length);
         }
 
-        map_addr = valloc_at(vmc, (void *)base, pages, vmo_flags, NULL);
+        map_addr = demand_page
+            ? valloc_at_lazy(vmc, (void *)base, pages, vmo_flags, vnode, offset)
+            : valloc_at(vmc, (void *)base, pages, vmo_flags, NULL);
     } else if (addr != NULL) {
         uint64_t base = page_align_down((uint64_t)(uintptr_t)addr);
 
         if (base >= MMAP_REGION_START && base + aligned_length <= MMAP_REGION_END
             && region_is_free(vmc, base, pages)) {
-            map_addr = valloc_at(vmc, (void *)base, pages, vmo_flags, NULL);
+            map_addr = demand_page
+                ? valloc_at_lazy(vmc, (void *)base, pages, vmo_flags, vnode, offset)
+                : valloc_at(vmc, (void *)base, pages, vmo_flags, NULL);
         }
 
         if (!map_addr) {
@@ -178,23 +187,27 @@ void *do_mmap(vmc_t *vmc, void *addr, size_t length, int prot,
             if (!free_addr) {
                 return MAP_FAILED;
             }
-            map_addr = valloc_at(vmc, free_addr, pages, vmo_flags, NULL);
+            map_addr = demand_page
+                ? valloc_at_lazy(vmc, free_addr, pages, vmo_flags, vnode, offset)
+                : valloc_at(vmc, free_addr, pages, vmo_flags, NULL);
         }
     } else {
         void *free_addr = find_free_region(vmc, pages);
         if (!free_addr) {
             return MAP_FAILED;
         }
-        map_addr = valloc_at(vmc, free_addr, pages, vmo_flags, NULL);
+        map_addr = demand_page
+            ? valloc_at_lazy(vmc, free_addr, pages, vmo_flags, vnode, offset)
+            : valloc_at(vmc, free_addr, pages, vmo_flags, NULL);
     }
 
     if (!map_addr) {
         return MAP_FAILED;
     }
 
-    uint64_t *pml4 = (uint64_t *)PHYS_TO_VIRTUAL(vmc->pml4_table);
-
-    if (flags & MAP_ANONYMOUS) {
+    /* Eager mappings (anonymous): zero the pages now */
+    if (!demand_page) {
+        uint64_t *pml4 = (uint64_t *)PHYS_TO_VIRTUAL(vmc->pml4_table);
         for (size_t i = 0; i < pages; i++) {
             uint64_t virt = (uint64_t)(uintptr_t)map_addr + i * MMAP_PAGE_SIZE;
             uint64_t phys = pg_virtual_to_phys(pml4, virt);
@@ -203,24 +216,9 @@ void *do_mmap(vmc_t *vmc, void *addr, size_t length, int prot,
                 memset(page_virt, 0, MMAP_PAGE_SIZE);
             }
         }
-    } else {
-        for (size_t i = 0; i < pages; i++) {
-            uint64_t virt = (uint64_t)(uintptr_t)map_addr + i * MMAP_PAGE_SIZE;
-            uint64_t phys = pg_virtual_to_phys(pml4, virt);
-            if (!phys) {
-                continue;
-            }
-
-            void *page_virt = (void *)PHYS_TO_VIRTUAL(phys);
-            memset(page_virt, 0, MMAP_PAGE_SIZE);
-
-            size_t file_off = offset + i * MMAP_PAGE_SIZE;
-            size_t to_read = MMAP_PAGE_SIZE;
-
-            int ret = vfs_read(vnode, to_read, file_off, page_virt);
-            (void)ret;
-        }
     }
+    /* Demand-paged (file-backed) mappings: pages will be populated on first
+     * access via the page fault handler, which reads from the backing vnode */
 
     return map_addr;
 }
