@@ -44,6 +44,7 @@ typedef unsigned int   uint32_t;
 #define SYS_MUNMAP    37
 #define SYS_MPROTECT  38
 #define SYS_MSYNC     39
+#define SYS_PIPE      40
 
 /* mmap protection flags */
 #define PROT_NONE   0x0
@@ -1519,7 +1520,6 @@ static void test_msync(uint64_t outfd) {
     }
 msync_test1_done:
 
-    /* ---- Test 2: msync on anonymous mapping should succeed (no-op) ---- */
     print(outfd, "\r\n[MSYNC TEST 2] msync on anonymous mapping (should be a no-op success)\r\n");
     {
         void *anon = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
@@ -1530,7 +1530,6 @@ msync_test1_done:
             goto msync_test2_done;
         }
 
-        /* Write some data */
         ((char *)anon)[0] = 'X';
 
         int64_t sret = (int64_t)msync(anon, PAGE_SIZE, MS_SYNC);
@@ -1548,7 +1547,6 @@ msync_test1_done:
     }
 msync_test2_done:
 
-    /* ---- Test 3: msync with MS_ASYNC flag ---- */
     print(outfd, "\r\n[MSYNC TEST 3] msync with MS_ASYNC flag\r\n");
     {
         void *anon = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
@@ -1574,7 +1572,6 @@ msync_test2_done:
     }
 msync_test3_done:
 
-    /* ---- Test 4: msync with invalid flags (MS_ASYNC|MS_SYNC both set) ---- */
     print(outfd, "\r\n[MSYNC TEST 4] msync with invalid flags (MS_ASYNC|MS_SYNC) should fail\r\n");
     {
         void *anon = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
@@ -1598,7 +1595,6 @@ msync_test3_done:
     }
 msync_test4_done:
 
-    /* ---- Test 5: msync on unaligned address should fail ---- */
     print(outfd, "\r\n[MSYNC TEST 5] msync on unaligned address should fail\r\n");
     {
         void *anon = mmap((void *)0, PAGE_SIZE, PROT_READ | PROT_WRITE,
@@ -1609,7 +1605,6 @@ msync_test4_done:
             goto msync_test5_done;
         }
 
-        /* Pass a misaligned address (base + 1) */
         int64_t sret = (int64_t)msync((char *)anon + 1, PAGE_SIZE, MS_SYNC);
         if (sret < 0) {
             print(outfd, "  OK: msync correctly rejected unaligned address\r\n");
@@ -1623,13 +1618,192 @@ msync_test4_done:
     }
 msync_test5_done:
 
-    /* Summary */
     print(outfd, "\r\n=== msync Test Summary ===\r\n");
     print(outfd, "  Passed: ");
     print_dec(outfd, passed);
     print(outfd, "\r\n  Failed: ");
     print_dec(outfd, failed);
     print(outfd, "\r\n=== End msync Test Suite ===\r\n");
+}
+
+static void test_pipe(uint64_t outfd) {
+    int passed = 0;
+    int failed = 0;
+
+    print(outfd, "\r\n=== pipe() Test Suite ===\r\n");
+
+    /* Test 1: Basic pipe creation */
+    print(outfd, "\r\n[TEST 1] pipe() basic creation\r\n");
+    int fds[2] = { -1, -1 };
+    int64_t ret = (int64_t)syscall1(SYS_PIPE, (uint64_t)fds);
+    if (ret == 0) {
+        print(outfd, "  OK: pipe() returned 0, read_fd=");
+        print_int(outfd, fds[0]);
+        print(outfd, " write_fd=");
+        print_int(outfd, fds[1]);
+        print(outfd, "\r\n");
+        if (fds[0] >= 0 && fds[1] >= 0 && fds[0] != fds[1]) {
+            print(outfd, "  OK: fds are valid and distinct\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: fds are invalid or equal\r\n");
+            failed++;
+        }
+    } else {
+        print(outfd, "  FAIL: pipe() returned ");
+        print_int(outfd, ret);
+        print(outfd, "\r\n");
+        failed++;
+        goto pipe_done;
+    }
+
+    /* Test 2: Write to pipe then read back */
+    print(outfd, "\r\n[TEST 2] write then read\r\n");
+    {
+        const char msg[] = "Hello, pipe!";
+        size_t msg_len = 12; /* strlen("Hello, pipe!") */
+        int64_t written = (int64_t)syscall3(SYS_WRITE, (uint64_t)fds[1],
+                                            (uint64_t)msg, (uint64_t)msg_len);
+        if (written == (int64_t)msg_len) {
+            print(outfd, "  OK: wrote ");
+            print_int(outfd, written);
+            print(outfd, " bytes\r\n");
+        } else {
+            print(outfd, "  FAIL: write returned ");
+            print_int(outfd, written);
+            print(outfd, "\r\n");
+            failed++;
+            goto pipe_cleanup;
+        }
+
+        char buf[64];
+        for (int i = 0; i < 64; i++) buf[i] = 0;
+        int64_t rd = (int64_t)syscall3(SYS_READ, (uint64_t)fds[0],
+                                       (uint64_t)buf, (uint64_t)msg_len);
+        if (rd == (int64_t)msg_len) {
+            print(outfd, "  OK: read ");
+            print_int(outfd, rd);
+            print(outfd, " bytes\r\n");
+        } else {
+            print(outfd, "  FAIL: read returned ");
+            print_int(outfd, rd);
+            print(outfd, "\r\n");
+            failed++;
+            goto pipe_cleanup;
+        }
+
+        /* Verify contents */
+        int match = 1;
+        for (size_t i = 0; i < msg_len; i++) {
+            if (buf[i] != msg[i]) {
+                match = 0;
+                break;
+            }
+        }
+        if (match) {
+            print(outfd, "  OK: data matches: \"");
+            print(outfd, buf);
+            print(outfd, "\"\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: data mismatch\r\n");
+            failed++;
+        }
+    }
+
+    /* Test 3: Multiple writes and a single larger read */
+    print(outfd, "\r\n[TEST 3] multiple writes, single read\r\n");
+    {
+        const char part1[] = "ABC";
+        const char part2[] = "DEF";
+        syscall3(SYS_WRITE, (uint64_t)fds[1], (uint64_t)part1, 3);
+        syscall3(SYS_WRITE, (uint64_t)fds[1], (uint64_t)part2, 3);
+
+        char buf[64];
+        for (int i = 0; i < 64; i++) buf[i] = 0;
+        int64_t rd = (int64_t)syscall3(SYS_READ, (uint64_t)fds[0],
+                                       (uint64_t)buf, 6);
+        if (rd == 6 && buf[0] == 'A' && buf[1] == 'B' && buf[2] == 'C'
+                    && buf[3] == 'D' && buf[4] == 'E' && buf[5] == 'F') {
+            print(outfd, "  OK: read 6 bytes \"ABCDEF\"\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: expected \"ABCDEF\", got \"");
+            buf[6] = 0;
+            print(outfd, buf);
+            print(outfd, "\" (rd=");
+            print_int(outfd, rd);
+            print(outfd, ")\r\n");
+            failed++;
+        }
+    }
+
+    /* Test 4: Close write end, read should get 0 (EOF) */
+    print(outfd, "\r\n[TEST 4] close write end, read should EOF\r\n");
+    {
+        syscall1(SYS_CLOSE, (uint64_t)fds[1]);
+        fds[1] = -1;
+
+        char buf[16];
+        int64_t rd = (int64_t)syscall3(SYS_READ, (uint64_t)fds[0],
+                                       (uint64_t)buf, 16);
+        if (rd == 0) {
+            print(outfd, "  OK: read returned 0 (EOF) after write end closed\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: read returned ");
+            print_int(outfd, rd);
+            print(outfd, " (expected 0)\r\n");
+            failed++;
+        }
+    }
+
+    /* Test 5: Close read end */
+    print(outfd, "\r\n[TEST 5] close read end\r\n");
+    {
+        int64_t cret = (int64_t)syscall1(SYS_CLOSE, (uint64_t)fds[0]);
+        fds[0] = -1;
+        if (cret == 0) {
+            print(outfd, "  OK: close(read_fd) returned 0\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: close(read_fd) returned ");
+            print_int(outfd, cret);
+            print(outfd, "\r\n");
+            failed++;
+        }
+    }
+
+    /* Test 6: pipe(NULL) should fail */
+    print(outfd, "\r\n[TEST 6] pipe(NULL) should fail\r\n");
+    {
+        int64_t nret = (int64_t)(int)syscall1(SYS_PIPE, (uint64_t)0);
+        if (nret < 0) {
+            print(outfd, "  OK: pipe(NULL) returned ");
+            print_int(outfd, nret);
+            print(outfd, "\r\n");
+            passed++;
+        } else {
+            print(outfd, "  FAIL: pipe(NULL) should have failed, got ");
+            print_int(outfd, nret);
+            print(outfd, "\r\n");
+            failed++;
+        }
+    }
+
+    goto pipe_done;
+
+pipe_cleanup:
+    if (fds[0] >= 0) syscall1(SYS_CLOSE, (uint64_t)fds[0]);
+    if (fds[1] >= 0) syscall1(SYS_CLOSE, (uint64_t)fds[1]);
+
+pipe_done:
+    print(outfd, "\r\n=== pipe() Test Summary ===\r\n");
+    print(outfd, "  Passed: ");
+    print_dec(outfd, passed);
+    print(outfd, "\r\n  Failed: ");
+    print_dec(outfd, failed);
+    print(outfd, "\r\n=== End pipe() Test Suite ===\r\n");
 }
 
 void main(uintptr_t *stack_ptr) {
@@ -1860,6 +2034,9 @@ void main(uintptr_t *stack_ptr) {
 
     /* msync tests */
     test_msync(fd);
+
+    /* pipe tests */
+    test_pipe(fd);
 
     int fb = syscall3(SYS_OPEN, (uint64_t)"/dev/fb0", 0, 0);
     if (fb < 0) {

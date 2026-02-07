@@ -89,7 +89,7 @@ int write(fileio_t *file, void *buf, size_t size) {
 
     if (file->flags & PIPE_WRITE_END) {
         pipe_write(file, buf, &size);
-        return EOK;
+        return size;
     } else if (file->flags & PIPE_READ_END) {
         return -EBADF;
     }

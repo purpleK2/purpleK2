@@ -45,6 +45,7 @@
 #define SYS_munmap    37
 #define SYS_mprotect  38
 #define SYS_msync     39
+#define SYS_pipe      40
 
 void set_syscall_context(registers_t *ctx);
 registers_t *get_syscall_context(void);
@@ -89,5 +90,6 @@ long sys_mmap(void __user *addr, size_t length, int prot, int flags, int fd, siz
 int sys_munmap(void __user *addr, size_t length);
 int sys_mprotect(void __user *addr, size_t length, int prot);
 int sys_msync(void __user *addr, size_t length, int flags);
+int sys_pipe(int *user_fds);
 
 #endif // SYSCALL_H
