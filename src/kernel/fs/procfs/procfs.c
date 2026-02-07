@@ -850,7 +850,7 @@ int procfs_readlink(vnode_t *vnode, char *buf, size_t size) {
 
 static int procfs_mmap(vnode_t *vnode, void *addr, size_t length, int prot, int flags, size_t offset) {
     (void)vnode; (void)addr; (void)length; (void)prot; (void)flags; (void)offset;
-    return EOK;
+    return ENOSYS; // you CANNOT mmap files in procfs, its a fake fs :3c
 }
 
 vnops_t procfs_vnops = {
