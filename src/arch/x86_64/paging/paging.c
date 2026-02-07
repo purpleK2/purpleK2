@@ -314,6 +314,13 @@ uint64_t *get_create_pmlt(uint64_t *pml_table, uint64_t pmlt_index,
 #endif
 
         pml_table[pmlt_index] = (uint64_t)pmm_alloc_page() | flags;
+    } else {
+        // Widen intermediate entry permissions: on x86-64, if a higher-level
+        // entry (PDP/PDIR) lacks WRITE, all pages beneath it are read-only
+        // regardless of their page-level flags.  OR in the new flags so that
+        // a writable mapping sharing an intermediate table with an earlier
+        // read-only mapping gets the WRITE bit propagated upward.
+        pml_table[pmlt_index] |= flags;
     }
 
 #ifdef CONFIG_PAGING_DEBUG

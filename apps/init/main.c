@@ -1628,7 +1628,7 @@ void main(uintptr_t *stack_ptr) {
     test_directory_walk(fd);
 
     /* mmap/munmap/mprotect tests */
-    //test_mmap(fd);
+    test_mmap(fd);
 
     /* file-backed mmap tests */
     //test_mmap_file(fd);
@@ -1660,17 +1660,18 @@ void main(uintptr_t *stack_ptr) {
         /* Fill the framebuffer with a test pattern */
         for (;;) {
             for (uint32_t y = 0; y < info.height; y++) {
-        for (uint32_t x = 0; x < info.width; x++) {
-            size_t off = y * info.pitch + x * 4;
+                for (uint32_t x = 0; x < info.width; x++) {
+                    size_t off = y * info.pitch + x * 4;
 
-            fb_ptr[off + 0] = (uint8_t)(x & 0xFF); /* B */
-            fb_ptr[off + 1] = (uint8_t)(y & 0xFF); /* G */
-            fb_ptr[off + 2] = 0xFF;                /* R */
-            fb_ptr[off + 3] = 0x00;                /* ignored / alpha */
+                    fb_ptr[off + 0] = (uint8_t)(x & 0xFF); /* B */
+                    fb_ptr[off + 1] = (uint8_t)(y & 0xFF); /* G */
+                    fb_ptr[off + 2] = 0xFF;                /* R */
+                    fb_ptr[off + 3] = 0x00;                /* ignored / alpha */
+                }
+            }
         }
     }
-    }
-}
+
     syscall1(SYS_CLOSE, fb);
 
     
