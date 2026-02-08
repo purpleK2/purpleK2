@@ -27,9 +27,7 @@ A freestanding 64-Bit kernel
     - [Built it yourself](#build-it-yourself)
   - [Building the ISO](#building-the-iso)
 - [Emulating the Kernel using QEMU](#emulating-the-kernel-using-qemu)
-- [Debugging the Kernel using QEMU and GDB](#debugging-the-kernel-using-qemu-and-gdb)
 - [Contributing](#contributing)
-- [Getting `compile_commands.json`](#getting-compile_commandsjson)
 - [License](#license)
 
 ## Why make a Kernel
@@ -228,21 +226,6 @@ make run-hdd
 ```bash
 make run-wsl-hdd
 ```
-
-## Debugging the Kernel using QEMU and GDB
-
-### If you run with the ISO:
-
-To debug the kernel using QEMU and GDB run `make debug`
-
-### If you run with the HDD:
-
-To debug the kernel using QEMU and GDB run `make debug-hdd`
-
-This will launch GDB using the [`debug.gdb`](debug.gdb) file as configuration. All output of the E9 debug port will be redirected into the `qemu_gdb.log` file.
-
-> [!TIP]
-> If you edit in VSCode you can set a breakpoint in code and just press `Crtl+F5` to launch the VSCode debugger. Output will be redirected to `qemu_vscode.log`
 
 ## Contributing
 
