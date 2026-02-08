@@ -3,6 +3,12 @@
 A freestanding 64-Bit kernel
 <image src="assets/banner.png" width=700>
 
+![GitHub License](https://img.shields.io/github/license/purpleK2/purpleK2)
+![GitHub commit activity (branch)](https://img.shields.io/github/commit-activity/w/purplek2/purplek2/dev-unstable)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/purplek2/purplek2/build.yml)
+![GitHub Repo stars](https://img.shields.io/github/stars/purplek2/purplek2?style=flat)
+![GitHub Tag](https://img.shields.io/github/v/tag/purplek2/purplek2?label=latest%20release)
+
 <br>
 
 > [!IMPORTANT]  
