@@ -12,7 +12,7 @@ A freestanding 64-Bit kernel
 
 - [Why make a Kernel](#why-make-a-kernel)
 - [Current Development Status](#current-development-status)
-- [The base of the Kernel](#the-base-of-the-kenrel)
+- [The base of the Kernel](#the-base-of-the-kernel)
 - [Building the Kernel](#building-the-kernel)
   - [Testing on real hardware](#testing-on-real-hardware)
   - [Prequisites](#prequisites)
@@ -41,9 +41,9 @@ The bootloader part is done by Limine, which offers a 64-bit environment out of 
 For the current development status check the [Roadmap Document](docs/Roadmap.md) or [The GitHub Project](https://github.com/orgs/purpleK2/projects/2)
 (I, Omar, recommend the latter since it's easier to update rather than committing changes to a file every single time)
 
-## The base of the Kenrel
+## The base of the Kernel
 
-The base of the kernel is the [Limine Bare Bones Template](https://wiki.osdev.org/Limine_Bare_Bones) on the [OSDev Wiki](https://wiki.osdev.org/Expanded_Main_Page) which is a fundamental source when doing OS Development
+The base of the kernel is the [Limine Bare Bones Template](https://wiki.osdev.org/Limine_Bare_Bones) on the [OSDev Wiki](https://wiki.osdev.org/Expanded_Main_Page). The OSDev Wiki is a fundamental source when doing OS Development
 
 ## Building the Kernel
 
