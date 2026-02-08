@@ -46,14 +46,19 @@ void apic_irq_handler(registers_t *ctx) {
     uint64_t apic_isr = lapic_read_reg(LAPIC_INSERVICE_REG);
     uint64_t apic_irr = lapic_read_reg(LAPIC_INT_REQ_REG);
 
+    // Send EOI before dispatching the handler. Handlers like the scheduler's
+    // yield() may perform a context switch via context_load()/iretq and never
+    // return, which would leave the LAPIC's in-service bit permanently set and
+    // block all further interrupts on this vector.  Since the CPU entered here
+    // with IF=0, sending EOI early cannot cause nested re-entry.
+    lapic_send_eoi();
+
     if (apic_irq_handlers[apic_irq] != NULL) {
         apic_irq_handlers[apic_irq](ctx);
     } else {
         debugf_warn("Unhandled IRQ %d  ISR=%llx  IRR=%llx\n", apic_irq,
                     apic_isr, apic_irr);
     }
-
-    lapic_send_eoi();
 }
 
 void ioapic_registerHandler(int irq, irq_handler handler) {

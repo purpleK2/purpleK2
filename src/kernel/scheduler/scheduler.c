@@ -1013,7 +1013,6 @@ void yield(registers_t *ctx) {
 
     case THREAD_RUNNING:
         if (--current->time_slice > 0) {
-            __asm__ volatile("sti");
             return;
         }
 
