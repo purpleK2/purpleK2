@@ -876,7 +876,7 @@ int init_cpu_scheduler() {
     if (cpu == get_bootloader_data()->bootstrap_cpu_id) {
         if (get_bootloader_data()->init_exec == NULL) {
             debugf_warn("No init executable specified, starting idle process instead.\n");
-            binfmt_exec("/initrd/bin/init.elf", get_init_argv_no_init_exec_arg("/initrd/bin/init.elf"), NULL);
+            binfmt_exec("/bin/init.elf", get_init_argv_no_init_exec_arg("/initrd/bin/init.elf"), NULL);
         } else {
             binfmt_exec(get_bootloader_data()->init_exec, get_init_argv(), NULL);
         }
@@ -972,6 +972,11 @@ int proc_exit(int exit_code) {
 
     int pid = current->parent->pid;
     char *name = current->parent->name;
+
+    if (pid == 1) {
+        kpanic("Init process was killed!");
+        scheduler_idle();
+    }
     
     debugf_debug("Process %d (%s) exited with code %d\n", pid,
            name ? name : "no-name", exit_code);
@@ -1063,7 +1068,7 @@ void yield(registers_t *ctx) {
     }
 
     if (!next) {
-        kpanic("Initprocess was killed!");
+        kpanic("No more processes to schedule!");
         scheduler_idle();
     }
 
