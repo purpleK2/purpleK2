@@ -986,6 +986,15 @@ int proc_exit(int exit_code) {
     return ret;
 }
 
+int scheduler_enqueue(tcb_t *thread) {
+    if (!thread) {
+        return -EINVAL;
+    }
+
+    thread_push_to_queue(thread);
+    return EOK;
+}
+
 void yield(registers_t *ctx) {
     __asm__ volatile("cli");
     
@@ -1057,7 +1066,6 @@ void yield(registers_t *ctx) {
         }
 #endif
 
-        mlfq_enqueue(cpu, current, new_priority);
         next = pick_next_thread(cpu);
         break;
     case THREAD_DEAD:
