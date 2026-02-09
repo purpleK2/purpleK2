@@ -413,10 +413,6 @@ int thread_create(pcb_t *parent, void (*entry)(), int flags) {
 
     mlfq_enqueue(cpu, thread, 0);
 
-    if (!current_threads[cpu]) {
-        current_threads[cpu] = thread;
-    }
-
     spinlock_release(&SCHEDULER_LOCK);
 
     return thread->tid;
@@ -837,7 +833,7 @@ tcb_t *tcb_lookup(int pid, int tid) {
 
 static void def_idle_proc() {
     while (1) {
-        __asm__ volatile("nop");
+        __asm__ volatile("hlt");
     }
 }
 
@@ -880,11 +876,16 @@ int init_cpu_scheduler() {
         } else {
             binfmt_exec(get_bootloader_data()->init_exec, get_init_argv(), NULL);
         }
-    } else {
-        proc_create(def_idle_proc, TF_MODE_KERNEL, "idle");
+    }
+
+    {
+        int idle_pid = proc_create(def_idle_proc, TF_MODE_KERNEL, "idle");
+        proc_engage(pcb_lookup(idle_pid));
     }
 
     _cpu_set_msr(0xC0000102, (uint64_t)&cpu_locals[get_cpu()]); // IA32_KERNEL_GS_BASE
+
+    return 0;
 }
 
 int pcb_destroy(int pid) {
@@ -1013,9 +1014,9 @@ void yield(registers_t *ctx) {
     }
 
     if (!current || !is_addr_mapped((uint64_t)(uintptr_t)current)) {
-        kpanic("No threads to schedule!");
-        __asm__ volatile("cli");
-        for (;;) {
+        current_threads[cpu] = NULL;
+        __asm__ volatile("sti");
+        while (!(current = pick_next_thread(cpu))) {
             __asm__ volatile("hlt");
         }
     }
@@ -1052,19 +1053,8 @@ void yield(registers_t *ctx) {
         break;
 
     case THREAD_WAITING:
-        // TODO :^)
-
-        new_priority = current->priority + 1;
-        if (new_priority >= CONFIG_SCHED_NUM_MLFQ_QUEUES) {
-            new_priority = CONFIG_SCHED_NUM_MLFQ_QUEUES - 1;
-        }
-        
-#ifdef CONFIG_SCHED_DEBUG
-        if (new_priority != current->priority) {
-            debugf_debug("Thread TID=%d demoted from priority %d to %d\n",
-                        current->tid, current->priority, new_priority);
-        }
-#endif
+        fpu_save(current->fpu);
+        current->regs = ctx;
 
         next = pick_next_thread(cpu);
         break;
@@ -1076,8 +1066,12 @@ void yield(registers_t *ctx) {
     }
 
     if (!next) {
-        kpanic("No more processes to schedule!");
-        scheduler_idle();
+        current_threads[cpu] = NULL;
+        __asm__ volatile("sti");
+        while (!next) {
+            __asm__ volatile("hlt");
+            next = pick_next_thread(cpu);
+        }
     }
 
     current_threads[cpu] = next;

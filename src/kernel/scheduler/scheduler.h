@@ -91,6 +91,11 @@ typedef struct thread {
 
     struct thread *next;
 
+    uint64_t wakeup_tick;
+
+    struct thread *wq_next;
+    int            on_waitqueue;
+
     tls_region_t tls;
     user_tls_t *tls_ptr;
 } tcb_t;

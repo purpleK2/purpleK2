@@ -6,16 +6,10 @@
 #include <stddef.h>
 
 #include <scheduler/scheduler.h>
-#include <memory/heap/kheap.h>
-
-typedef struct wq_entry {
-    tcb_t            *thread;
-    struct wq_entry  *next;
-} wq_entry_t;
 
 typedef struct waitqueue {
-    wq_entry_t  *head;
-    wq_entry_t  *tail;
+    tcb_t       *head;
+    tcb_t       *tail;
     size_t       count;
     atomic_flag  lock;
 } waitqueue_t;
@@ -31,58 +25,52 @@ static inline void waitqueue_prepare_wait(waitqueue_t *wq) {
     tcb_t *me = get_current_tcb();
     if (!me) return;
 
-    if (me->state == THREAD_WAITING)
+    if (me->on_waitqueue)
         return;
-
-    wq_entry_t *entry = kmalloc(sizeof(wq_entry_t));
-    if (!entry) return;
-
-    entry->thread = me;
-    entry->next   = NULL;
 
     spinlock_acquire(&wq->lock);
 
-    if (wq->tail) {
-        wq->tail->next = entry;
-    } else {
-        wq->head = entry;
-    }
-    wq->tail = entry;
-    wq->count++;
+    me->wq_next      = NULL;
+    me->on_waitqueue  = 1;
+    me->state         = THREAD_WAITING;
 
-    me->state = THREAD_WAITING;
+    if (wq->tail) {
+        wq->tail->wq_next = me;
+    } else {
+        wq->head = me;
+    }
+    wq->tail = me;
+    wq->count++;
 
     spinlock_release(&wq->lock);
 }
 
 static inline void waitqueue_sleep(waitqueue_t *wq) {
     waitqueue_prepare_wait(wq);
-
     yield(get_current_tcb()->regs);
 }
 
 static inline bool waitqueue_wake_one(waitqueue_t *wq) {
     spinlock_acquire(&wq->lock);
 
-    wq_entry_t *entry = wq->head;
-    if (!entry) {
+    tcb_t *thread = wq->head;
+    if (!thread) {
         spinlock_release(&wq->lock);
         return false;
     }
 
-    wq->head = entry->next;
+    wq->head = thread->wq_next;
     if (!wq->head)
         wq->tail = NULL;
     wq->count--;
 
-    tcb_t *thread = entry->thread;
-    thread->state = THREAD_READY;
+    thread->wq_next     = NULL;
+    thread->on_waitqueue = 0;
+    thread->state        = THREAD_READY;
 
     spinlock_release(&wq->lock);
 
     scheduler_enqueue(thread);
-
-    kfree(entry);
     return true;
 }
 
@@ -90,19 +78,57 @@ static inline size_t waitqueue_wake_all(waitqueue_t *wq) {
     spinlock_acquire(&wq->lock);
 
     size_t woken = 0;
-    wq_entry_t *entry = wq->head;
-    while (entry) {
-        wq_entry_t *next = entry->next;
-        entry->thread->state = THREAD_READY;
-        scheduler_enqueue(entry->thread);
-        kfree(entry);
+    tcb_t *cur = wq->head;
+    while (cur) {
+        tcb_t *next = cur->wq_next;
+
+        cur->wq_next     = NULL;
+        cur->on_waitqueue = 0;
+        cur->state        = THREAD_READY;
+        scheduler_enqueue(cur);
         woken++;
-        entry = next;
+
+        cur = next;
     }
 
     wq->head  = NULL;
     wq->tail  = NULL;
     wq->count = 0;
+
+    spinlock_release(&wq->lock);
+    return woken;
+}
+
+static inline size_t waitqueue_wake_expired(waitqueue_t *wq, uint64_t current_tick) {
+    spinlock_acquire(&wq->lock);
+
+    size_t  woken      = 0;
+    tcb_t **pp         = &wq->head;
+    tcb_t  *last_valid = NULL;
+
+    while (*pp) {
+        tcb_t *thread = *pp;
+
+        if (thread->wakeup_tick != 0 &&
+            thread->wakeup_tick <= current_tick) {
+            /* Unlink from the queue. */
+            *pp = thread->wq_next;
+            wq->count--;
+
+            thread->wakeup_tick  = 0;
+            thread->wq_next      = NULL;
+            thread->on_waitqueue  = 0;
+            thread->state         = THREAD_READY;
+
+            scheduler_enqueue(thread);
+            woken++;
+        } else {
+            last_valid = thread;
+            pp = &thread->wq_next;
+        }
+    }
+
+    wq->tail = last_valid;
 
     spinlock_release(&wq->lock);
     return woken;

@@ -45,6 +45,7 @@ typedef unsigned int   uint32_t;
 #define SYS_MPROTECT  38
 #define SYS_MSYNC     39
 #define SYS_PIPE      40
+#define SYS_NANOSLEEP 41
 
 /* mmap protection flags */
 #define PROT_NONE   0x0
@@ -2059,10 +2060,15 @@ void main(uintptr_t *stack_ptr) {
     size_t fb_size = info.pitch * info.height;
     uint8_t *fb_ptr = (uint8_t *)mmap((void *)0, fb_size, PROT_READ | PROT_WRITE,
                                   MAP_SHARED, (int)fb, 0);
+    
+    typedef struct timespec {
+        uint64_t tv_sec;
+        uint64_t tv_nsec;
+    } timespec_t;
+
     if (fb_ptr == MAP_FAILED) {
         print(fd, "Failed to mmap fb!\n");
     } else {
-        for (;;) {
             for (uint32_t y = 0; y < info.height; y++) {
                 for (uint32_t x = 0; x < info.width; x++) {
                     size_t off = y * info.pitch + x * 4;
@@ -2073,7 +2079,10 @@ void main(uintptr_t *stack_ptr) {
                     fb_ptr[off + 3] = 0x00;
                 }
             }
-        }
+        timespec_t ts = { .tv_sec = 5, .tv_nsec = 0 };
+        timespec_t rem;
+        syscall2(SYS_NANOSLEEP, (uint64_t)&ts, (uint64_t)&rem);
+        syscall2(SYS_MUNMAP, (uint64_t)fb_ptr, fb_size);
     }
 
     syscall1(SYS_CLOSE, fb);

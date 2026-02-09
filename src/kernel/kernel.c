@@ -40,6 +40,8 @@
 
 #include <scheduler/scheduler.h>
 
+#include <system/sleep.h>
+
 #include <smp/ipi.h>
 #include <smp/smp.h>
 
@@ -408,6 +410,7 @@ void kstart(void) {
 
     // first scheduler, then FS
     init_scheduler();
+    sleep_init();
 
     if (!module_request.response) {
         kprintf_warn("No modules loaded.\n");

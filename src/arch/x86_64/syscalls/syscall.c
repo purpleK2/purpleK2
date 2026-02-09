@@ -14,6 +14,8 @@
 #include <memory/heap/kheap.h>
 #include <memory/mmap.h>
 
+#include <system/sleep.h>
+
 #include <stdint.h>
 #include <string.h>
 #include <util/macro.h>
@@ -728,6 +730,24 @@ fail:
     return -EMFILE;
 }
 
+int sys_nanosleep(const void __user *req, void __user *rem) {
+    if (!req)
+        return -EINVAL;
+
+    timespec_t kreq;
+    if (copy_from_user(&kreq, req, sizeof(timespec_t)) != 0)
+        return -EFAULT;
+
+    timespec_t krem = {0, 0};
+    int ret = do_nanosleep(&kreq, &krem);
+
+    if (rem && ret != 0) {
+        copy_to_user(rem, &krem, sizeof(timespec_t));
+    }
+
+    return ret;
+}
+
 void* syscall_table[] = {
     (void*)sys_exit,
     (void*)sys_open,
@@ -769,5 +789,6 @@ void* syscall_table[] = {
     (void*)sys_munmap,
     (void*)sys_mprotect,
     (void*)sys_msync,
-    (void*)sys_pipe
+    (void*)sys_pipe,
+    (void*)sys_nanosleep
 };
